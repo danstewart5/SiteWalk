@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiteWalk - Job Site Documentation</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #1a365d; }
+        .section { margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #2c5282; }
+        #photos, #notes { margin-top: 15px; }
+        .photo { max-width: 200px; margin: 10px; border-radius: 8px; }
+        .note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
+        #summary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📍 SiteWalk</h1>
+        <p>Walk the site. Snap photos. Talk notes. Get instant reports.</p>
+        
+        <div class="section">
+            <h2>1. Take Photos</h2>
+            <input type="file" id="photoInput" accept="image/*" multiple>
+            <div id="photos"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. Voice Notes</h2>
+            <button onclick="startRecording()">Start Recording</button>
+            <button onclick="stopRecording()">Stop & Transcribe</button>
+            <div id="notes"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. AI Summary</h2>
+            <button onclick="generateSummary()">Generate Report</button>
+            <div id="summary"></div>
+        </div>
+    </div>
+    <script>
+        let photos = [];
+        let notes = [];
+        let mediaRecorder;
+        let audioChunks = [];
+        
+        document.getElementById('photoInput').addEventListener('change', function(e) {
+            const files = e.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    photos.push(ev.target.result);
+                    const img = document.createElement('img');
+                    img.src = ev.target.result;
+                    img.className = 'photo';
+                    document.getElementById('photos').appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        async function startRecording() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.start();
+            alert('Recording started...');
+        }
+        
+        function stopRecording() {
+            if (!mediaRecorder) return;
+            mediaRecorder.stop();
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks);
+                const text = await mockTranscribe(audioBlob);
+                notes.push(text);
+                const div = document.createElement('div');
+                div.className = 'note';
+                div.textContent = text;
+                document.getElementById('notes').appendChild(div);
+            };
+        }
+        
+        async function mockTranscribe(blob) {
+            return new Promise(resolve => {
+                setTimeout(() => resolve('Voice note: Job progressing well. Foundation poured yesterday. Framing starts tomorrow.'), 800);
+            });
+        }
+        
+        function generateSummary() {
+            const summaryDiv = document.getElementById('summary');
+            let summary = 'SiteWalk Report - ' + new Date().toLocaleDateString() + '\n\n';
+            summary += 'Photos taken: ' + photos.length + '\n';
+            summary += 'Voice notes: ' + notes.length + '\n\n';
+            if (notes.length > 0) summary += 'Key updates:\n' + notes.join('\n') + '\n\n';
+            summary += 'Status: On track. No issues noted.';
+            summaryDiv.textContent = summary;
+        }
+    </script>
+</body>
+</html>
