@@ -440,7 +440,10 @@ function analyzeVideoWithAI() {
   const results = document.getElementById('videoSummary');
   results.innerHTML = 'AI analyzing video and voice...';
   setTimeout(() => {
-    results.innerHTML = `<strong>AI Video Analysis Complete</strong><br>✅ Walk-through complete<br>📋 Punch list items detected: 4<br>   - Uneven grading near green<br>   - Missing edging on north bed<br>   - Drainage slope needs adjustment<br>   - 3 plants need staking<br><br>📊 Estimated materials from video: 2,800 sq ft sod, 1,200 ft edging, 18 plants<br><br><em>Report ready to print or send to client.</em>`;
+    results.innerHTML = `<strong>AI Video Analysis Complete</strong><br>✅ Walk-through complete<br>📋 Punch list items detected: 4<br>   - Uneven grading near green<br>   - Missing edging on north bed
+   - Drainage slope needs adjustment
+   - 3 plants need staking
+<br><br>📊 Estimated materials from video: 2,800 sq ft sod, 1,200 ft edging, 18 plants<br><br><em>Report ready to print or send to client.</em>`;
   }, 1800);
 }
 
@@ -481,7 +484,7 @@ function logDailyUse() {
 
 function renderDailyLog() {
   const div = document.getElementById('dailyLog');
-  div.innerHTML = dailyUsage.map(u => `<div class="note">${u.time} — ${u.qty} ${u.name} at ${u.loc} ${u.waste ? '— waste: '+u.waste : ''}</div>`).join('');
+  div.innerHTML = dailyUsage.map(u => `<div class="note">${u.time} — ${u.qty} ${u.name} at ${u.loc} ${waste ? '— waste: '+u.waste : ''}</div>`).join('');
 }
 
 function renderInventory() {
