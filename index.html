@@ -35,15 +35,15 @@ th { background: #f7fafc; }
 <div class="container">
 <h1>📍 SiteWalk</h1>
 <p>One app for the whole job — documentation, takeoffs, time tracking, landscape, 3D design & video AI.</p>
-<button id="print-btn" onclick="window.print()">🖨️ Print Full Report</button>
+<button id="print-btn">🖨️ Print Full Report</button>
 
 <div class="tab">
-<button class="tablinks active" onclick="openTab(event, 'Docs')">📸 Documentation</button>
-<button class="tablinks" onclick="openTab(event, 'Takeoff')">📐 Takeoff</button>
-<button class="tablinks" onclick="openTab(event, 'Time')">⏱️ Time Tracking</button>
-<button class="tablinks" onclick="openTab(event, 'Landscape')">🌳 Landscape</button>
-<button class="tablinks" onclick="openTab(event, 'Design3D')">🏊 3D Pool/Deck</button>
-<button class="tablinks" onclick="openTab(event, 'Video')">🎥 Video Walkthrough</button>
+<button class="tablinks active" data-tab="Docs">📸 Documentation</button>
+<button class="tablinks" data-tab="Takeoff">📐 Takeoff</button>
+<button class="tablinks" data-tab="Time">⏱️ Time Tracking</button>
+<button class="tablinks" data-tab="Landscape">🌳 Landscape</button>
+<button class="tablinks" data-tab="Design3D">🏊 3D Pool/Deck</button>
+<button class="tablinks" data-tab="Video">🎥 Video Walkthrough</button>
 </div>
 
 <!-- Documentation Tab -->
@@ -55,15 +55,15 @@ th { background: #f7fafc; }
 </div>
 <div class="section">
 <h2>2. Voice Notes</h2>
-<button id="startBtn" onclick="startRecording()">Start Recording</button>
-<button id="stopBtn" onclick="stopRecording()" disabled>Stop & Transcribe</button>
+<button id="startBtn">Start Recording</button>
+<button id="stopBtn" disabled>Stop & Transcribe</button>
 <div id="notes"></div>
 <textarea id="manualNote" placeholder="Or type a note here..."></textarea>
-<button onclick="addManualNote()">Add Manual Note</button>
+<button id="addManualBtn">Add Manual Note</button>
 </div>
 <div class="section">
 <h2>3. AI Report</h2>
-<button onclick="generateSummary()">Generate Report</button>
+<button id="genSummaryBtn">Generate Report</button>
 <div id="summary"></div>
 </div>
 </div>
@@ -72,14 +72,14 @@ th { background: #f7fafc; }
 <div id="Takeoff" class="tabcontent">
 <div class="section">
 <h2>Live Material Pricing</h2>
-<input type="text" id="materialSearch" placeholder="Search materials (lumber, drywall, concrete...)" onkeyup="if (event.key === 'Enter') searchMaterial()">
-<button onclick="searchMaterial()">Search</button>
+<input type="text" id="materialSearch" placeholder="Search materials (lumber, drywall, concrete...)">
+<button id="searchMatBtn">Search</button>
 <div id="pricingResult"></div>
 </div>
 <div class="section">
 <h2>AI Plan Analysis</h2>
 <input type="file" id="planInput" accept="image/*,.pdf">
-<button onclick="analyzePlans()">Analyze Plans with AI</button>
+<button id="analyzePlansBtn">Analyze Plans with AI</button>
 <div id="planResults"></div>
 </div>
 <div class="section">
@@ -88,8 +88,8 @@ th { background: #f7fafc; }
 <thead><tr><th>Material</th><th>Quantity</th><th>Unit Cost</th><th>Total</th></tr></thead>
 <tbody id="takeoffBody"></tbody>
 </table>
-<button onclick="addTakeoffRow()">+ Add Row</button>
-<button onclick="calculateTakeoff()">Calculate Totals</button>
+<button id="addRowBtn">+ Add Row</button>
+<button id="calcTotalsBtn">Calculate Totals</button>
 <div id="takeoffSummary"></div>
 </div>
 </div>
@@ -99,9 +99,9 @@ th { background: #f7fafc; }
 <div class="section">
 <h2>GPS Geofencing Clock-In</h2>
 <p>Set job site location and radius. Workers auto-clock when they arrive.</p>
-<button onclick="setJobSite()">Set Current Location as Job Site</button>
-<button onclick="startGeofencing()">Start Monitoring</button>
-<button onclick="stopGeofencing()">Stop Monitoring</button>
+<button id="setJobBtn">Set Current Location as Job Site</button>
+<button id="startGpsBtn">Start Monitoring</button>
+<button id="stopGpsBtn">Stop Monitoring</button>
 <div id="clockStatus" class="red">Not on site</div>
 <div id="timeLog"></div>
 </div>
@@ -112,7 +112,7 @@ th { background: #f7fafc; }
 <div class="section">
 <h2>Landscape Design</h2>
 <input type="file" id="aerialInput" accept="image/*,application/pdf">
-<button onclick="analyzeLandscape()">Upload Aerial & Generate Plan + Directions</button>
+<button id="analyzeLandBtn">Upload Aerial & Generate Plan + Directions</button>
 <div id="landscapeResults"></div>
 </div>
 </div>
@@ -122,7 +122,7 @@ th { background: #f7fafc; }
 <div class="section">
 <h2>3D Pool & Deck Designer</h2>
 <input type="file" id="sitePhotoInput" accept="image/*">
-<button onclick="start3DDesign()">Upload Site Photo & Design Pool/Deck</button>
+<button id="start3DBtn">Upload Site Photo & Design Pool/Deck</button>
 <div id="design3dResults"></div>
 </div>
 </div>
@@ -132,8 +132,8 @@ th { background: #f7fafc; }
 <div class="section">
 <h2>🎥 AI Video Walkthrough</h2>
 <p>Record a walk-through video while talking. AI watches and listens, then generates notes, punch lists, or reports.</p>
-<button id="videoStartBtn" onclick="startVideoRecording()">Start Video Recording</button>
-<button id="videoStopBtn" onclick="stopVideoRecording()" disabled>Stop & Analyze with AI</button>
+<button id="videoStartBtn">Start Video Recording</button>
+<button id="videoStopBtn" disabled>Stop & Analyze with AI</button>
 <div id="videoPreview"></div>
 <div id="videoSummary"></div>
 </div>
@@ -141,7 +141,7 @@ th { background: #f7fafc; }
 
 </div>
 <script>
-// All existing functions + new Video module
+// All functions with proper mobile touch + click listeners
 let photos = [];
 let notes = [];
 let mediaRecorder;
@@ -155,8 +155,15 @@ let videoRecorder;
 let videoChunks = [];
 let videoBlob = null;
 
-// Documentation functions
-document.getElementById('photoInput').addEventListener('change', function(e) {
+function addListener(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('click', fn);
+  el.addEventListener('touchstart', fn, {passive: true});
+}
+
+// Documentation
+addListener('photoInput', function(e) {
   const files = e.target.files;
   for (let file of files) {
     const reader = new FileReader();
@@ -235,7 +242,12 @@ function generateSummary() {
   document.getElementById('summary').innerHTML = `<strong>AI Report:</strong>\n${all || 'Add photos or notes first.'}`;
 }
 
-// Takeoff functions
+// Takeoff
+addListener('searchMatBtn', searchMaterial);
+addListener('analyzePlansBtn', analyzePlans);
+addListener('addRowBtn', () => addTakeoffRow());
+addListener('calcTotalsBtn', calculateTakeoff);
+
 function searchMaterial() {
   const q = document.getElementById('materialSearch').value.toLowerCase();
   const result = document.getElementById('pricingResult');
@@ -284,7 +296,11 @@ function analyzePlans() {
   }, 1400);
 }
 
-// GPS functions
+// GPS
+addListener('setJobBtn', setJobSite);
+addListener('startGpsBtn', startGeofencing);
+addListener('stopGpsBtn', stopGeofencing);
+
 function setJobSite() {
   navigator.geolocation.getCurrentPosition(pos => {
     jobSite = { lat: pos.coords.latitude, lon: pos.coords.longitude, radius: 50 };
@@ -328,7 +344,9 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// Landscape function
+// Landscape
+addListener('analyzeLandBtn', analyzeLandscape);
+
 function analyzeLandscape() {
   const fileInput = document.getElementById('aerialInput');
   const resultsDiv = document.getElementById('landscapeResults');
@@ -339,7 +357,9 @@ function analyzeLandscape() {
   }, 1200);
 }
 
-// 3D Design function
+// 3D
+addListener('start3DBtn', start3DDesign);
+
 function start3DDesign() {
   const fileInput = document.getElementById('sitePhotoInput');
   const resultsDiv = document.getElementById('design3dResults');
@@ -350,7 +370,10 @@ function start3DDesign() {
   }, 1400);
 }
 
-// NEW Video Walkthrough module
+// Video
+addListener('videoStartBtn', startVideoRecording);
+addListener('videoStopBtn', stopVideoRecording);
+
 function startVideoRecording() {
   navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
     const preview = document.createElement('video');
@@ -392,19 +415,37 @@ function analyzeVideoWithAI() {
   }, 1800);
 }
 
-// Tab switching
-function openTab(evt, tabName) {
-  const tabcontents = document.getElementsByClassName('tabcontent');
-  for (let i = 0; i < tabcontents.length; i++) { tabcontents[i].style.display = 'none'; }
+// Tab switching with data-tab and proper listeners
+function setupTabs() {
   const tablinks = document.getElementsByClassName('tablinks');
-  for (let i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(' active', ''); }
-  document.getElementById(tabName).style.display = 'block';
-  evt.currentTarget.className += ' active';
+  for (let btn of tablinks) {
+    const handler = function(e) {
+      e.preventDefault();
+      const tabName = btn.getAttribute('data-tab');
+      const tabcontents = document.getElementsByClassName('tabcontent');
+      for (let i = 0; i < tabcontents.length; i++) { tabcontents[i].style.display = 'none'; }
+      for (let i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(' active', ''); }
+      document.getElementById(tabName).style.display = 'block';
+      btn.className += ' active';
+    };
+    btn.addEventListener('click', handler);
+    btn.addEventListener('touchstart', handler, {passive: false});
+  }
 }
 
+// Attach all remaining listeners
+addListener('startBtn', startRecording);
+addListener('stopBtn', stopRecording);
+addListener('addManualBtn', addManualNote);
+addListener('genSummaryBtn', generateSummary);
+addListener('print-btn', () => window.print());
+
 window.onload = function() {
+  setupTabs();
   addTakeoffRow('Lumber (2x4)', 3.85);
   addTakeoffRow('Drywall 1/2"', 42.50);
+  // Make sure first tab is visible
+  document.getElementById('Docs').style.display = 'block';
 };
 </script>
 </body>
