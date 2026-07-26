@@ -19,7 +19,7 @@ button:hover { background: #2c5282; }
 button:disabled { background: #a0aec0; cursor: not-allowed; }
 .photo, video { max-width: 200px; margin: 10px; border-radius: 8px; }
 .note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
-#summary, #takeoffSummary, #videoSummary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
+#summary, #takeoffSummary, #videoSummary, #inventorySummary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
 textarea, input[type=text], input[type=number] { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid #e2e8f0; box-sizing: border-box; }
 table { width: 100%; border-collapse: collapse; margin-top: 15px; }
 th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
@@ -34,7 +34,7 @@ th { background: #f7fafc; }
 <body>
 <div class="container">
 <h1>📍 SiteWalk</h1>
-<p>One app for the whole job — documentation, takeoffs, time tracking, landscape, 3D design & video AI.</p>
+<p>One app for the whole job — documentation, takeoffs, time tracking, landscape, 3D design, video AI & inventory.</p>
 <button id="print-btn">🖨️ Print Full Report</button>
 
 <div class="tab">
@@ -44,6 +44,7 @@ th { background: #f7fafc; }
 <button class="tablinks" data-tab="Landscape">🌳 Landscape</button>
 <button class="tablinks" data-tab="Design3D">🏊 3D Pool/Deck</button>
 <button class="tablinks" data-tab="Video">🎥 Video Walkthrough</button>
+<button class="tablinks" data-tab="Inventory">📦 Materials & Inventory</button>
 </div>
 
 <!-- Documentation Tab -->
@@ -134,6 +135,34 @@ th { background: #f7fafc; }
 </div>
 </div>
 
+<!-- Materials & Inventory Tab -->
+<div id="Inventory" class="tabcontent">
+<div class="section">
+<h2>📦 Daily Material Log</h2>
+<p>Log what was used today — quantity, location on site, waste noted. Auto-deducts from running inventory.</p>
+<input type="text" id="matName" placeholder="Material name (2x4, nails, etc.)">
+<input type="number" id="matQty" placeholder="Quantity used today">
+<input type="text" id="matLoc" placeholder="Location on job (e.g. north wall, green)">
+<input type="text" id="matWaste" placeholder="Waste notes (optional)">
+<button id="logMatBtn">Log Today's Use</button>
+<div id="dailyLog"></div>
+</div>
+<div class="section">
+<h2>Running Inventory</h2>
+<table id="invTable">
+<thead><tr><th>Material</th><th>In Stock</th><th>Used Today</th><th>Remaining</th><th>Reorder Alert</th></tr></thead>
+<tbody id="invBody"></tbody>
+</table>
+<button id="addInvBtn">+ Add Material to Inventory</button>
+<div id="inventorySummary"></div>
+</div>
+<div class="section">
+<h2>Accountability — Where Did It Go?</h2>
+<p>See exactly who used what and where on the job.</p>
+<div id="accountabilityLog"></div>
+</div>
+</div>
+
 </div>
 <script>
 // All functions with proper mobile touch + click listeners
@@ -149,6 +178,8 @@ let isOnSite = false;
 let videoRecorder;
 let videoChunks = [];
 let videoBlob = null;
+let inventory = [];
+let dailyUsage = [];
 
 function addListener(id, fn) {
   const el = document.getElementById(id);
@@ -413,6 +444,67 @@ function analyzeVideoWithAI() {
   }, 1800);
 }
 
+// Materials & Inventory
+addListener('logMatBtn', logDailyUse);
+addListener('addInvBtn', addToInventory);
+
+function addToInventory() {
+  const name = prompt('Material name?');
+  if (!name) return;
+  const qty = parseFloat(prompt('Starting quantity in stock?')) || 0;
+  inventory.push({ name, stock: qty });
+  renderInventory();
+}
+
+function logDailyUse() {
+  const name = document.getElementById('matName').value.trim();
+  const qty = parseFloat(document.getElementById('matQty').value) || 0;
+  const loc = document.getElementById('matLoc').value.trim();
+  const waste = document.getElementById('matWaste').value.trim();
+  if (!name || !qty) { alert('Enter material name and quantity'); return; }
+  dailyUsage.push({ name, qty, loc, waste, time: new Date().toLocaleTimeString() });
+  // Deduct from inventory
+  const item = inventory.find(i => i.name.toLowerCase() === name.toLowerCase());
+  if (item) item.stock = Math.max(0, item.stock - qty);
+  renderDailyLog();
+  renderInventory();
+  checkReorder();
+  // Accountability log
+  const acc = document.getElementById('accountabilityLog');
+  acc.innerHTML += `<div>Used ${qty} ${name} at ${loc} ${waste ? '('+waste+')' : ''} — logged ${new Date().toLocaleTimeString()}</div>`;
+  // Clear inputs
+  document.getElementById('matName').value = '';
+  document.getElementById('matQty').value = '';
+  document.getElementById('matLoc').value = '';
+  document.getElementById('matWaste').value = '';
+}
+
+function renderDailyLog() {
+  const div = document.getElementById('dailyLog');
+  div.innerHTML = dailyUsage.map(u => `<div class="note">${u.time} — ${u.qty} ${u.name} at ${u.loc} ${u.waste ? '— waste: '+u.waste : ''}</div>`).join('');
+}
+
+function renderInventory() {
+  const tbody = document.getElementById('invBody');
+  tbody.innerHTML = '';
+  inventory.forEach((item, i) => {
+    const row = document.createElement('tr');
+    const usedToday = dailyUsage.filter(u => u.name.toLowerCase() === item.name.toLowerCase()).reduce((sum, u) => sum + u.qty, 0);
+    const remaining = item.stock;
+    const alert = remaining < 50 ? '⚠️ Reorder soon' : 'OK';
+    row.innerHTML = `<td>${item.name}</td><td>${item.stock}</td><td>${usedToday}</td><td>${remaining}</td><td>${alert}</td>`;
+    tbody.appendChild(row);
+  });
+}
+
+function checkReorder() {
+  const low = inventory.filter(i => i.stock < 50);
+  if (low.length) {
+    const msg = low.map(i => `${i.name} (only ${i.stock} left)`).join(', ');
+    document.getElementById('inventorySummary').innerHTML = `<strong>⚠️ Reorder Alert:</strong> ${msg}<br>Suggested order: contact supplier for restock.`;
+  }
+}
+
 // Tab switching with data-tab and proper listeners
 function setupTabs() {
   const tablinks = document.getElementsByClassName('tablinks');
@@ -447,6 +539,9 @@ window.onload = function() {
   // Pre-set job site to 946 Taylor Rd, Metchosin
   const status = document.getElementById('clockStatus');
   status.textContent = 'Job site: 946 Taylor Rd, Metchosin (250m radius)';
+  // Seed some inventory for demo
+  inventory = [{name: '2x4', stock: 500}, {name: 'Drywall 1/2"', stock: 120}, {name: 'Nails 3"', stock: 2000}];
+  renderInventory();
 };
 </script>
 </body>
