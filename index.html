@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SiteWalk - All-in-One Construction App</title>
+<link rel="manifest" href="manifest.json">
 <style>
 body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
 .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -165,6 +166,13 @@ th { background: #f7fafc; }
 
 </div>
 <script>
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js');
+  });
+}
+
 // All functions with proper mobile touch + click listeners
 let photos = [];
 let notes = [];
@@ -270,7 +278,7 @@ function generateSummary() {
 
 // Takeoff
 addListener('searchMatBtn', searchMaterial);
-addListener('analyzePlansBtn', analyzePlans);
+addListener('analyzePlans', analyzePlans);
 addListener('addRowBtn', () => addTakeoffRow());
 addListener('calcTotalsBtn', calculateTakeoff);
 
@@ -416,7 +424,7 @@ function startVideoRecording() {
     videoRecorder.ondataavailable = e => videoChunks.push(e.data);
     videoRecorder.onstop = () => {
       videoBlob = new Blob(videoChunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(videoBlob);
+      const url = URL.createDataURL(videoBlob);
       preview.srcObject = null;
       preview.src = url;
       preview.controls = true;
