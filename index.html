@@ -9,12 +9,14 @@
         .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         h1 { color: #1a365d; }
         .section { margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
         button:hover { background: #2c5282; }
+        button:disabled { background: #a0aec0; cursor: not-allowed; }
         #photos, #notes { margin-top: 15px; }
         .photo { max-width: 200px; margin: 10px; border-radius: 8px; }
         .note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
         #summary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
+        textarea { width: 100%; height: 80px; margin-top: 10px; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; }
     </style>
 </head>
 <body>
@@ -23,16 +25,18 @@
         <p>Walk the site. Snap photos. Talk notes. Get instant reports.</p>
         
         <div class="section">
-            <h2>1. Take Photos</h2>
+            <h2>1. Photos</h2>
             <input type="file" id="photoInput" accept="image/*" multiple>
             <div id="photos"></div>
         </div>
         
         <div class="section">
             <h2>2. Voice Notes</h2>
-            <button onclick="startRecording()">Start Recording</button>
-            <button onclick="stopRecording()">Stop & Transcribe</button>
+            <button id="startBtn" onclick="startRecording()">Start Recording</button>
+            <button id="stopBtn" onclick="stopRecording()" disabled>Stop & Transcribe</button>
             <div id="notes"></div>
+            <textarea id="manualNote" placeholder="Or type a note here if voice doesn't work on your phone..."></textarea>
+            <button onclick="addManualNote()">Add Manual Note</button>
         </div>
         
         <div class="section">
@@ -46,6 +50,7 @@
         let notes = [];
         let mediaRecorder;
         let audioChunks = [];
+        let recognition;
         
         document.getElementById('photoInput').addEventListener('change', function(e) {
             const files = e.target.files;
@@ -62,33 +67,74 @@
             }
         });
         
-        async function startRecording() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.start();
-            alert('Recording started...');
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.start();
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                alert('Recording started... speak now');
+            });
         }
         
         function stopRecording() {
             if (!mediaRecorder) return;
             mediaRecorder.stop();
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
             mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks);
-                const text = await mockTranscribe(audioBlob);
-                notes.push(text);
-                const div = document.createElement('div');
-                div.className = 'note';
-                div.textContent = text;
-                document.getElementById('notes').appendChild(div);
+                try {
+                    const text = await transcribeWithWebSpeech();
+                    if (text) {
+                        notes.push(text);
+                        showNote(text);
+                    } else {
+                        alert('Voice transcription not supported on this phone. Use the text box below instead.');
+                    }
+                } catch(e) {
+                    alert('Voice failed on this device. Type your note in the box below.');
+                }
             };
         }
         
-        async function mockTranscribe(blob) {
-            return new Promise(resolve => {
-                setTimeout(() => resolve('Voice note: Job progressing well. Foundation poured yesterday. Framing starts tomorrow.'), 800);
+        function transcribeWithWebSpeech() {
+            return new Promise((resolve, reject) => {
+                if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+                    reject('No speech API');
+                    return;
+                }
+                const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRec();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+                let finalText = '';
+                recognition.onresult = e => {
+                    finalText = e.results[0][0].transcript;
+                    resolve(finalText);
+                };
+                recognition.onerror = e => reject(e);
+                recognition.onend = () => { if (!finalText) resolve(''); };
+                recognition.start();
             });
+        }
+        
+        function showNote(text) {
+            const div = document.createElement('div');
+            div.className = 'note';
+            div.textContent = text;
+            document.getElementById('notes').appendChild(div);
+        }
+        
+        function addManualNote() {
+            const ta = document.getElementById('manualNote');
+            if (ta.value.trim()) {
+                notes.push(ta.value.trim());
+                showNote(ta.value.trim());
+                ta.value = '';
+            }
         }
         
         function generateSummary() {
