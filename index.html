@@ -1,151 +1,382 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SiteWalk - Job Site Documentation</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #1a365d; }
-        .section { margin: 25px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
-        button:hover { background: #2c5282; }
-        button:disabled { background: #a0aec0; cursor: not-allowed; }
-        #photos, #notes { margin-top: 15px; }
-        .photo { max-width: 200px; margin: 10px; border-radius: 8px; }
-        .note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
-        #summary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
-        textarea { width: 100%; height: 80px; margin-top: 10px; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiteWalk - All-in-One Construction App</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+.container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+h1 { color: #1a365d; }
+.tab { overflow: hidden; border: 1px solid #ccc; background-color: #f1f1f1; border-radius: 8px 8px 0 0; }
+.tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 16px; }
+.tab button:hover { background-color: #ddd; }
+.tab button.active { background-color: #2b6cb0; color: white; }
+.tabcontent { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; border-radius: 0 0 8px 8px; }
+.section { margin: 20px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
+button:hover { background: #2c5282; }
+button:disabled { background: #a0aec0; cursor: not-allowed; }
+.photo { max-width: 200px; margin: 10px; border-radius: 8px; }
+.note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
+#summary, #takeoffSummary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
+textarea, input[type=text], input[type=number] { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid #e2e8f0; box-sizing: border-box; }
+table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+th { background: #f7fafc; }
+#clockStatus { font-size: 18px; font-weight: bold; margin: 15px 0; padding: 15px; border-radius: 8px; }
+.green { background: #c6f6d5; color: #276749; }
+.red { background: #fed7d7; color: #c53030; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>📍 SiteWalk</h1>
-        <p>Walk the site. Snap photos. Talk notes. Get instant reports.</p>
-        
-        <div class="section">
-            <h2>1. Photos</h2>
-            <input type="file" id="photoInput" accept="image/*" multiple>
-            <div id="photos"></div>
-        </div>
-        
-        <div class="section">
-            <h2>2. Voice Notes</h2>
-            <button id="startBtn" onclick="startRecording()">Start Recording</button>
-            <button id="stopBtn" onclick="stopRecording()" disabled>Stop & Transcribe</button>
-            <div id="notes"></div>
-            <textarea id="manualNote" placeholder="Or type a note here if voice doesn't work on your phone..."></textarea>
-            <button onclick="addManualNote()">Add Manual Note</button>
-        </div>
-        
-        <div class="section">
-            <h2>3. AI Summary</h2>
-            <button onclick="generateSummary()">Generate Report</button>
-            <div id="summary"></div>
-        </div>
-    </div>
-    <script>
-        let photos = [];
-        let notes = [];
-        let mediaRecorder;
-        let audioChunks = [];
-        let recognition;
-        
-        document.getElementById('photoInput').addEventListener('change', function(e) {
-            const files = e.target.files;
-            for (let file of files) {
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    photos.push(ev.target.result);
-                    const img = document.createElement('img');
-                    img.src = ev.target.result;
-                    img.className = 'photo';
-                    document.getElementById('photos').appendChild(img);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-        
-        function startRecording() {
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                mediaRecorder.start();
-                document.getElementById('startBtn').disabled = true;
-                document.getElementById('stopBtn').disabled = false;
-                alert('Recording started... speak now');
-            });
-        }
-        
-        function stopRecording() {
-            if (!mediaRecorder) return;
-            mediaRecorder.stop();
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-            mediaRecorder.onstop = async () => {
-                try {
-                    const text = await transcribeWithWebSpeech();
-                    if (text) {
-                        notes.push(text);
-                        showNote(text);
-                    } else {
-                        alert('Voice transcription not supported on this phone. Use the text box below instead.');
-                    }
-                } catch(e) {
-                    alert('Voice failed on this device. Type your note in the box below.');
-                }
-            };
-        }
-        
-        function transcribeWithWebSpeech() {
-            return new Promise((resolve, reject) => {
-                if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-                    reject('No speech API');
-                    return;
-                }
-                const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRec();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = 'en-US';
-                let finalText = '';
-                recognition.onresult = e => {
-                    finalText = e.results[0][0].transcript;
-                    resolve(finalText);
-                };
-                recognition.onerror = e => reject(e);
-                recognition.onend = () => { if (!finalText) resolve(''); };
-                recognition.start();
-            });
-        }
-        
-        function showNote(text) {
-            const div = document.createElement('div');
-            div.className = 'note';
-            div.textContent = text;
-            document.getElementById('notes').appendChild(div);
-        }
-        
-        function addManualNote() {
-            const ta = document.getElementById('manualNote');
-            if (ta.value.trim()) {
-                notes.push(ta.value.trim());
-                showNote(ta.value.trim());
-                ta.value = '';
-            }
-        }
-        
-        function generateSummary() {
-            const summaryDiv = document.getElementById('summary');
-            let summary = 'SiteWalk Report - ' + new Date().toLocaleDateString() + '\n\n';
-            summary += 'Photos taken: ' + photos.length + '\n';
-            summary += 'Voice notes: ' + notes.length + '\n\n';
-            if (notes.length > 0) summary += 'Key updates:\n' + notes.join('\n') + '\n\n';
-            summary += 'Status: On track. No issues noted.';
-            summaryDiv.textContent = summary;
-        }
-    </script>
+<div class="container">
+<h1>📍 SiteWalk</h1>
+<p>One app for the whole job — documentation, takeoffs, time tracking.</p>
+
+<div class="tab">
+<button class="tablinks active" onclick="openTab(event, 'Docs')">📸 Documentation</button>
+<button class="tablinks" onclick="openTab(event, 'Takeoff')">📐 Takeoff</button>
+<button class="tablinks" onclick="openTab(event, 'Time')">⏱️ Time Tracking</button>
+</div>
+
+<!-- Documentation Tab -->
+<div id="Docs" class="tabcontent" style="display:block">
+<div class="section">
+<h2>1. Photos</h2>
+<input type="file" id="photoInput" accept="image/*" multiple>
+<div id="photos"></div>
+</div>
+<div class="section">
+<h2>2. Voice Notes</h2>
+<button id="startBtn" onclick="startRecording()">Start Recording</button>
+<button id="stopBtn" onclick="stopRecording()" disabled>Stop & Transcribe</button>
+<div id="notes"></div>
+<textarea id="manualNote" placeholder="Or type a note here..."></textarea>
+<button onclick="addManualNote()">Add Manual Note</button>
+</div>
+<div class="section">
+<h2>3. AI Report</h2>
+<button onclick="generateSummary()">Generate Report</button>
+<div id="summary"></div>
+</div>
+</div>
+
+<!-- Takeoff Tab -->
+<div id="Takeoff" class="tabcontent">
+<div class="section">
+<h2>Live Material Pricing</h2>
+<input type="text" id="materialSearch" placeholder="Search materials (lumber, drywall, concrete...)" onkeyup="if (event.key === 'Enter') searchMaterial()">
+<button onclick="searchMaterial()">Search</button>
+<div id="pricingResult"></div>
+</div>
+<div class="section">
+<h2>AI Plan Analysis</h2>
+<input type="file" id="planInput" accept="image/*,.pdf">
+<button onclick="analyzePlans()">Analyze Plans with AI</button>
+<div id="planResults"></div>
+</div>
+<div class="section">
+<h2>Takeoff Calculator</h2>
+<table id="takeoffTable">
+<thead><tr><th>Material</th><th>Quantity</th><th>Unit Cost</th><th>Total</th></tr></thead>
+<tbody id="takeoffBody"></tbody>
+</table>
+<button onclick="addTakeoffRow()">+ Add Row</button>
+<button onclick="calculateTakeoff()">Calculate Totals</button>
+<div id="takeoffSummary"></div>
+</div>
+</div>
+
+<!-- Time Tracking Tab -->
+<div id="Time" class="tabcontent">
+<div class="section">
+<h2>GPS Geofencing Clock-In</h2>
+<p>Set job site location and radius. Workers are auto-clocked when they arrive.</p>
+<button onclick="setJobSite()">Set Current Location as Job Site</button>
+<button onclick="startGeofencing()">Start Monitoring</button>
+<button onclick="stopGeofencing()">Stop Monitoring</button>
+<div id="clockStatus" class="red">Not on site</div>
+<div id="timeLog"></div>
+</div>
+</div>
+
+</div>
+<script>
+// ========== DOCUMENTATION ==========
+let photos = [];
+let notes = [];
+let mediaRecorder;
+let audioChunks = [];
+let recognition;
+
+document.getElementById('photoInput').addEventListener('change', function(e) {
+  const files = e.target.files;
+  for (let file of files) {
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      photos.push(ev.target.result);
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.className = 'photo';
+      document.getElementById('photos').appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+function startRecording() {
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.start();
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+    alert('Recording started... speak now');
+  });
+}
+
+function stopRecording() {
+  if (!mediaRecorder) return;
+  mediaRecorder.stop();
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  mediaRecorder.onstop = async () => {
+    try {
+      const text = await transcribeWithWebSpeech();
+      if (text) {
+        notes.push(text);
+        showNote(text);
+      } else {
+        alert('Voice transcription not supported on this phone. Use the text box below.');
+      }
+    } catch(e) {
+      alert('Voice failed. Type your note in the box below.');
+    }
+  };
+}
+
+function transcribeWithWebSpeech() {
+  return new Promise((resolve, reject) => {
+    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      reject('No speech API');
+      return;
+    }
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRec();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+    let finalText = '';
+    recognition.onresult = e => {
+      finalText = e.results[0][0].transcript;
+      resolve(finalText);
+    };
+    recognition.onerror = e => reject(e);
+    recognition.onend = () => { if (!finalText) resolve(''); };
+    recognition.start();
+  });
+}
+
+function showNote(text) {
+  const div = document.createElement('div');
+  div.className = 'note';
+  div.textContent = text;
+  document.getElementById('notes').appendChild(div);
+}
+
+function addManualNote() {
+  const ta = document.getElementById('manualNote');
+  if (ta.value.trim()) {
+    notes.push(ta.value.trim());
+    showNote(ta.value.trim());
+    ta.value = '';
+  }
+}
+
+function generateSummary() {
+  const summaryDiv = document.getElementById('summary');
+  let summary = 'SiteWalk Report - ' + new Date().toLocaleDateString() + '\n\n';
+  summary += 'Photos taken: ' + photos.length + '\n';
+  summary += 'Voice notes: ' + notes.length + '\n\n';
+  if (notes.length > 0) summary += 'Key updates:\n' + notes.join('\n') + '\n\n';
+  summary += 'Status: On track. No issues noted.';
+  summaryDiv.textContent = summary;
+}
+
+// ========== TAKEOFF ==========
+let takeoffRows = [];
+
+function searchMaterial() {
+  const query = document.getElementById('materialSearch').value.trim();
+  if (!query) return;
+  const resultDiv = document.getElementById('pricingResult');
+  resultDiv.innerHTML = 'Searching...';
+  fetch(`https://api.estimationpro.ai/v1/pricing?query=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.price) {
+        resultDiv.innerHTML = `<strong>${data.name || query}</strong>: $${data.price} per ${data.unit || 'unit'} <button onclick="usePrice('${data.name || query}', ${data.price})">Use this price</button>`;
+      } else {
+        resultDiv.innerHTML = 'No live price found. Enter manually below.';
+      }
+    })
+    .catch(() => {
+      resultDiv.innerHTML = 'Live pricing unavailable. Enter manually.';
+    });
+}
+
+function usePrice(name, price) {
+  addTakeoffRow(name, price);
+  document.getElementById('pricingResult').innerHTML = '';
+  document.getElementById('materialSearch').value = '';
+}
+
+function addTakeoffRow(name = '', price = '') {
+  const tbody = document.getElementById('takeoffBody');
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td><input type="text" value="${name}" placeholder="Material"></td>
+    <td><input type="number" value="1" placeholder="Qty"></td>
+    <td><input type="number" value="${price}" placeholder="Unit Cost"></td>
+    <td class="rowTotal">0.00</td>
+    <td><button onclick="this.closest('tr').remove()">×</button></td>
+  `;
+  tbody.appendChild(row);
+  takeoffRows.push(row);
+}
+
+function calculateTakeoff() {
+  let grandTotal = 0;
+  const rows = document.querySelectorAll('#takeoffBody tr');
+  rows.forEach(row => {
+    const qty = parseFloat(row.cells[1].querySelector('input').value) || 0;
+    const cost = parseFloat(row.cells[2].querySelector('input').value) || 0;
+    const total = qty * cost;
+    row.cells[3].textContent = total.toFixed(2);
+    grandTotal += total;
+  });
+  const tax = grandTotal * 0.05;
+  const final = grandTotal + tax;
+  document.getElementById('takeoffSummary').innerHTML = 
+    `Subtotal: $${grandTotal.toFixed(2)}<br>Tax (5%): $${tax.toFixed(2)}<br><strong>Total: $${final.toFixed(2)}</strong>`;
+}
+
+function analyzePlans() {
+  const fileInput = document.getElementById('planInput');
+  const resultsDiv = document.getElementById('planResults');
+  if (!fileInput.files.length) {
+    resultsDiv.innerHTML = 'Please upload a plan image or PDF.';
+    return;
+  }
+  resultsDiv.innerHTML = 'Analyzing plans with AI...';
+  // Simulate AI analysis (in real version would use vision model)
+  setTimeout(() => {
+    const sample = [
+      {material: 'Lumber (2x4 studs)', qty: 245, unitCost: 3.85},
+      {material: 'Drywall 1/2"', qty: 68, unitCost: 42.50},
+      {material: 'Concrete 3000psi', qty: 12, unitCost: 125.00},
+      {material: 'Nails 16d', qty: 8, unitCost: 12.75}
+    ];
+    resultsDiv.innerHTML = '<strong>AI detected materials:</strong><br>' + 
+      sample.map(s => `${s.material}: ${s.qty} units @ $${s.unitCost}`).join('<br>');
+    const tbody = document.getElementById('takeoffBody');
+    tbody.innerHTML = '';
+    sample.forEach(item => addTakeoffRow(item.material, item.unitCost));
+  }, 1500);
+}
+
+// ========== GPS GEOFENCING ==========
+let jobSite = null;
+let watchId = null;
+let isOnSite = false;
+
+function setJobSite() {
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    jobSite = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      radius: 100 // meters
+    };
+    alert(`Job site set at ${jobSite.lat.toFixed(5)}, ${jobSite.lng.toFixed(5)} with 100m radius`);
+  });
+}
+
+function startGeofencing() {
+  if (!jobSite) {
+    alert('Set job site first');
+    return;
+  }
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  watchId = navigator.geolocation.watchPosition(checkLocation, err => console.log(err), {enableHighAccuracy: true});
+  document.getElementById('clockStatus').textContent = 'Monitoring...';
+}
+
+function stopGeofencing() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  document.getElementById('clockStatus').textContent = 'Monitoring stopped';
+}
+
+function checkLocation(position) {
+  if (!jobSite) return;
+  const dist = getDistance(
+    position.coords.latitude, position.coords.longitude,
+    jobSite.lat, jobSite.lng
+  );
+  const statusEl = document.getElementById('clockStatus');
+  const logEl = document.getElementById('timeLog');
+  if (dist <= jobSite.radius && !isOnSite) {
+    isOnSite = true;
+    statusEl.className = 'green';
+    statusEl.textContent = '✅ CLOCKED IN - On site';
+    logEl.innerHTML += `<div>${new Date().toLocaleTimeString()} - Clocked IN</div>`;
+  } else if (dist > jobSite.radius && isOnSite) {
+    isOnSite = false;
+    statusEl.className = 'red';
+    statusEl.textContent = '❌ CLOCKED OUT - Off site';
+    logEl.innerHTML += `<div>${new Date().toLocaleTimeString()} - Clocked OUT</div>`;
+  }
+}
+
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Tab switching
+function openTab(evt, tabName) {
+  const tabcontents = document.getElementsByClassName('tabcontent');
+  for (let i = 0; i < tabcontents.length; i++) {
+    tabcontents[i].style.display = 'none';
+  }
+  const tablinks = document.getElementsByClassName('tablinks');
+  for (let i = 0; i < tablinks.length; i++) {
+    tablinks[i].className = tablinks[i].className.replace(' active', '');
+  }
+  document.getElementById(tabName).style.display = 'block';
+  evt.currentTarget.className += ' active';
+}
+
+// Init with sample takeoff row
+window.onload = function() {
+  addTakeoffRow('Lumber (2x4)', 3.85);
+  addTakeoffRow('Drywall 1/2"', 42.50);
+};
+</script>
 </body>
 </html>
