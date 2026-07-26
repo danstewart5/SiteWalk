@@ -76,12 +76,7 @@ th { background: #f7fafc; }
 <button id="searchMatBtn">Search</button>
 <div id="pricingResult"></div>
 </div>
-<div class="section">
-<h2>AI Plan Analysis</h2>
-<input type="file" id="planInput" accept="image/*,.pdf">
-<button id="analyzePlansBtn">Analyze Plans with AI</button>
 <div id="planResults"></div>
-</div>
 <div class="section">
 <h2>Takeoff Calculator</h2>
 <table id="takeoffTable">
@@ -97,8 +92,8 @@ th { background: #f7fafc; }
 <!-- Time Tracking Tab -->
 <div id="Time" class="tabcontent">
 <div class="section">
-<h2>GPS Geofencing Clock-In</h2>
-<p>Set job site location and radius. Workers auto-clock when they arrive.</p>
+<h2>GPS Geofencing Clock-In — 946 Taylor Rd, Metchosin</h2>
+<p>Job site set to 946 Taylor Road waterfront property. Workers auto-clock when they arrive.</p>
 <button id="setJobBtn">Set Current Location as Job Site</button>
 <button id="startGpsBtn">Start Monitoring</button>
 <button id="stopGpsBtn">Stop Monitoring</button>
@@ -148,7 +143,7 @@ let mediaRecorder;
 let audioChunks = [];
 let recognition;
 let takeoffRows = [];
-let jobSite = null;
+let jobSite = { lat: 48.365, lon: -123.540, radius: 250 };
 let watchId = null;
 let isOnSite = false;
 let videoRecorder;
@@ -303,8 +298,8 @@ addListener('stopGpsBtn', stopGeofencing);
 
 function setJobSite() {
   navigator.geolocation.getCurrentPosition(pos => {
-    jobSite = { lat: pos.coords.latitude, lon: pos.coords.longitude, radius: 50 };
-    alert('Job site set! Radius: 50 meters');
+    jobSite = { lat: pos.coords.latitude, lon: pos.coords.longitude, radius: 250 };
+    alert('Job site set to current location! Radius: 250 meters');
   });
 }
 
@@ -353,7 +348,10 @@ function analyzeLandscape() {
   if (!fileInput.files.length) { resultsDiv.innerHTML = 'Upload an aerial photo or site plan.'; return; }
   resultsDiv.innerHTML = 'Analyzing 20-acre property with putting green + 1-acre garden...';
   setTimeout(() => {
-    resultsDiv.innerHTML = `<strong>Generated Layout:</strong><br>Putting green (3 holes): ~2,800 sq ft<br>1-acre garden beds: ~43,560 sq ft<br><br><strong>Step-by-step build process:</strong><br>1. Site prep & grading<br>2. Drainage & base layers for green<br>3. Sod installation<br>4. Edging & contours<br>5. Garden soil prep & planting<br><br><strong>Materials auto-fed to Takeoff tab.</strong>`;
+    resultsDiv.innerHTML = `<strong>Generated Layout:</strong><br>Putting green (3 holes): ~2,800 sq ft<br>1-acre garden beds: ~43,560 sq ft<br><br><strong>Step-by-step build process:</strong><br>1. Site prep & grading<br>2. Drainage & base layers for green
+3. Sod installation
+4. Edging & contours
+5. Garden soil prep & planting<br><br><strong>Materials auto-fed to Takeoff tab.</strong>`;
   }, 1200);
 }
 
@@ -446,6 +444,9 @@ window.onload = function() {
   addTakeoffRow('Drywall 1/2"', 42.50);
   // Make sure first tab is visible
   document.getElementById('Docs').style.display = 'block';
+  // Pre-set job site to 946 Taylor Rd, Metchosin
+  const status = document.getElementById('clockStatus');
+  status.textContent = 'Job site: 946 Taylor Rd, Metchosin (250m radius)';
 };
 </script>
 </body>
