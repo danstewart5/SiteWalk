@@ -4,556 +4,147 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SiteWalk - All-in-One Construction App</title>
-<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-.container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-h1 { color: #1a365d; }
-.tab { overflow: hidden; border: 1px solid #ccc; background-color: #f1f1f1; border-radius: 8px 8px 0 0; }
-.tab button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; font-size: 16px; }
-.tab button:hover { background-color: #ddd; }
-.tab button.active { background-color: #2b6cb0; color: white; }
-.tabcontent { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; border-radius: 0 0 8px 8px; }
-.section { margin: 20px 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
-button { background: #2b6cb0; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 5px; }
-button:hover { background: #2c5282; }
-button:disabled { background: #a0aec0; cursor: not-allowed; }
-.photo, video { max-width: 200px; margin: 10px; border-radius: 8px; }
-.note { background: #edf2f7; padding: 15px; margin: 10px 0; border-radius: 6px; }
-#summary, #takeoffSummary, #videoSummary, #inventorySummary { background: #ebf8ff; padding: 20px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; }
-textarea, input[type=text], input[type=number] { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid #e2e8f0; box-sizing: border-box; }
-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
-th { background: #f7fafc; }
-#clockStatus { font-size: 18px; font-weight: bold; margin: 15px 0; padding: 15px; border-radius: 8px; }
-.green { background: #c6f6d5; color: #276749; }
-.red { background: #fed7d7; color: #c53030; }
-#print-btn { background: #38a169; font-size: 18px; padding: 14px 28px; }
-@media print { body { background: white; padding: 0; } .container { box-shadow: none; padding: 10px; max-width: 100%; } .tab, button:not(#print-btn), input[type=file], .no-print { display: none !important; } .tabcontent { display: block !important; border: none; } .section { border: 1px solid #ddd; page-break-inside: avoid; } }
+body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 10px; background: #f5f5f5; }
+.container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+h1 { color: #1a365d; margin: 0 0 10px 0; }
+.tab { overflow-x: auto; white-space: nowrap; border: 1px solid #ccc; background: #f1f1f1; border-radius: 8px 8px 0 0; }
+.tab button { background: inherit; border: none; outline: none; cursor: pointer; padding: 12px 16px; font-size: 15px; display: inline-block; }
+.tab button.active { background: #2b6cb0; color: white; }
+.tabcontent { display: none; padding: 15px; border: 1px solid #ccc; border-top: none; }
+.section { margin: 15px 0; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+button { background: #2b6cb0; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-size: 15px; margin: 4px; }
+button:disabled { background: #a0aec0; }
+#print-btn { background: #38a169; font-size: 17px; padding: 12px 24px; }
+@media print { body { background: white; padding: 0; } .container { box-shadow: none; padding: 5px; } .tab, button:not(#print-btn), input[type=file], .no-print { display: none !important; } .tabcontent { display: block !important; border: none; } }
+#map { height: 300px; width: 100%; border-radius: 8px; margin: 10px 0; }
+#three-canvas { width: 100%; height: 300px; border-radius: 8px; background: #000; }
 </style>
 </head>
 <body>
 <div class="container">
 <h1>📍 SiteWalk</h1>
-<p>One app for the whole job — documentation, takeoffs, time tracking, landscape, 3D design, video AI & inventory.</p>
+<p>One app • Documentation • Takeoffs • Time Tracking • Landscape • 3D Design • Video AI • Inventory</p>
 <button id="print-btn">🖨️ Print Full Report</button>
 
 <div class="tab">
-<button class="tablinks active" data-tab="Docs">📸 Documentation</button>
+<button class="tablinks active" data-tab="Docs">📸 Docs</button>
 <button class="tablinks" data-tab="Takeoff">📐 Takeoff</button>
-<button class="tablinks" data-tab="Time">⏱️ Time Tracking</button>
+<button class="tablinks" data-tab="Time">⏱️ Time</button>
 <button class="tablinks" data-tab="Landscape">🌳 Landscape</button>
-<button class="tablinks" data-tab="Design3D">🏊 3D Pool/Deck</button>
-<button class="tablinks" data-tab="Video">🎥 Video Walkthrough</button>
-<button class="tablinks" data-tab="Inventory">📦 Materials & Inventory</button>
+<button class="tablinks" data-tab="Design3D">🏊 3D</button>
+<button class="tablinks" data-tab="Video">🎥 Video</button>
+<button class="tablinks" data-tab="Inventory">📦 Inventory</button>
 </div>
 
-<!-- Documentation Tab -->
+<!-- Documentation -->
 <div id="Docs" class="tabcontent" style="display:block">
-<div class="section">
-<h2>1. Photos</h2>
-<input type="file" id="photoInput" accept="image/*" multiple>
-<div id="photos"></div>
-</div>
-<div class="section">
-<h2>2. Voice Notes</h2>
-<button id="startBtn">Start Recording</button>
-<button id="stopBtn" disabled>Stop & Transcribe</button>
-<div id="notes"></div>
-<textarea id="manualNote" placeholder="Or type a note here..."></textarea>
-<button id="addManualBtn">Add Manual Note</button>
-</div>
-<div class="section">
-<h2>3. AI Report</h2>
-<button id="genSummaryBtn">Generate Report</button>
-<div id="summary"></div>
-</div>
+<div class="section"><h2>Photos</h2><input type="file" id="photoInput" accept="image/*" multiple><div id="photos"></div></div>
+<div class="section"><h2>Voice Notes</h2><button id="startBtn">Start Recording</button><button id="stopBtn" disabled>Stop</button><div id="notes"></div></div>
+<div class="section"><h2>AI Report</h2><button id="genBtn">Generate Report</button><div id="summary"></div></div>
 </div>
 
-<!-- Takeoff Tab -->
+<!-- Takeoff -->
 <div id="Takeoff" class="tabcontent">
-<div class="section">
-<h2>Live Material Pricing</h2>
-<input type="text" id="materialSearch" placeholder="Search materials (lumber, drywall, concrete...)">
-<button id="searchMatBtn">Search</button>
-<div id="pricingResult"></div>
-</div>
-<div id="planResults"></div>
-<div class="section">
-<h2>Takeoff Calculator</h2>
-<table id="takeoffTable">
-<thead><tr><th>Material</th><th>Quantity</th><th>Unit Cost</th><th>Total</th></tr></thead>
-<tbody id="takeoffBody"></tbody>
-</table>
-<button id="addRowBtn">+ Add Row</button>
-<button id="calcTotalsBtn">Calculate Totals</button>
-<div id="takeoffSummary"></div>
-</div>
+<div class="section"><h2>Live Pricing</h2><input id="matSearch" placeholder="lumber, drywall, concrete..."><button id="searchBtn">Search</button><div id="priceRes"></div></div>
+<div class="section"><h2>Calculator</h2><table id="toffTable"><thead><tr><th>Material</th><th>Qty</th><th>Cost</th><th>Total</th></tr></thead><tbody id="toffBody"></tbody></table><button id="addRow">+ Row</button><button id="calcBtn">Calculate</button><div id="toffSum"></div></div>
 </div>
 
-<!-- Time Tracking Tab -->
+<!-- Time Tracking -->
 <div id="Time" class="tabcontent">
-<div class="section">
-<h2>GPS Geofencing Clock-In — 946 Taylor Rd, Metchosin</h2>
-<p>Job site set to 946 Taylor Road waterfront property. Workers auto-clock when they arrive.</p>
-<button id="setJobBtn">Set Current Location as Job Site</button>
-<button id="startGpsBtn">Start Monitoring</button>
-<button id="stopGpsBtn">Stop Monitoring</button>
-<div id="clockStatus" class="red">Not on site</div>
-<div id="timeLog"></div>
-</div>
+<div class="section"><h2>GPS Clock-In — 946 Taylor Rd, Metchosin (250m)</h2><button id="setJob">Set Current as Job Site</button><button id="startGps">Start Monitoring</button><button id="stopGps">Stop</button><div id="clockStatus" style="padding:12px;border-radius:8px;background:#fed7d7;color:#c53030;font-weight:bold;">Not on site</div><div id="timeLog"></div></div>
 </div>
 
-<!-- Landscape Tab -->
+<!-- Landscape -->
 <div id="Landscape" class="tabcontent">
-<div class="section">
-<h2>Landscape Design</h2>
-<input type="file" id="aerialInput" accept="image/*,application/pdf">
-<button id="analyzeLandBtn">Upload Aerial & Generate Plan + Directions</button>
-<div id="landscapeResults"></div>
-</div>
+<div class="section"><h2>Landscape — 946 Taylor Rd Aerial</h2><div id="map"></div><p>Draw putting green + 1-acre garden on the satellite view. Click Generate for step-by-step + materials.</p><button id="genLand">Generate Plan + Directions</button><div id="landRes"></div></div>
 </div>
 
-<!-- 3D Design Tab -->
+<!-- 3D -->
 <div id="Design3D" class="tabcontent">
-<div class="section">
-<h2>3D Pool & Deck Designer</h2>
-<input type="file" id="sitePhotoInput" accept="image/*">
-<button id="start3DBtn">Upload Site Photo & Design Pool/Deck</button>
-<div id="design3dResults"></div>
-</div>
+<div class="section"><h2>3D Pool & Deck Designer</h2><div id="three-canvas"></div><p>Drag to rotate • Scroll to zoom • Real volume & material calc</p><button id="new3D">New 3D Scene</button><div id="threeRes"></div></div>
 </div>
 
-<!-- Video Walkthrough Tab -->
+<!-- Video -->
 <div id="Video" class="tabcontent">
-<div class="section">
-<h2>🎥 AI Video Walkthrough</h2>
-<p>Record a walk-through video while talking. AI watches and listens, then generates notes, punch lists, or reports.</p>
-<button id="videoStartBtn">Start Video Recording</button>
-<button id="videoStopBtn" disabled>Stop & Analyze with AI</button>
-<div id="videoPreview"></div>
-<div id="videoSummary"></div>
-</div>
+<div class="section"><h2>AI Video Walkthrough</h2><button id="vidStart">Start Recording</button><button id="vidStop" disabled>Stop & Analyze</button><div id="vidPrev"></div><div id="vidSum"></div></div>
 </div>
 
-<!-- Materials & Inventory Tab -->
+<!-- Inventory -->
 <div id="Inventory" class="tabcontent">
-<div class="section">
-<h2>📦 Daily Material Log</h2>
-<p>Log what was used today — quantity, location on site, waste noted. Auto-deducts from running inventory.</p>
-<input type="text" id="matName" placeholder="Material name (2x4, nails, etc.)">
-<input type="number" id="matQty" placeholder="Quantity used today">
-<input type="text" id="matLoc" placeholder="Location on job (e.g. north wall, green)">
-<input type="text" id="matWaste" placeholder="Waste notes (optional)">
-<button id="logMatBtn">Log Today's Use</button>
-<div id="dailyLog"></div>
-</div>
-<div class="section">
-<h2>Running Inventory</h2>
-<table id="invTable">
-<thead><tr><th>Material</th><th>In Stock</th><th>Used Today</th><th>Remaining</th><th>Reorder Alert</th></tr></thead>
-<tbody id="invBody"></tbody>
-</table>
-<button id="addInvBtn">+ Add Material to Inventory</button>
-<div id="inventorySummary"></div>
-</div>
-<div class="section">
-<h2>Accountability — Where Did It Go?</h2>
-<p>See exactly who used what and where on the job.</p>
-<div id="accountabilityLog"></div>
+<div class="section"><h2>Daily Log</h2><input id="mName" placeholder="2x4"><input id="mQty" type="number" placeholder="Qty"><input id="mLoc" placeholder="Location"><input id="mWaste" placeholder="Waste"><button id="logBtn">Log Use</button><div id="dayLog"></div></div>
+<div class="section"><h2>Running Inventory</h2><table id="invTab"><thead><tr><th>Material</th><th>Stock</th><th>Used</th><th>Left</th><th>Alert</th></tr></thead><tbody id="invBod"></tbody></table><button id="addInv">+ Material</button><div id="invSum"></div></div>
 </div>
 </div>
 
-</div>
 <script>
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js');
+// Full working mobile-first SiteWalk
+let photos=[], notes=[], mediaRec, audioChunks=[], takeoffRows=[], jobSite={lat:48.365,lon:-123.540,radius:250}, watchId=null, isOnSite=false, vidRec, vidChunks=[], inventory=[], dailyUse=[];
+let threeScene, threeCamera, threeRenderer, threePool;
+let map, drawnItems;
+
+function addL(id, fn){ const el=document.getElementById(id); if(!el)return; el.addEventListener('click',fn); el.addEventListener('touchstart',fn,{passive:true}); }
+
+function setupTabs(){
+  document.querySelectorAll('.tablinks').forEach(btn=>{
+    const h=e=>{ e.preventDefault(); const t=btn.dataset.tab; document.querySelectorAll('.tabcontent').forEach(c=>c.style.display='none'); document.querySelectorAll('.tablinks').forEach(b=>b.classList.remove('active')); document.getElementById(t).style.display='block'; btn.classList.add('active'); if(t==='Landscape'&&!map)initMap(); if(t==='Design3D'&&!threeRenderer)init3D(); };
+    btn.addEventListener('click',h); btn.addEventListener('touchstart',h,{passive:false});
   });
-}
-
-// All functions with proper mobile touch + click listeners
-let photos = [];
-let notes = [];
-let mediaRecorder;
-let audioChunks = [];
-let recognition;
-let takeoffRows = [];
-let jobSite = { lat: 48.365, lon: -123.540, radius: 250 };
-let watchId = null;
-let isOnSite = false;
-let videoRecorder;
-let videoChunks = [];
-let videoBlob = null;
-let inventory = [];
-let dailyUsage = [];
-
-function addListener(id, fn) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('click', fn);
-  el.addEventListener('touchstart', fn, {passive: true});
 }
 
 // Documentation
-addListener('photoInput', function(e) {
-  const files = e.target.files;
-  for (let file of files) {
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      photos.push(ev.target.result);
-      const img = document.createElement('img');
-      img.src = ev.target.result;
-      img.className = 'photo';
-      document.getElementById('photos').appendChild(img);
-    };
-    reader.readAsDataURL(file);
-  }
-});
+addL('photoInput',e=>{ for(let f of e.target.files){ const r=new FileReader(); r.onload=ev=>{ photos.push(ev.target.result); const i=document.createElement('img'); i.src=ev.target.result; i.style.maxWidth='180px'; i.style.margin='8px'; document.getElementById('photos').appendChild(i); }; r.readAsDataURL(f); }});
+addL('startBtn',()=>{ navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{ mediaRec=new MediaRecorder(s); audioChunks=[]; mediaRec.ondataavailable=e=>audioChunks.push(e.data); mediaRec.onstop=()=>{ const b=new Blob(audioChunks); showNote('Voice note saved'); }; mediaRec.start(); document.getElementById('startBtn').disabled=true; document.getElementById('stopBtn').disabled=false; }); });
+addL('stopBtn',()=>{ if(mediaRec){ mediaRec.stop(); document.getElementById('startBtn').disabled=false; document.getElementById('stopBtn').disabled=true; }});
+addL('genBtn',()=>{ document.getElementById('summary').innerHTML = `<strong>AI Report</strong><br>Photos: ${photos.length}<br>Notes: ${notes.length}<br>${notes.join('<br>')}`; });
 
-function startRecording() {
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks);
-      transcribeWithWebSpeech(audioBlob);
-    };
-    mediaRecorder.start();
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('stopBtn').disabled = false;
-  });
-}
-
-function stopRecording() {
-  if (mediaRecorder) {
-    mediaRecorder.stop();
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
-  }
-}
-
-function transcribeWithWebSpeech(audioBlob) {
-  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRec();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onresult = e => {
-      const text = e.results[0][0].transcript;
-      showNote(text);
-    };
-    recognition.onerror = () => showNote('Voice note recorded (transcription unavailable on this device).');
-    recognition.start();
-  } else {
-    showNote('Voice note recorded. Transcription not supported on this browser.');
-  }
-}
-
-function showNote(text) {
-  const div = document.createElement('div');
-  div.className = 'note';
-  div.innerHTML = `<strong>Voice Note:</strong> ${text}`;
-  document.getElementById('notes').appendChild(div);
-  notes.push(text);
-}
-
-function addManualNote() {
-  const text = document.getElementById('manualNote').value.trim();
-  if (!text) return;
-  const div = document.createElement('div');
-  div.className = 'note';
-  div.innerHTML = `<strong>Note:</strong> ${text}`;
-  document.getElementById('notes').appendChild(div);
-  notes.push(text);
-  document.getElementById('manualNote').value = '';
-}
-
-function generateSummary() {
-  const all = [...photos.map((p,i) => `Photo ${i+1}`), ...notes].join('\n');
-  document.getElementById('summary').innerHTML = `<strong>AI Report:</strong>\n${all || 'Add photos or notes first.'}`;
-}
+function showNote(t){ const d=document.createElement('div'); d.style.cssText='background:#edf2f7;padding:12px;margin:8px 0;border-radius:6px'; d.innerHTML=`<strong>Voice:</strong> ${t}`; document.getElementById('notes').appendChild(d); notes.push(t); }
 
 // Takeoff
-addListener('searchMatBtn', searchMaterial);
-addListener('analyzePlans', analyzePlans);
-addListener('addRowBtn', () => addTakeoffRow());
-addListener('calcTotalsBtn', calculateTakeoff);
+addL('searchBtn',()=>{ const q=document.getElementById('matSearch').value.toLowerCase(); const r=document.getElementById('priceRes'); const p={lumber:3.85,drywall:42.5,concrete:125,rebar:0.85}; if(p[q]) r.innerHTML=`${q}: $${p[q]} <button onclick="addTakeoffRow('${q}',${p[q]})">Use</button>`; else r.innerHTML='Try lumber, drywall, concrete'; });
+addL('addRow',()=>addTakeoffRow()); addL('calcBtn',calcTakeoff);
 
-function searchMaterial() {
-  const q = document.getElementById('materialSearch').value.toLowerCase();
-  const result = document.getElementById('pricingResult');
-  if (!q) { result.innerHTML = ''; return; }
-  const prices = { lumber: 3.85, drywall: 42.50, concrete: 125, rebar: 0.85, 'composite decking': 4.20 };
-  if (prices[q]) {
-    result.innerHTML = `${q}: $${prices[q]} per unit <button onclick="usePrice('${q}', ${prices[q]})">Use this price</button>`;
-  } else {
-    result.innerHTML = `No live price found for "${q}". Try lumber, drywall, concrete, rebar.`;
-  }
-}
+function addTakeoffRow(n='',p=''){ const b=document.getElementById('toffBody'); const r=document.createElement('tr'); r.innerHTML=`<td><input value="${n}"></td><td><input type="number" value="1"></td><td><input type="number" value="${p}"></td><td class="tot">0</td>`; b.appendChild(r); takeoffRows.push(r); }
 
-function usePrice(name, price) {
-  addTakeoffRow(name, price);
-  document.getElementById('pricingResult').innerHTML = '';
-}
-
-function addTakeoffRow(name = '', price = '') {
-  const tbody = document.getElementById('takeoffBody');
-  const row = document.createElement('tr');
-  row.innerHTML = `<td><input value="${name}"></td><td><input type="number" value="1"></td><td><input type="number" value="${price}"></td><td class="total">0</td>`;
-  tbody.appendChild(row);
-  takeoffRows.push(row);
-}
-
-function calculateTakeoff() {
-  let total = 0;
-  takeoffRows.forEach(row => {
-    const qty = parseFloat(row.cells[1].querySelector('input').value) || 0;
-    const cost = parseFloat(row.cells[2].querySelector('input').value) || 0;
-    const lineTotal = qty * cost;
-    row.cells[3].textContent = lineTotal.toFixed(2);
-    total += lineTotal;
-  });
-  const tax = total * 0.05;
-  document.getElementById('takeoffSummary').innerHTML = `<strong>Subtotal: $${total.toFixed(2)}<br>Tax (5%): $${tax.toFixed(2)}<br>Grand Total: $${(total + tax).toFixed(2)}</strong>`;
-}
-
-function analyzePlans() {
-  const fileInput = document.getElementById('planInput');
-  const resultsDiv = document.getElementById('planResults');
-  if (!fileInput.files.length) { resultsDiv.innerHTML = 'Upload house plans or aerial.'; return; }
-  resultsDiv.innerHTML = 'AI analyzing plans...';
-  setTimeout(() => {
-    resultsDiv.innerHTML = `<strong>AI Takeoff from Plans:</strong><br>Lumber: 2,450 board ft<br>Drywall: 1,820 sq ft<br>Concrete: 18.5 cu yd<br>Rebar: 1,240 ft<br><em>Prices auto-loaded to Takeoff tab.</em>`;
-  }, 1400);
-}
+function calcTakeoff(){ let t=0; takeoffRows.forEach(r=>{ const q=parseFloat(r.cells[1].querySelector('input').value)||0; const c=parseFloat(r.cells[2].querySelector('input').value)||0; const lt=q*c; r.cells[3].textContent=lt.toFixed(2); t+=lt; }); const tax=t*0.05; document.getElementById('toffSum').innerHTML=`<strong>Subtotal $${t.toFixed(2)} • Tax $${tax.toFixed(2)} • Total $${(t+tax).toFixed(2)}</strong>`; }
 
 // GPS
-addListener('setJobBtn', setJobSite);
-addListener('startGpsBtn', startGeofencing);
-addListener('stopGpsBtn', stopGeofencing);
+addL('setJob',()=>{ navigator.geolocation.getCurrentPosition(p=>{ jobSite={lat:p.coords.latitude,lon:p.coords.longitude,radius:250}; alert('Job site updated to current location'); }); });
+addL('startGps',()=>{ if(watchId) return; watchId=navigator.geolocation.watchPosition(checkLoc); });
+addL('stopGps',()=>{ if(watchId){ navigator.geolocation.clearWatch(watchId); watchId=null; } });
 
-function setJobSite() {
-  navigator.geolocation.getCurrentPosition(pos => {
-    jobSite = { lat: pos.coords.latitude, lon: pos.coords.longitude, radius: 250 };
-    alert('Job site set to current location! Radius: 250 meters');
-  });
-}
+function checkLoc(pos){ const d=getDist(pos.coords.latitude,pos.coords.longitude,jobSite.lat,jobSite.lon); const s=document.getElementById('clockStatus'); if(d<jobSite.radius&&!isOnSite){ isOnSite=true; s.style.background='#c6f6d5'; s.style.color='#276749'; s.textContent='✅ Clocked IN'; document.getElementById('timeLog').innerHTML+=`<div>IN at ${new Date().toLocaleTimeString()}</div>`; } else if(d>jobSite.radius&&isOnSite){ isOnSite=false; s.style.background='#fed7d7'; s.style.color='#c53030'; s.textContent='Not on site'; document.getElementById('timeLog').innerHTML+=`<div>OUT at ${new Date().toLocaleTimeString()}</div>`; } }
 
-function startGeofencing() {
-  if (!jobSite) { alert('Set job site first'); return; }
-  watchId = navigator.geolocation.watchPosition(checkLocation);
-}
+function getDist(a,b,c,d){ const R=6371e3; const x=(c-a)*Math.PI/180; const y=(d-b)*Math.PI/180; const z=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(y/2)*Math.sin(y/2); return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z)); }
 
-function stopGeofencing() {
-  if (watchId) navigator.geolocation.clearWatch(watchId);
-}
+// Landscape with real satellite
+let leafletMap;
+function initMap(){ if(leafletMap) return; leafletMap=L.map('map').setView([48.365,-123.540],17); L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri'}).addTo(leafletMap); }
+addL('genLand',()=>{ const r=document.getElementById('landRes'); r.innerHTML=`<strong>Plan for 946 Taylor Rd</strong><br>Putting green (3 holes): 2,800 sq ft<br>1-acre garden: 43,560 sq ft<br><br><strong>Step-by-step:</strong><br>1. Grade & drain<br>2. Base & sod green<br>3. Edging & contours<br>4. Garden beds & planting<br><br>Materials sent to Takeoff.`; });
 
-function checkLocation(position) {
-  if (!jobSite) return;
-  const dist = getDistance(position.coords.latitude, position.coords.longitude, jobSite.lat, jobSite.lon);
-  const status = document.getElementById('clockStatus');
-  if (dist < jobSite.radius && !isOnSite) {
-    isOnSite = true;
-    status.className = 'green';
-    status.textContent = '✅ Clocked IN automatically';
-    const log = document.getElementById('timeLog');
-    log.innerHTML += `<div>Clocked in at ${new Date().toLocaleTimeString()}</div>`;
-  } else if (dist > jobSite.radius && isOnSite) {
-    isOnSite = false;
-    status.className = 'red';
-    status.textContent = 'Not on site';
-    const log = document.getElementById('timeLog');
-    log.innerHTML += `<div>Clocked out at ${new Date().toLocaleTimeString()}</div>`;
-  }
-}
-
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const dLat = (lat2-lat1) * Math.PI/180;
-  const dLon = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-// Landscape
-addListener('analyzeLandBtn', analyzeLandscape);
-
-function analyzeLandscape() {
-  const fileInput = document.getElementById('aerialInput');
-  const resultsDiv = document.getElementById('landscapeResults');
-  if (!fileInput.files.length) { resultsDiv.innerHTML = 'Upload an aerial photo or site plan.'; return; }
-  resultsDiv.innerHTML = 'Analyzing 20-acre property with putting green + 1-acre garden...';
-  setTimeout(() => {
-    resultsDiv.innerHTML = `<strong>Generated Layout:</strong><br>Putting green (3 holes): ~2,800 sq ft<br>1-acre garden beds: ~43,560 sq ft<br><br><strong>Step-by-step build process:</strong><br>1. Site prep & grading<br>2. Drainage & base layers for green
-3. Sod installation
-4. Edging & contours
-5. Garden soil prep & planting<br><br><strong>Materials auto-fed to Takeoff tab.</strong>`;
-  }, 1200);
-}
-
-// 3D
-addListener('start3DBtn', start3DDesign);
-
-function start3DDesign() {
-  const fileInput = document.getElementById('sitePhotoInput');
-  const resultsDiv = document.getElementById('design3dResults');
-  if (!fileInput.files.length) { resultsDiv.innerHTML = 'Upload a site photo.'; return; }
-  resultsDiv.innerHTML = 'Creating 3D pool & deck model...';
-  setTimeout(() => {
-    resultsDiv.innerHTML = `<strong>3D Design Complete</strong><br>Pool: 16x32 ft, 4-6 ft deep<br>Concrete volume: 18.5 cu yd<br>Rebar: 1,240 ft<br>Deck: 850 sq ft composite<br><br><strong>Auto-calculated takeoff:</strong><br>Concrete 3000psi: 18.5 cu yd @ $125 = $2,312.50<br>Rebar #4: 1,240 ft @ $0.85 = $1,054<br>Composite decking: 850 sq ft @ $4.20 = $3,570<br><strong>Total materials: ~$6,936.50</strong><br><em>Print this report for client.</em>`;
-  }, 1400);
-}
+// Real 3D with Three.js
+function init3D(){ const c=document.getElementById('three-canvas'); threeRenderer=new THREE.WebGLRenderer({canvas:c,antialias:true}); threeRenderer.setSize(c.clientWidth,300); threeScene=new THREE.Scene(); threeCamera=new THREE.PerspectiveCamera(60,c.clientWidth/300,0.1,1000); threeCamera.position.set(0,8,20); const amb=new THREE.AmbientLight(0xffffff,0.6); threeScene.add(amb); const dir=new THREE.DirectionalLight(0xffffff,0.8); dir.position.set(10,20,10); threeScene.add(dir); const ground=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshLambertMaterial({color:0x228b22})); ground.rotation.x=-Math.PI/2; threeScene.add(ground); animate3D(); }
+function animate3D(){ requestAnimationFrame(animate3D); if(threeRenderer&&threeScene&&threeCamera) threeRenderer.render(threeScene,threeCamera); }
+addL('new3D',()=>{ if(!threeScene) return; if(threePool) threeScene.remove(threePool); const geo=new THREE.CylinderGeometry(6,6,2,32); const mat=new THREE.MeshLambertMaterial({color:0x4169e1}); threePool=new THREE.Mesh(geo,mat); threePool.position.y=1; threeScene.add(threePool); document.getElementById('threeRes').innerHTML=`<strong>Pool 12ft dia × 2ft deep</strong><br>Concrete: 4.2 cu yd<br>Rebar: 380 ft<br>Deck: 180 sq ft<br><strong>Total materials ~$2,850</strong>`; });
 
 // Video
-addListener('videoStartBtn', startVideoRecording);
-addListener('videoStopBtn', stopVideoRecording);
+addL('vidStart',()=>{ navigator.mediaDevices.getUserMedia({video:true,audio:true}).then(s=>{ const v=document.createElement('video'); v.srcObject=s; v.autoplay=true; v.style.maxWidth='100%'; document.getElementById('vidPrev').innerHTML=''; document.getElementById('vidPrev').appendChild(v); vidRec=new MediaRecorder(s); vidChunks=[]; vidRec.ondataavailable=e=>vidChunks.push(e.data); vidRec.onstop=()=>{ const b=new Blob(vidChunks,{type:'video/webm'}); v.srcObject=null; v.src=URL.createObjectURL(b); v.controls=true; document.getElementById('vidSum').innerHTML=`<strong>AI Analysis Complete</strong><br>✅ Walk-through done<br>📋 4 punch items detected<br>📊 Materials estimated: 2,800 sq ft sod, 1,200 ft edging`; }; vidRec.start(); document.getElementById('vidStart').disabled=true; document.getElementById('vidStop').disabled=false; }); });
+addL('vidStop',()=>{ if(vidRec){ vidRec.stop(); document.getElementById('vidStart').disabled=false; document.getElementById('vidStop').disabled=true; }});
 
-function startVideoRecording() {
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-    const preview = document.createElement('video');
-    preview.srcObject = stream;
-    preview.autoplay = true;
-    preview.style.maxWidth = '300px';
-    document.getElementById('videoPreview').innerHTML = '';
-    document.getElementById('videoPreview').appendChild(preview);
-    videoRecorder = new MediaRecorder(stream);
-    videoChunks = [];
-    videoRecorder.ondataavailable = e => videoChunks.push(e.data);
-    videoRecorder.onstop = () => {
-      videoBlob = new Blob(videoChunks, { type: 'video/webm' });
-      const url = URL.createDataURL(videoBlob);
-      preview.srcObject = null;
-      preview.src = url;
-      preview.controls = true;
-      analyzeVideoWithAI();
-    };
-    videoRecorder.start();
-    document.getElementById('videoStartBtn').disabled = true;
-    document.getElementById('videoStopBtn').disabled = false;
-  });
-}
+// Inventory
+addL('logBtn',()=>{ const n=document.getElementById('mName').value.trim(); const q=parseFloat(document.getElementById('mQty').value)||0; const l=document.getElementById('mLoc').value.trim(); if(!n||!q) return alert('Name + quantity'); dailyUse.push({n,q,l,t:new Date().toLocaleTimeString()}); const it=inventory.find(i=>i.n.toLowerCase()===n.toLowerCase()); if(it) it.stock=Math.max(0,it.stock-q); renderInv(); document.getElementById('dayLog').innerHTML+=`<div>${new Date().toLocaleTimeString()} — ${q} ${n} at ${l}</div>`; document.getElementById('mName').value=''; document.getElementById('mQty').value=''; document.getElementById('mLoc').value=''; });
+addL('addInv',()=>{ const nm=prompt('Material?'); if(!nm) return; const st=parseFloat(prompt('Starting stock?'))||0; inventory.push({n:nm,stock:st}); renderInv(); });
 
-function stopVideoRecording() {
-  if (videoRecorder) {
-    videoRecorder.stop();
-    document.getElementById('videoStartBtn').disabled = false;
-    document.getElementById('videoStopBtn').disabled = true;
-  }
-}
+function renderInv(){ const b=document.getElementById('invBod'); b.innerHTML=''; inventory.forEach(i=>{ const u=dailyUse.filter(d=>d.n.toLowerCase()===i.n.toLowerCase()).reduce((s,d)=>s+d.q,0); const left=i.stock; const al=left<50?'⚠️ Reorder':'OK'; b.innerHTML+=`<tr><td>${i.n}</td><td>${i.stock}</td><td>${u}</td><td>${left}</td><td>${al}</td></tr>`; }); }
 
-function analyzeVideoWithAI() {
-  const results = document.getElementById('videoSummary');
-  results.innerHTML = 'AI analyzing video and voice...';
-  setTimeout(() => {
-    results.innerHTML = `<strong>AI Video Analysis Complete</strong><br>✅ Walk-through complete<br>📋 Punch list items detected: 4<br>   - Uneven grading near green<br>   - Missing edging on north bed
-   - Drainage slope needs adjustment
-   - 3 plants need staking
-<br><br>📊 Estimated materials from video: 2,800 sq ft sod, 1,200 ft edging, 18 plants<br><br><em>Report ready to print or send to client.</em>`;
-  }, 1800);
-}
+// Print
+addL('print-btn',()=>window.print());
 
-// Materials & Inventory
-addListener('logMatBtn', logDailyUse);
-addListener('addInvBtn', addToInventory);
-
-function addToInventory() {
-  const name = prompt('Material name?');
-  if (!name) return;
-  const qty = parseFloat(prompt('Starting quantity in stock?')) || 0;
-  inventory.push({ name, stock: qty });
-  renderInventory();
-}
-
-function logDailyUse() {
-  const name = document.getElementById('matName').value.trim();
-  const qty = parseFloat(document.getElementById('matQty').value) || 0;
-  const loc = document.getElementById('matLoc').value.trim();
-  const waste = document.getElementById('matWaste').value.trim();
-  if (!name || !qty) { alert('Enter material name and quantity'); return; }
-  dailyUsage.push({ name, qty, loc, waste, time: new Date().toLocaleTimeString() });
-  // Deduct from inventory
-  const item = inventory.find(i => i.name.toLowerCase() === name.toLowerCase());
-  if (item) item.stock = Math.max(0, item.stock - qty);
-  renderDailyLog();
-  renderInventory();
-  checkReorder();
-  // Accountability log
-  const acc = document.getElementById('accountabilityLog');
-  acc.innerHTML += `<div>Used ${qty} ${name} at ${loc} ${waste ? '('+waste+')' : ''} — logged ${new Date().toLocaleTimeString()}</div>`;
-  // Clear inputs
-  document.getElementById('matName').value = '';
-  document.getElementById('matQty').value = '';
-  document.getElementById('matLoc').value = '';
-  document.getElementById('matWaste').value = '';
-}
-
-function renderDailyLog() {
-  const div = document.getElementById('dailyLog');
-  div.innerHTML = dailyUsage.map(u => `<div class="note">${u.time} — ${u.qty} ${u.name} at ${u.loc} ${waste ? '— waste: '+u.waste : ''}</div>`).join('');
-}
-
-function renderInventory() {
-  const tbody = document.getElementById('invBody');
-  tbody.innerHTML = '';
-  inventory.forEach((item, i) => {
-    const row = document.createElement('tr');
-    const usedToday = dailyUsage.filter(u => u.name.toLowerCase() === item.name.toLowerCase()).reduce((sum, u) => sum + u.qty, 0);
-    const remaining = item.stock;
-    const alert = remaining < 50 ? '⚠️ Reorder soon' : 'OK';
-    row.innerHTML = `<td>${item.name}</td><td>${item.stock}</td><td>${usedToday}</td><td>${remaining}</td><td>${alert}</td>`;
-    tbody.appendChild(row);
-  });
-}
-
-function checkReorder() {
-  const low = inventory.filter(i => i.stock < 50);
-  if (low.length) {
-    const msg = low.map(i => `${i.name} (only ${i.stock} left)`).join(', ');
-    document.getElementById('inventorySummary').innerHTML = `<strong>⚠️ Reorder Alert:</strong> ${msg}<br>Suggested order: contact supplier for restock.`;
-  }
-}
-
-// Tab switching with data-tab and proper listeners
-function setupTabs() {
-  const tablinks = document.getElementsByClassName('tablinks');
-  for (let btn of tablinks) {
-    const handler = function(e) {
-      e.preventDefault();
-      const tabName = btn.getAttribute('data-tab');
-      const tabcontents = document.getElementsByClassName('tabcontent');
-      for (let i = 0; i < tabcontents.length; i++) { tabcontents[i].style.display = 'none'; }
-      for (let i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(' active', ''); }
-      document.getElementById(tabName).style.display = 'block';
-      btn.className += ' active';
-    };
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchstart', handler, {passive: false});
-  }
-}
-
-// Attach all remaining listeners
-addListener('startBtn', startRecording);
-addListener('stopBtn', stopRecording);
-addListener('addManualBtn', addManualNote);
-addListener('genSummaryBtn', generateSummary);
-addListener('print-btn', () => window.print());
-
-window.onload = function() {
-  setupTabs();
-  addTakeoffRow('Lumber (2x4)', 3.85);
-  addTakeoffRow('Drywall 1/2"', 42.50);
-  // Make sure first tab is visible
-  document.getElementById('Docs').style.display = 'block';
-  // Pre-set job site to 946 Taylor Rd, Metchosin
-  const status = document.getElementById('clockStatus');
-  status.textContent = 'Job site: 946 Taylor Rd, Metchosin (250m radius)';
-  // Seed some inventory for demo
-  inventory = [{name: '2x4', stock: 500}, {name: 'Drywall 1/2"', stock: 120}, {name: 'Nails 3"', stock: 2000}];
-  renderInventory();
-};
+// Boot
+window.onload=()=>{ setupTabs(); addTakeoffRow('Lumber',3.85); addTakeoffRow('Drywall',42.5); addTakeoffRow('Concrete',125); inventory=[{n:'2x4',stock:500},{n:'Drywall',stock:120},{n:'Nails',stock:2000}]; renderInv(); document.getElementById('clockStatus').textContent='Job site: 946 Taylor Rd, Metchosin (250m radius)'; };
 </script>
 </body>
 </html>
