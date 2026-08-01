@@ -22,6 +22,7 @@ button { background: #2b6cb0; color: white; border: none; padding: 11px 16px; bo
 button:active { opacity: 0.85; }
 button:disabled { background: #a0aec0; }
 #print-btn { background: #38a169; font-size: 16px; padding: 12px 20px; width: 100%; margin-bottom: 12px; }
+.big-btn { width: 100%; padding: 14px; font-size: 16px; margin: 6px 0; }
 .status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
@@ -54,8 +55,11 @@ th { background: #edf2f7; }
 <!-- Documentation -->
 <div id="Docs" class="tabcontent" style="display:block">
 <div class="section">
-<h2>Photos</h2>
-<input type="file" id="photoInput" accept="image/*" multiple capture="environment">
+<h2>📷 Camera + Walk-Around</h2>
+<button id="cameraBtn" class="big-btn">📷 Take Photo</button>
+<button id="walkBtn" class="big-btn">🎥 AI Walk-Around (Photo + Voice)</button>
+<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+<div id="photoStatus" class="status info">Tap Take Photo to open your camera. Photos go straight into the app.</div>
 <div id="photos"></div>
 </div>
 <div class="section">
@@ -186,9 +190,26 @@ function setupTabs() {
   });
 }
 
+// Camera button - opens phone camera
+addL('cameraBtn', function() {
+  document.getElementById('photoInput').click();
+});
+
+// AI Walk-Around - starts camera + voice together
+addL('walkBtn', function() {
+  document.getElementById('photoInput').click();
+  // Also trigger voice recording if possible
+  setTimeout(function() {
+    document.getElementById('startBtn').click();
+  }, 500);
+  document.getElementById('photoStatus').className = 'status ok';
+  document.getElementById('photoStatus').textContent = 'AI Walk-Around started. Take photos and speak notes.';
+});
+
 // Photos
 addL('photoInput', function(e) {
   const files = e.target.files;
+  if (!files || !files.length) return;
   for (let f of files) {
     const r = new FileReader();
     r.onload = function(ev) {
@@ -197,6 +218,8 @@ addL('photoInput', function(e) {
       img.src = ev.target.result;
       img.style.cssText = 'max-width:160px;margin:6px;border-radius:6px;';
       document.getElementById('photos').appendChild(img);
+      document.getElementById('photoStatus').className = 'status ok';
+      document.getElementById('photoStatus').textContent = 'Photo added (' + photos.length + ' total). AI will sort them into the right tabs.';
     };
     r.readAsDataURL(f);
   }
@@ -399,7 +422,7 @@ addL('vidStart', function() {
   }
   status.className = 'status info';
   status.textContent = 'Requesting camera + microphone...';
-  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true })
     .then(function(stream) {
       const v = document.createElement('video');
       v.srcObject = stream;
