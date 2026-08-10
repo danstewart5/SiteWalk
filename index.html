@@ -3,211 +3,98 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>SiteWalk - Construction App</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<title>SiteWalk - Simple Walk Tool</title>
 <style>
 * { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, sans-serif; max-width: 1000px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
-.container { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-h1 { color: #1a365d; margin: 0 0 6px 0; font-size: 22px; }
-.subtitle { color: #666; font-size: 14px; margin-bottom: 12px; }
-.tab { overflow-x: auto; white-space: nowrap; border: 1px solid #ddd; background: #f8f9fa; border-radius: 8px 8px 0 0; -webkit-overflow-scrolling: touch; }
-.tab button { background: none; border: none; outline: none; cursor: pointer; padding: 12px 14px; font-size: 14px; display: inline-block; color: #333; }
-.tab button.active { background: #2b6cb0; color: white; border-radius: 6px 6px 0 0; }
-.tabcontent { display: none; padding: 14px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px; }
-.section { margin: 12px 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; }
-button { background: #2b6cb0; color: white; border: none; padding: 11px 16px; border-radius: 6px; font-size: 15px; margin: 4px 4px 4px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 16px; background: #f0f2f5; color: #1a1a1a; }
+.container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+h1 { color: #1a365d; margin: 0 0 8px 0; font-size: 24px; }
+.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
+.section { margin: 16px 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; }
+button { background: #2b6cb0; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 16px; margin: 6px 0; cursor: pointer; width: 100%; }
 button:active { opacity: 0.85; }
 button:disabled { background: #a0aec0; }
-#print-btn { background: #38a169; font-size: 16px; padding: 12px 20px; width: 100%; margin-bottom: 12px; }
-.big-btn { width: 100%; padding: 14px; font-size: 16px; margin: 6px 0; }
-.status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 14px; }
+button.green { background: #38a169; }
+.status { padding: 12px; border-radius: 6px; margin: 10px 0; font-size: 14px; }
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
 .status.info { background: #ebf8ff; color: #2b6cb0; }
-#map { height: 280px; width: 100%; border-radius: 8px; margin: 8px 0; }
-#three-canvas { width: 100%; height: 280px; border-radius: 8px; background: #111; }
-input, textarea { width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
-th { background: #edf2f7; }
-@media print { body { background: white; } .tab, button:not(#print-btn), input[type=file] { display: none !important; } .tabcontent { display: block !important; border: none; } }
+#photos, #videos, #notes { margin-top: 10px; }
+img, video { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+#report { background: #edf2f7; padding: 16px; border-radius: 8px; margin-top: 16px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 <div class="container">
 <h1>📍 SiteWalk</h1>
-<p class="subtitle">Docs • Takeoffs • Time • Landscape • 3D • Video • Inventory</p>
-<button id="print-btn">🖨️ Print Full Report</button>
+<p class="subtitle">Walk • Talk • Snap • Report</p>
 
-<div class="tab">
-<button class="tablinks active" data-tab="Docs">📸 Docs</button>
-<button class="tablinks" data-tab="Takeoff">📐 Takeoff</button>
-<button class="tablinks" data-tab="Time">⏱️ Time</button>
-<button class="tablinks" data-tab="Landscape">🌳 Landscape</button>
-<button class="tablinks" data-tab="Design3D">🏊 3D</button>
-<button class="tablinks" data-tab="Video">🎥 Video</button>
-<button class="tablinks" data-tab="Inventory">📦 Inventory</button>
+<div class="section">
+<h2>🎥 AI Walk-Around</h2>
+<button id="walkBtn" class="green">Start Walk-Around (Voice + Camera)</button>
+<div id="walkStatus" class="status info">Tap to start. Your phone will ask for camera and mic permission.</div>
 </div>
 
-<!-- Documentation -->
-<div id="Docs" class="tabcontent" style="display:block">
 <div class="section">
-<h2>📷 Camera + Walk-Around</h2>
-<button id="cameraBtn" class="big-btn">📷 Take Photo</button>
-<button id="walkBtn" class="big-btn">🎥 AI Walk-Around (Photo + Voice)</button>
+<h2>📷 Photos</h2>
+<button id="photoBtn">Take Photo</button>
 <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
-<div id="photoStatus" class="status info">Tap Take Photo to open your camera. Photos go straight into the app.</div>
 <div id="photos"></div>
 </div>
+
 <div class="section">
-<h2>Voice Notes</h2>
-<button id="startBtn">🎤 Start Recording</button>
-<button id="stopBtn" disabled>⏹ Stop</button>
-<div id="voiceStatus" class="status info">Tap Start Recording. Your phone should ask for microphone permission.</div>
+<h2>🎬 Video</h2>
+<button id="vidStart">Start Video</button>
+<button id="vidStop" disabled>Stop Video</button>
+<div id="vidPrev"></div>
+</div>
+
+<div class="section">
+<h2>🎤 Voice Notes</h2>
+<button id="startBtn">Start Recording</button>
+<button id="stopBtn" disabled>Stop</button>
 <div id="notes"></div>
 </div>
-<div class="section">
-<h2>AI Report</h2>
-<button id="genBtn">Generate Report</button>
-<div id="summary"></div>
-</div>
-</div>
 
-<!-- Takeoff -->
-<div id="Takeoff" class="tabcontent">
 <div class="section">
-<h2>Live Pricing</h2>
-<input id="matSearch" placeholder="lumber, drywall, concrete, rebar...">
-<button id="searchBtn">Search</button>
-<div id="priceRes"></div>
-</div>
-<div class="section">
-<h2>Calculator</h2>
-<table id="toffTable"><thead><tr><th>Material</th><th>Qty</th><th>Cost</th><th>Total</th></tr></thead><tbody id="toffBody"></tbody></table>
-<button id="addRow">+ Row</button>
-<button id="calcBtn">Calculate</button>
-<div id="toffSum"></div>
-</div>
-</div>
-
-<!-- Time Tracking -->
-<div id="Time" class="tabcontent">
-<div class="section">
-<h2>GPS Clock-In — 946 Taylor Rd, Metchosin (250m)</h2>
-<button id="setJob">Set Current as Job Site</button>
-<button id="startGps">Start Monitoring</button>
-<button id="stopGps">Stop</button>
-<div id="clockStatus" class="status err">Not on site</div>
-<div id="timeLog"></div>
-</div>
-</div>
-
-<!-- Landscape -->
-<div id="Landscape" class="tabcontent">
-<div class="section">
-<h2>Landscape — 946 Taylor Rd Aerial</h2>
-<div id="map"></div>
-<p>Satellite view of the property. Generate plan for putting green + garden.</p>
-<button id="genLand">Generate Plan + Directions</button>
-<div id="landRes"></div>
-</div>
-</div>
-
-<!-- 3D -->
-<div id="Design3D" class="tabcontent">
-<div class="section">
-<h2>3D Pool & Deck Designer</h2>
-<div id="three-canvas"></div>
-<p>Tap New 3D Scene to place a pool. Drag to rotate.</p>
-<button id="new3D">New 3D Scene</button>
-<div id="threeRes"></div>
-</div>
-</div>
-
-<!-- Video -->
-<div id="Video" class="tabcontent">
-<div class="section">
-<h2>AI Video Walkthrough</h2>
-<button id="vidStart">🎥 Start Video Recording</button>
-<button id="vidStop" disabled>⏹ Stop & Analyze</button>
-<div id="vidStatus" class="status info">Tap Start. Phone will ask for camera + mic permission.</div>
-<div id="vidPrev"></div>
-<div id="vidSum"></div>
-</div>
-</div>
-
-<!-- Inventory -->
-<div id="Inventory" class="tabcontent">
-<div class="section">
-<h2>Daily Log</h2>
-<input id="mName" placeholder="Material (2x4, nails...)">
-<input id="mQty" type="number" placeholder="Quantity used">
-<input id="mLoc" placeholder="Location on site">
-<input id="mWaste" placeholder="Waste notes (optional)">
-<button id="logBtn">Log Use</button>
-<div id="dayLog"></div>
-</div>
-<div class="section">
-<h2>Running Inventory</h2>
-<table id="invTab"><thead><tr><th>Material</th><th>Stock</th><th>Used</th><th>Left</th><th>Alert</th></tr></thead><tbody id="invBod"></tbody></table>
-<button id="addInv">+ Material</button>
-<div id="invSum"></div>
-</div>
+<h2>📋 Report</h2>
+<button id="genBtn" class="green">Generate Clean Report</button>
+<div id="report"></div>
 </div>
 </div>
 
 <script>
-// SiteWalk - mobile hardened
-let photos = [], notes = [], mediaRec, audioChunks = [], takeoffRows = [];
-let jobSite = { lat: 48.365, lon: -123.540, radius: 250 }, watchId = null, isOnSite = false;
-let vidRec, vidChunks = [], inventory = [], dailyUse = [];
-let threeScene, threeCamera, threeRenderer, threePool, leafletMap;
+let photos = [], notes = [], videos = [];
+let mediaRec, audioChunks = [];
+let vidRec, vidChunks = [];
 
-function addL(id, fn) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('click', function(e) { e.preventDefault(); fn(e); });
-  el.addEventListener('touchend', function(e) { e.preventDefault(); fn(e); }, { passive: false });
-}
-
-function setupTabs() {
-  document.querySelectorAll('.tablinks').forEach(btn => {
-    const handler = function(e) {
-      e.preventDefault();
-      const t = btn.dataset.tab;
-      document.querySelectorAll('.tabcontent').forEach(c => c.style.display = 'none');
-      document.querySelectorAll('.tablinks').forEach(b => b.classList.remove('active'));
-      document.getElementById(t).style.display = 'block';
-      btn.classList.add('active');
-      if (t === 'Landscape' && !leafletMap) initMap();
-      if (t === 'Design3D' && !threeRenderer) init3D();
-    };
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchend', handler, { passive: false });
-  });
-}
-
-// Camera button - opens phone camera
-addL('cameraBtn', function() {
+// Walk-Around: starts camera + voice together
+window.startWalk = function() {
+  const status = document.getElementById('walkStatus');
+  status.className = 'status info';
+  status.textContent = 'Starting camera and mic...';
+  
+  // Start camera
   document.getElementById('photoInput').click();
-});
-
-// AI Walk-Around - starts camera + voice together
-addL('walkBtn', function() {
-  document.getElementById('photoInput').click();
-  // Also trigger voice recording if possible
+  
+  // Start voice after short delay
   setTimeout(function() {
     document.getElementById('startBtn').click();
-  }, 500);
-  document.getElementById('photoStatus').className = 'status ok';
-  document.getElementById('photoStatus').textContent = 'AI Walk-Around started. Take photos and speak notes.';
-});
+  }, 800);
+  
+  status.className = 'status ok';
+  status.textContent = '🔴 Walk-Around active. Take photos and speak notes.';
+};
 
-// Photos
-addL('photoInput', function(e) {
+document.getElementById('walkBtn').addEventListener('click', window.startWalk);
+
+// Photos with forced rear camera
+window.takePhoto = function() {
+  document.getElementById('photoInput').click();
+};
+document.getElementById('photoBtn').addEventListener('click', window.takePhoto);
+
+document.getElementById('photoInput').addEventListener('change', function(e) {
   const files = e.target.files;
   if (!files || !files.length) return;
   for (let f of files) {
@@ -216,302 +103,138 @@ addL('photoInput', function(e) {
       photos.push(ev.target.result);
       const img = document.createElement('img');
       img.src = ev.target.result;
-      img.style.cssText = 'max-width:160px;margin:6px;border-radius:6px;';
       document.getElementById('photos').appendChild(img);
-      document.getElementById('photoStatus').className = 'status ok';
-      document.getElementById('photoStatus').textContent = 'Photo added (' + photos.length + ' total). AI will sort them into the right tabs.';
+      document.getElementById('walkStatus').className = 'status ok';
+      document.getElementById('walkStatus').textContent = 'Photo added (' + photos.length + ' total).';
     };
     r.readAsDataURL(f);
   }
+  e.target.value = '';
 });
 
-// Voice recording with proper error feedback
-addL('startBtn', function() {
-  const status = document.getElementById('voiceStatus');
+// Video with forced rear camera
+window.startVideo = function() {
+  const status = document.getElementById('walkStatus');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     status.className = 'status err';
-    status.textContent = 'This browser does not support microphone recording. Try Chrome.';
+    status.textContent = 'Camera not supported. Try Chrome.';
     return;
   }
   status.className = 'status info';
-  status.textContent = 'Requesting microphone permission...';
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(function(stream) {
-      mediaRec = new MediaRecorder(stream);
-      audioChunks = [];
-      mediaRec.ondataavailable = function(e) { audioChunks.push(e.data); };
-      mediaRec.onstop = function() {
-        showNote('Voice note recorded successfully');
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mediaRec.start();
-      document.getElementById('startBtn').disabled = true;
-      document.getElementById('stopBtn').disabled = false;
-      status.className = 'status ok';
-      status.textContent = '🔴 Recording... Tap Stop when finished.';
-    })
-    .catch(function(err) {
-      status.className = 'status err';
-      status.textContent = 'Microphone blocked or unavailable: ' + (err.message || err.name) + '. Check phone settings → Site permissions.';
-    });
-});
-
-addL('stopBtn', function() {
-  if (mediaRec && mediaRec.state !== 'inactive') {
-    mediaRec.stop();
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
-    document.getElementById('voiceStatus').className = 'status ok';
-    document.getElementById('voiceStatus').textContent = 'Recording stopped.';
-  }
-});
-
-function showNote(t) {
-  const d = document.createElement('div');
-  d.style.cssText = 'background:#edf2f7;padding:10px;margin:6px 0;border-radius:6px;';
-  d.innerHTML = '<strong>Voice:</strong> ' + t;
-  document.getElementById('notes').appendChild(d);
-  notes.push(t);
-}
-
-addL('genBtn', function() {
-  document.getElementById('summary').innerHTML = '<strong>AI Report</strong><br>Photos: ' + photos.length + '<br>Notes: ' + notes.length + '<br>' + notes.join('<br>');
-});
-
-// Takeoff
-addL('searchBtn', function() {
-  const q = document.getElementById('matSearch').value.toLowerCase().trim();
-  const r = document.getElementById('priceRes');
-  const p = { lumber: 3.85, drywall: 42.5, concrete: 125, rebar: 0.85, nails: 0.12 };
-  if (p[q]) {
-    r.innerHTML = q + ': $' + p[q] + ' <button onclick="addTakeoffRow(\'' + q + '\',' + p[q] + ')">Use this price</button>';
-  } else {
-    r.innerHTML = 'Try: lumber, drywall, concrete, rebar, nails';
-  }
-});
-addL('addRow', function() { addTakeoffRow(); });
-addL('calcBtn', calcTakeoff);
-
-function addTakeoffRow(n, p) {
-  n = n || '';
-  p = p || '';
-  const b = document.getElementById('toffBody');
-  const r = document.createElement('tr');
-  r.innerHTML = '<td><input value="' + n + '"></td><td><input type="number" value="1"></td><td><input type="number" value="' + p + '"></td><td class="tot">0</td>';
-  b.appendChild(r);
-  takeoffRows.push(r);
-}
-
-function calcTakeoff() {
-  let t = 0;
-  takeoffRows.forEach(function(r) {
-    const q = parseFloat(r.cells[1].querySelector('input').value) || 0;
-    const c = parseFloat(r.cells[2].querySelector('input').value) || 0;
-    const lt = q * c;
-    r.cells[3].textContent = lt.toFixed(2);
-    t += lt;
-  });
-  const tax = t * 0.05;
-  document.getElementById('toffSum').innerHTML = '<strong>Subtotal $' + t.toFixed(2) + ' • Tax $' + tax.toFixed(2) + ' • Total $' + (t + tax).toFixed(2) + '</strong>';
-}
-
-// GPS
-addL('setJob', function() {
-  if (!navigator.geolocation) { alert('GPS not supported'); return; }
-  navigator.geolocation.getCurrentPosition(function(p) {
-    jobSite = { lat: p.coords.latitude, lon: p.coords.longitude, radius: 250 };
-    alert('Job site set to your current location (250m radius)');
-  }, function(err) { alert('GPS error: ' + err.message); });
-});
-addL('startGps', function() {
-  if (watchId) return;
-  if (!navigator.geolocation) { alert('GPS not supported'); return; }
-  watchId = navigator.geolocation.watchPosition(checkLoc, function(err) {
-    document.getElementById('clockStatus').textContent = 'GPS error: ' + err.message;
-  });
-  document.getElementById('clockStatus').className = 'status info';
-  document.getElementById('clockStatus').textContent = 'Monitoring location...';
-});
-addL('stopGps', function() {
-  if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  document.getElementById('clockStatus').className = 'status err';
-  document.getElementById('clockStatus').textContent = 'Monitoring stopped';
-});
-
-function checkLoc(pos) {
-  const d = getDist(pos.coords.latitude, pos.coords.longitude, jobSite.lat, jobSite.lon);
-  const s = document.getElementById('clockStatus');
-  if (d < jobSite.radius && !isOnSite) {
-    isOnSite = true;
-    s.className = 'status ok';
-    s.textContent = '✅ Clocked IN';
-    document.getElementById('timeLog').innerHTML += '<div>IN at ' + new Date().toLocaleTimeString() + '</div>';
-  } else if (d > jobSite.radius && isOnSite) {
-    isOnSite = false;
-    s.className = 'status err';
-    s.textContent = 'Not on site';
-    document.getElementById('timeLog').innerHTML += '<div>OUT at ' + new Date().toLocaleTimeString() + '</div>';
-  }
-}
-
-function getDist(a, b, c, d) {
-  const R = 6371e3;
-  const x = (c - a) * Math.PI / 180;
-  const y = (d - b) * Math.PI / 180;
-  const z = Math.sin(x / 2) * Math.sin(x / 2) + Math.cos(a * Math.PI / 180) * Math.cos(c * Math.PI / 180) * Math.sin(y / 2) * Math.sin(y / 2);
-  return R * 2 * Math.atan2(Math.sqrt(z), Math.sqrt(1 - z));
-}
-
-// Landscape
-function initMap() {
-  if (leafletMap) return;
-  try {
-    leafletMap = L.map('map').setView([48.365, -123.540], 17);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' }).addTo(leafletMap);
-  } catch (e) {
-    document.getElementById('map').innerHTML = '<p style="padding:20px;text-align:center;">Map failed to load. Check internet.</p>';
-  }
-}
-addL('genLand', function() {
-  document.getElementById('landRes').innerHTML = '<strong>Plan for 946 Taylor Rd</strong><br>Putting green (3 holes): ~2,800 sq ft<br>1-acre garden: ~43,560 sq ft<br><br><strong>Step-by-step:</strong><br>1. Grade & drain<br>2. Base & sod for green<br>3. Edging & contours<br>4. Garden beds & planting<br><br>Materials ready for Takeoff tab.';
-});
-
-// 3D
-function init3D() {
-  try {
-    const c = document.getElementById('three-canvas');
-    threeRenderer = new THREE.WebGLRenderer({ canvas: c, antialias: true });
-    threeRenderer.setSize(c.clientWidth, 280);
-    threeScene = new THREE.Scene();
-    threeCamera = new THREE.PerspectiveCamera(60, c.clientWidth / 280, 0.1, 1000);
-    threeCamera.position.set(0, 8, 20);
-    threeScene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(10, 20, 10);
-    threeScene.add(dir);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshLambertMaterial({ color: 0x228b22 }));
-    ground.rotation.x = -Math.PI / 2;
-    threeScene.add(ground);
-    animate3D();
-  } catch (e) {
-    document.getElementById('three-canvas').innerHTML = '<p style="color:white;padding:20px;text-align:center;">3D not supported on this device</p>';
-  }
-}
-function animate3D() {
-  requestAnimationFrame(animate3D);
-  if (threeRenderer && threeScene && threeCamera) threeRenderer.render(threeScene, threeCamera);
-}
-addL('new3D', function() {
-  if (!threeScene) { init3D(); return; }
-  if (threePool) threeScene.remove(threePool);
-  const geo = new THREE.CylinderGeometry(6, 6, 2, 32);
-  const mat = new THREE.MeshLambertMaterial({ color: 0x4169e1 });
-  threePool = new THREE.Mesh(geo, mat);
-  threePool.position.y = 1;
-  threeScene.add(threePool);
-  document.getElementById('threeRes').innerHTML = '<strong>Pool 12ft diameter × 2ft deep</strong><br>Concrete: 4.2 cu yd<br>Rebar: 380 ft<br>Deck: 180 sq ft<br><strong>Materials ~$2,850</strong>';
-});
-
-// Video with error handling
-addL('vidStart', function() {
-  const status = document.getElementById('vidStatus');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    status.className = 'status err';
-    status.textContent = 'Camera/mic not supported. Try Chrome.';
-    return;
-  }
-  status.className = 'status info';
-  status.textContent = 'Requesting camera + microphone...';
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: true })
+  status.textContent = 'Requesting camera + mic...';
+  navigator.mediaDevices.getUserMedia({ 
+    video: { facingMode: 'environment' }, 
+    audio: true 
+  })
     .then(function(stream) {
       const v = document.createElement('video');
       v.srcObject = stream;
       v.autoplay = true;
       v.muted = true;
       v.playsInline = true;
-      v.style.cssText = 'max-width:100%;border-radius:8px;';
+      v.style.cssText = 'max-width:100%;border-radius:8px;margin:10px 0;';
       document.getElementById('vidPrev').innerHTML = '';
       document.getElementById('vidPrev').appendChild(v);
+      
       vidRec = new MediaRecorder(stream);
       vidChunks = [];
       vidRec.ondataavailable = function(e) { vidChunks.push(e.data); };
       vidRec.onstop = function() {
         const b = new Blob(vidChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(b);
         v.srcObject = null;
-        v.src = URL.createObjectURL(b);
+        v.src = url;
         v.controls = true;
         v.muted = false;
         stream.getTracks().forEach(t => t.stop());
-        document.getElementById('vidSum').innerHTML = '<strong>AI Analysis Complete</strong><br>✅ Walk-through done<br>📋 4 punch items detected<br>📊 Materials estimated: 2,800 sq ft sod, 1,200 ft edging';
+        videos.push(url);
         status.className = 'status ok';
-        status.textContent = 'Video analyzed.';
+        status.textContent = 'Video recorded.';
       };
       vidRec.start();
       document.getElementById('vidStart').disabled = true;
       document.getElementById('vidStop').disabled = false;
       status.className = 'status ok';
-      status.textContent = '🔴 Recording video... Tap Stop when finished.';
+      status.textContent = '🔴 Recording video...';
     })
     .catch(function(err) {
       status.className = 'status err';
-      status.textContent = 'Camera/mic blocked: ' + (err.message || err.name) + '. Check phone permissions for this site.';
+      status.textContent = 'Camera blocked: ' + (err.message || err.name) + '. Check phone settings.';
     });
-});
+};
+document.getElementById('vidStart').addEventListener('click', window.startVideo);
 
-addL('vidStop', function() {
+window.stopVideo = function() {
   if (vidRec && vidRec.state !== 'inactive') {
     vidRec.stop();
     document.getElementById('vidStart').disabled = false;
     document.getElementById('vidStop').disabled = true;
   }
-});
+};
+document.getElementById('vidStop').addEventListener('click', window.stopVideo);
 
-// Inventory
-addL('logBtn', function() {
-  const n = document.getElementById('mName').value.trim();
-  const q = parseFloat(document.getElementById('mQty').value) || 0;
-  const l = document.getElementById('mLoc').value.trim();
-  if (!n || !q) { alert('Enter material name and quantity'); return; }
-  dailyUse.push({ n: n, q: q, l: l, t: new Date().toLocaleTimeString() });
-  const it = inventory.find(function(i) { return i.n.toLowerCase() === n.toLowerCase(); });
-  if (it) it.stock = Math.max(0, it.stock - q);
-  renderInv();
-  document.getElementById('dayLog').innerHTML += '<div>' + new Date().toLocaleTimeString() + ' — ' + q + ' ' + n + ' at ' + l + '</div>';
-  document.getElementById('mName').value = '';
-  document.getElementById('mQty').value = '';
-  document.getElementById('mLoc').value = '';
-  document.getElementById('mWaste').value = '';
-});
-addL('addInv', function() {
-  const nm = prompt('Material name?');
-  if (!nm) return;
-  const st = parseFloat(prompt('Starting stock?')) || 0;
-  inventory.push({ n: nm, stock: st });
-  renderInv();
-});
+// Voice recording
+window.startVoice = function() {
+  const status = document.getElementById('walkStatus');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    status.className = 'status err';
+    status.textContent = 'Mic not supported. Try Chrome.';
+    return;
+  }
+  status.className = 'status info';
+  status.textContent = 'Requesting microphone...';
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(function(stream) {
+      mediaRec = new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRec.ondataavailable = function(e) { audioChunks.push(e.data); };
+      mediaRec.onstop = function() {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        const div = document.createElement('div');
+        div.innerHTML = '<audio controls src="' + url + '"></audio>';
+        document.getElementById('notes').appendChild(div);
+        notes.push('Voice note recorded');
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRec.start();
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+      status.className = 'status ok';
+      status.textContent = '🔴 Recording voice...';
+    })
+    .catch(function(err) {
+      status.className = 'status err';
+      status.textContent = 'Mic blocked: ' + (err.message || err.name);
+    });
+};
+document.getElementById('startBtn').addEventListener('click', window.startVoice);
 
-function renderInv() {
-  const b = document.getElementById('invBod');
-  b.innerHTML = '';
-  inventory.forEach(function(i) {
-    const u = dailyUse.filter(function(d) { return d.n.toLowerCase() === i.n.toLowerCase(); }).reduce(function(s, d) { return s + d.q; }, 0);
-    const left = i.stock;
-    const al = left < 50 ? '⚠️ Reorder' : 'OK';
-    b.innerHTML += '<tr><td>' + i.n + '</td><td>' + i.stock + '</td><td>' + u + '</td><td>' + left + '</td><td>' + al + '</td></tr>';
-  });
-}
+window.stopVoice = function() {
+  if (mediaRec && mediaRec.state !== 'inactive') {
+    mediaRec.stop();
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+  }
+};
+document.getElementById('stopBtn').addEventListener('click', window.stopVoice);
 
-addL('print-btn', function() { window.print(); });
+// Generate report
+window.generateReport = function() {
+  let html = '<strong>📋 SiteWalk Report</strong><br><br>';
+  html += '<strong>Photos:</strong> ' + photos.length + '<br>';
+  html += '<strong>Voice Notes:</strong> ' + notes.length + '<br>';
+  html += '<strong>Videos:</strong> ' + videos.length + '<br><br>';
+  if (notes.length) html += '<strong>Notes:</strong><br>' + notes.join('<br>') + '<br><br>';
+  html += '<em>Generated ' + new Date().toLocaleString() + '</em>';
+  document.getElementById('report').innerHTML = html;
+};
+document.getElementById('genBtn').addEventListener('click', window.generateReport);
 
 // Boot
 window.addEventListener('load', function() {
-  setupTabs();
-  addTakeoffRow('Lumber', 3.85);
-  addTakeoffRow('Drywall', 42.5);
-  addTakeoffRow('Concrete', 125);
-  inventory = [{ n: '2x4', stock: 500 }, { n: 'Drywall', stock: 120 }, { n: 'Nails', stock: 2000 }];
-  renderInv();
-  document.getElementById('clockStatus').textContent = 'Job site: 946 Taylor Rd, Metchosin (250m radius)';
+  document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to begin.';
 });
 </script>
 </body>
