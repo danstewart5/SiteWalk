@@ -3,50 +3,69 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>SiteWalk - Simple Walk Tool</title>
+<title>SiteWalk</title>
 <style>
 * { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 16px; background: #f0f2f5; color: #1a1a1a; }
-.container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-h1 { color: #1a365d; margin: 0 0 8px 0; font-size: 24px; }
-.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
-.section { margin: 16px 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; }
-button { background: #2b6cb0; color: white; border: none; padding: 14px 20px; border-radius: 8px; font-size: 16px; margin: 6px 0; cursor: pointer; width: 100%; }
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
+.container { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+h1 { color: #1a365d; margin: 0 0 4px 0; font-size: 22px; }
+.subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
+.section { margin: 12px 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; }
+h2 { margin: 0 0 10px 0; font-size: 16px; color: #2d3748; }
+button { background: #2b6cb0; color: white; border: none; padding: 13px 16px; border-radius: 8px; font-size: 15px; margin: 5px 0; cursor: pointer; width: 100%; }
 button:active { opacity: 0.85; }
 button:disabled { background: #a0aec0; }
 button.green { background: #38a169; }
-.status { padding: 12px; border-radius: 6px; margin: 10px 0; font-size: 14px; }
+button.orange { background: #dd6b20; }
+button.gray { background: #718096; }
+.status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
 .status.info { background: #ebf8ff; color: #2b6cb0; }
-#photos, #videos, #notes { margin-top: 10px; }
-img, video { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
-#report { background: #edf2f7; padding: 16px; border-radius: 8px; margin-top: 16px; white-space: pre-wrap; }
+select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
+.photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
+.photo-card img { max-width: 100%; border-radius: 6px; display: block; }
+.trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
+#report { background: white; padding: 16px; border-radius: 8px; margin-top: 12px; border: 1px solid #e2e8f0; }
+.report-section { margin: 16px 0; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
+.report-section img { max-width: 100%; border-radius: 6px; margin: 6px 0; }
+.punch-item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+@media print {
+  body { background: white; padding: 0; }
+  .container { box-shadow: none; }
+  button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !important; }
+  #reportSection { display: block !important; border: none; }
+}
 </style>
 </head>
 <body>
 <div class="container">
 <h1>📍 SiteWalk</h1>
-<p class="subtitle">Walk • Talk • Snap • Report</p>
+<p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
 
 <div class="section">
-<h2>🎥 AI Walk-Around</h2>
-<button id="walkBtn" class="green">Start Walk-Around (Voice + Camera)</button>
-<div id="walkStatus" class="status info">Tap to start. Your phone will ask for camera and mic permission.</div>
+<h2>🎥 Walk-Around</h2>
+<button id="walkBtn" class="green">Start Walk-Around</button>
+<div id="walkStatus" class="status info">Ready. Tap to begin.</div>
 </div>
 
 <div class="section">
-<h2>📷 Photos</h2>
-<button id="photoBtn">Take Photo</button>
+<h2>📷 Photos + Trade Tag</h2>
+<select id="tradeSelect">
+  <option value="General">General</option>
+  <option value="Plumbing">Plumbing</option>
+  <option value="Electrical">Electrical</option>
+  <option value="Framing">Framing</option>
+  <option value="Drywall">Drywall</option>
+  <option value="Roofing">Roofing</option>
+  <option value="Concrete">Concrete</option>
+  <option value="Landscaping">Landscaping</option>
+  <option value="Other">Other</option>
+</select>
+<button id="photoBtn">Take Photo (uses selected trade)</button>
 <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
 <div id="photos"></div>
-</div>
-
-<div class="section">
-<h2>🎬 Video</h2>
-<button id="vidStart">Start Video</button>
-<button id="vidStop" disabled>Stop Video</button>
-<div id="vidPrev"></div>
 </div>
 
 <div class="section">
@@ -57,38 +76,40 @@ img, video { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block;
 </div>
 
 <div class="section">
+<h2>✅ Punch List</h2>
+<input type="text" id="punchInput" placeholder="Add issue... e.g. Missing outlet cover in master bath">
+<button id="addPunchBtn" class="orange">Add to Punch List</button>
+<div id="punchList"></div>
+</div>
+
+<div class="section" id="reportSection">
 <h2>📋 Report</h2>
-<button id="genBtn" class="green">Generate Clean Report</button>
+<button id="genBtn" class="green">Generate Report (Photos + Trades + Punch List)</button>
+<button id="printBtn" class="gray">Print Report</button>
 <div id="report"></div>
 </div>
 </div>
 
 <script>
-let photos = [], notes = [], videos = [];
+let photos = []; // {src, trade, time}
+let notes = [];
+let punch = [];
 let mediaRec, audioChunks = [];
-let vidRec, vidChunks = [];
 
-// Walk-Around: starts camera + voice together
+// Trade select stays sticky
+const tradeSelect = document.getElementById('tradeSelect');
+
 window.startWalk = function() {
   const status = document.getElementById('walkStatus');
   status.className = 'status info';
-  status.textContent = 'Starting camera and mic...';
-  
-  // Start camera
+  status.textContent = 'Starting...';
   document.getElementById('photoInput').click();
-  
-  // Start voice after short delay
-  setTimeout(function() {
-    document.getElementById('startBtn').click();
-  }, 800);
-  
+  setTimeout(function(){ document.getElementById('startBtn').click(); }, 700);
   status.className = 'status ok';
-  status.textContent = '🔴 Walk-Around active. Take photos and speak notes.';
+  status.textContent = '🔴 Walk active — take photos & speak notes.';
 };
-
 document.getElementById('walkBtn').addEventListener('click', window.startWalk);
 
-// Photos with forced rear camera
 window.takePhoto = function() {
   document.getElementById('photoInput').click();
 };
@@ -97,117 +118,54 @@ document.getElementById('photoBtn').addEventListener('click', window.takePhoto);
 document.getElementById('photoInput').addEventListener('change', function(e) {
   const files = e.target.files;
   if (!files || !files.length) return;
+  const trade = tradeSelect.value;
   for (let f of files) {
     const r = new FileReader();
     r.onload = function(ev) {
-      photos.push(ev.target.result);
-      const img = document.createElement('img');
-      img.src = ev.target.result;
-      document.getElementById('photos').appendChild(img);
+      const item = { src: ev.target.result, trade: trade, time: new Date().toLocaleString() };
+      photos.push(item);
+      const card = document.createElement('div');
+      card.className = 'photo-card';
+      card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>';
+      document.getElementById('photos').appendChild(card);
       document.getElementById('walkStatus').className = 'status ok';
-      document.getElementById('walkStatus').textContent = 'Photo added (' + photos.length + ' total).';
+      document.getElementById('walkStatus').textContent = 'Photo tagged as ' + trade + ' (' + photos.length + ' total)';
     };
     r.readAsDataURL(f);
   }
   e.target.value = '';
 });
 
-// Video with forced rear camera
-window.startVideo = function() {
-  const status = document.getElementById('walkStatus');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    status.className = 'status err';
-    status.textContent = 'Camera not supported. Try Chrome.';
-    return;
-  }
-  status.className = 'status info';
-  status.textContent = 'Requesting camera + mic...';
-  navigator.mediaDevices.getUserMedia({ 
-    video: { facingMode: 'environment' }, 
-    audio: true 
-  })
-    .then(function(stream) {
-      const v = document.createElement('video');
-      v.srcObject = stream;
-      v.autoplay = true;
-      v.muted = true;
-      v.playsInline = true;
-      v.style.cssText = 'max-width:100%;border-radius:8px;margin:10px 0;';
-      document.getElementById('vidPrev').innerHTML = '';
-      document.getElementById('vidPrev').appendChild(v);
-      
-      vidRec = new MediaRecorder(stream);
-      vidChunks = [];
-      vidRec.ondataavailable = function(e) { vidChunks.push(e.data); };
-      vidRec.onstop = function() {
-        const b = new Blob(vidChunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(b);
-        v.srcObject = null;
-        v.src = url;
-        v.controls = true;
-        v.muted = false;
-        stream.getTracks().forEach(t => t.stop());
-        videos.push(url);
-        status.className = 'status ok';
-        status.textContent = 'Video recorded.';
-      };
-      vidRec.start();
-      document.getElementById('vidStart').disabled = true;
-      document.getElementById('vidStop').disabled = false;
-      status.className = 'status ok';
-      status.textContent = '🔴 Recording video...';
-    })
-    .catch(function(err) {
-      status.className = 'status err';
-      status.textContent = 'Camera blocked: ' + (err.message || err.name) + '. Check phone settings.';
-    });
-};
-document.getElementById('vidStart').addEventListener('click', window.startVideo);
-
-window.stopVideo = function() {
-  if (vidRec && vidRec.state !== 'inactive') {
-    vidRec.stop();
-    document.getElementById('vidStart').disabled = false;
-    document.getElementById('vidStop').disabled = true;
-  }
-};
-document.getElementById('vidStop').addEventListener('click', window.stopVideo);
-
-// Voice recording
+// Voice
 window.startVoice = function() {
   const status = document.getElementById('walkStatus');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  if (!navigator.mediaDevices) {
     status.className = 'status err';
-    status.textContent = 'Mic not supported. Try Chrome.';
+    status.textContent = 'Mic not supported';
     return;
   }
-  status.className = 'status info';
-  status.textContent = 'Requesting microphone...';
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(function(stream) {
-      mediaRec = new MediaRecorder(stream);
-      audioChunks = [];
-      mediaRec.ondataavailable = function(e) { audioChunks.push(e.data); };
-      mediaRec.onstop = function() {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        const div = document.createElement('div');
-        div.innerHTML = '<audio controls src="' + url + '"></audio>';
-        document.getElementById('notes').appendChild(div);
-        notes.push('Voice note recorded');
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mediaRec.start();
-      document.getElementById('startBtn').disabled = true;
-      document.getElementById('stopBtn').disabled = false;
-      status.className = 'status ok';
-      status.textContent = '🔴 Recording voice...';
-    })
-    .catch(function(err) {
-      status.className = 'status err';
-      status.textContent = 'Mic blocked: ' + (err.message || err.name);
-    });
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+    mediaRec = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRec.ondataavailable = function(e){ audioChunks.push(e.data); };
+    mediaRec.onstop = function() {
+      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      const div = document.createElement('div');
+      div.innerHTML = '<audio controls src="' + url + '"></audio>';
+      document.getElementById('notes').appendChild(div);
+      notes.push({ url: url, time: new Date().toLocaleString() });
+      stream.getTracks().forEach(t => t.stop());
+    };
+    mediaRec.start();
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = false;
+    status.className = 'status ok';
+    status.textContent = '🔴 Recording voice...';
+  }).catch(function(err) {
+    status.className = 'status err';
+    status.textContent = 'Mic blocked: ' + (err.message || err.name);
+  });
 };
 document.getElementById('startBtn').addEventListener('click', window.startVoice);
 
@@ -220,21 +178,78 @@ window.stopVoice = function() {
 };
 document.getElementById('stopBtn').addEventListener('click', window.stopVoice);
 
-// Generate report
+// Punch list
+document.getElementById('addPunchBtn').addEventListener('click', function() {
+  const val = document.getElementById('punchInput').value.trim();
+  if (!val) return;
+  punch.push(val);
+  const div = document.createElement('div');
+  div.className = 'punch-item';
+  div.textContent = '• ' + val;
+  document.getElementById('punchList').appendChild(div);
+  document.getElementById('punchInput').value = '';
+});
+
+// Generate report with photos grouped by trade
 window.generateReport = function() {
-  let html = '<strong>📋 SiteWalk Report</strong><br><br>';
-  html += '<strong>Photos:</strong> ' + photos.length + '<br>';
-  html += '<strong>Voice Notes:</strong> ' + notes.length + '<br>';
-  html += '<strong>Videos:</strong> ' + videos.length + '<br><br>';
-  if (notes.length) html += '<strong>Notes:</strong><br>' + notes.join('<br>') + '<br><br>';
-  html += '<em>Generated ' + new Date().toLocaleString() + '</em>';
+  const trades = {};
+  photos.forEach(p => {
+    if (!trades[p.trade]) trades[p.trade] = [];
+    trades[p.trade].push(p);
+  });
+
+  let html = '<div style="text-align:center;margin-bottom:16px">';
+  html += '<strong style="font-size:18px">SiteWalk Report</strong><br>';
+  html += '<span style="font-size:12px;color:#666">' + new Date().toLocaleString() + '</span></div>';
+
+  // Photos by trade
+  const order = ['Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','General','Other'];
+  order.forEach(t => {
+    if (!trades[t] || !trades[t].length) return;
+    html += '<div class="report-section"><h3>' + t + ' (' + trades[t].length + ')</h3>';
+    trades[t].forEach(p => {
+      html += '<img src="' + p.src + '"><div style="font-size:11px;color:#666;margin-bottom:8px">' + p.time + '</div>';
+    });
+    html += '</div>';
+  });
+
+  // Any leftover trades
+  Object.keys(trades).forEach(t => {
+    if (order.indexOf(t) === -1) {
+      html += '<div class="report-section"><h3>' + t + ' (' + trades[t].length + ')</h3>';
+      trades[t].forEach(p => {
+        html += '<img src="' + p.src + '"><div style="font-size:11px;color:#666;margin-bottom:8px">' + p.time + '</div>';
+      });
+      html += '</div>';
+    }
+  });
+
+  // Punch list
+  if (punch.length) {
+    html += '<div class="report-section"><h3>Punch List</h3>';
+    punch.forEach(item => {
+      html += '<div class="punch-item">☐ ' + item + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Notes count
+  html += '<div class="report-section" style="border:none"><h3>Summary</h3>';
+  html += 'Photos: ' + photos.length + '<br>';
+  html += 'Voice notes: ' + notes.length + '<br>';
+  html += 'Punch items: ' + punch.length + '</div>';
+
   document.getElementById('report').innerHTML = html;
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 
-// Boot
+document.getElementById('printBtn').addEventListener('click', function() {
+  window.generateReport();
+  setTimeout(function(){ window.print(); }, 300);
+});
+
 window.addEventListener('load', function() {
-  document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to begin.';
+  document.getElementById('walkStatus').textContent = 'Ready. Select trade, then take photos.';
 });
 </script>
 </body>
