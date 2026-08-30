@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Clock-In</title>
+<style>
+  :root {
+    --green: #1a7f37;
+    --red: #c0392b;
+    --amber: #b8860b;
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --text: #e8e8e8;
+    --muted: #9aa0a6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20px; margin: 8px 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .status-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+    border: 1px solid #2a2e37;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-out { background: #3a2323; color: #ff8a80; }
+  .badge-in { background: #1e3a24; color: #7be395; }
+  .badge-grace { background: #3a3323; color: #f2c94c; }
+  .site-name { font-size: 17px; font-weight: 600; margin-top: 10px; }
+  .timer { font-size: 28px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .gps-info { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+  .btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 8px;
+    cursor: pointer;
+  }
+  .btn-manual { background: var(--card); color: var(--text); border: 1px solid #3a3e47; }
+  .btn-manual.active { background: var(--red); color: white; border: none; }
+  .sites-header { font-size: 13px; color: var(--muted); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .site-row {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    border: 1px solid #2a2e37;
+  }
+  .site-dist { color: var(--muted); font-size: 12px; }
+  .log-entry {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    border-left: 3px solid var(--green);
+  }
+  .log-entry.out { border-left-color: var(--red); }
+  .log-entry.manual { border-left-color: var(--amber); }
+  .perm-warning {
+    background: #3a2323;
+    border: 1px solid #6b3232;
+    color: #ffb4a8;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+
+<h1>GPS Clock-In</h1>
+<div class="subtitle">100m auto radius · multi-site · 5-min exit buffer</div>
+
+<div id="permWarning"></div>
+
+<div class="status-card">
+  <span id="statusBadge" class="status-badge badge-out">Clocked Out</span>
+  <div class="site-name" id="siteName">No active site</div>
+  <div class="timer" id="timer">00:00:00</div>
+  <div class="gps-info" id="gpsInfo">Waiting for location…</div>
+</div>
+
+<button class="btn btn-manual" id="manualBtn">Manual Clock In</button>
+
+<div class="sites-header">Job Sites</div>
+<div id="sitesList"></div>
+
+<div class="sites-header">Activity Log</div>
+<div id="log"></div>
+
+<script>
+// ---- CONFIG ----
+// In production these come from the backend per employee's assigned/active sites.
+const RADIUS_M = 100;
+const EXIT_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+const WATCH_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 };
+
+// Demo job sites — replace with real coordinates / API pull
+const jobSites = [
+  { id: 'site-1', name: '2140 Ridgeline Dr — Framing', lat: 48.4284, lng: -123.3656 },
+  { id: 'site-2', name: 'Colwood Subdivision Lot 7', lat: 48.4237, lng: -123.4995 },
+  { id: 'site-3', name: 'Shop / Yard', lat: 48.4500, lng: -123.3800 },
+];
+
+// ---- STATE ----
+let state = {
+  clockedIn: false,
+  activeSite: null,
+  clockInTime: null,
+  clockInType: null, // 'auto' | 'manual'
+  pendingExit: null, // { site, exitDetectedAt } while in buffer window
+  watchId: null,
+};
+
+const logEntries = [];
+
+// ---- HELPERS ----
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${sec}`;
+}
+
+function addLog(text, cls) {
+  logEntries.unshift({ text, cls, time: new Date() });
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('log');
+  if (logEntries.length === 0) {
+    el.innerHTML = '<div class="gps-info">No activity yet.</div>';
+    return;
+  }
+  el.innerHTML = logEntries.slice(0, 20).map(e =>
+    `<div class="log-entry ${e.cls}">${e.time.toLocaleTimeString()} — ${e.text}</div>`
+  ).join('');
+}
+
+// ---- CLOCK ACTIONS ----
+function clockIn(site, type) {
+  state.clockedIn = true;
+  state.activeSite = site;
+  state.clockInTime = new Date();
+  state.clockInType = type;
+  state.pendingExit = null;
+  addLog(`Clocked IN at ${site.name} (${type})`, type === 'manual' ? 'manual' : '');
+  render();
+}
+
+function clockOut(reason) {
+  if (!state.clockedIn) return;
+  const durationMs = new Date() - state.clockInTime;
+  addLog(`Clocked OUT of ${state.activeSite.name} — ${fmtDuration(durationMs)} (${reason})`, 'out');
+  state.clockedIn = false;
+  state.activeSite = null;
+  state.clockInTime = null;
+  state.pendingExit = null;
+  render();
+}
+
+// ---- GPS LOGIC ----
+function handlePosition(pos) {
+  const { latitude, longitude, accuracy } = pos.coords;
+  document.getElementById('gpsInfo').textContent =
+    `Lat ${latitude.toFixed(5)}, Lng ${longitude.toFixed(5)} · ±${Math.round(accuracy)}m accuracy`;
+
+  const distances = jobSites.map(site => ({
+    site,
+    dist: haversineMeters(latitude, longitude, site.lat, site.lng),
+  }));
+  renderSites(distances);
+
+  const insideSites = distances.filter(d => d.dist <= RADIUS_M);
+
+  if (state.clockedIn) {
+    const stillInsideActive = insideSites.some(d => d.site.id === state.activeSite.id);
+
+    if (stillInsideActive) {
+      // Back inside radius — cancel any pending exit buffer
+      if (state.pendingExit) {
+        addLog(`Back within range of ${state.activeSite.name} — exit cancelled`, '');
+        state.pendingExit = null;
+      }
+    } else {
+      // Outside radius — start or continue exit buffer
+      if (!state.pendingExit) {
+        state.pendingExit = { site: state.activeSite, exitDetectedAt: new Date() };
+        addLog(`Left range of ${state.activeSite.name} — 5 min buffer started`, '');
+      } else {
+        const elapsed = new Date() - state.pendingExit.exitDetectedAt;
+        if (elapsed >= EXIT_BUFFER_MS) {
+          clockOut('auto — left radius');
+        }
+      }
+    }
+  } else {
+    // Not clocked in — auto clock-in if inside any site (closest one wins)
+    if (insideSites.length > 0 && state.clockInType !== 'manual-off') {
+      const closest = insideSites.sort((a, b) => a.dist - b.dist)[0];
+      clockIn(closest.site, 'auto');
+    }
+  }
+
+  render();
+}
+
+function handleGeoError(err) {
+  document.getElementById('gpsInfo').textContent = `GPS error: ${err.message}. Use manual fallback.`;
+}
+
+function startWatch() {
+  if (!navigator.geolocation) {
+    document.getElementById('permWarning').innerHTML =
+      '<div class="perm-warning">This device/browser does not support geolocation. Manual clock-in only.</div>';
+    return;
+  }
+  state.watchId = navigator.geolocation.watchPosition(handlePosition, handleGeoError, WATCH_OPTIONS);
+}
+
+// ---- MANUAL FALLBACK ----
+document.getElementById('manualBtn').addEventListener('click', () => {
+  if (state.clockedIn && state.clockInType !== 'auto-pending') {
+    clockOut('manual');
+  } else {
+    // Manual clock-in: use nearest known site if we have a location, else generic "Manual site"
+    const site = state.activeSite || jobSites[0];
+    clockIn(site, 'manual');
+  }
+});
+
+// ---- RENDER ----
+function renderSites(distances) {
+  const el = document.getElementById('sitesList');
+  el.innerHTML = distances.map(d => {
+    const inside = d.dist <= RADIUS_M;
+    return `<div class="site-row">
+      <span>${inside ? '📍 ' : ''}${d.site.name}</span>
+      <span class="site-dist">${Math.round(d.dist)}m</span>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  const badge = document.getElementById('statusBadge');
+  const nameEl = document.getElementById('siteName');
+  const timerEl = document.getElementById('timer');
+  const btn = document.getElementById('manualBtn');
+
+  if (state.clockedIn) {
+    if (state.pendingExit) {
+      badge.className = 'status-badge badge-grace';
+      badge.textContent = 'Leaving — buffer active';
+    } else {
+      badge.className = 'status-badge badge-in';
+      badge.textContent = 'Clocked In';
+    }
+    nameEl.textContent = state.activeSite.name;
+    btn.textContent = 'Manual Clock Out';
+    btn.classList.add('active');
+  } else {
+    badge.className = 'status-badge badge-out';
+    badge.textContent = 'Clocked Out';
+    nameEl.textContent = 'No active site';
+    timerEl.textContent = '00:00:00';
+    btn.textContent = 'Manual Clock In';
+    btn.classList.remove('active');
+  }
+}
+
+// ---- TIMER TICK ----
+setInterval(() => {
+  if (state.clockedIn && state.clockInTime) {
+    document.getElementById('timer').textContent = fmtDuration(new Date() - state.clockInTime);
+  }
+}, 1000);
+
+// ---- INIT ----
+renderLog();
+render();
+startWatch();
+</script>
+</body>
+</html>
