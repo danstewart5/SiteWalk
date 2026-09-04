@@ -1,1 +1,367 @@
-c1
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SiteWalk</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2b6cb0">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  header { background: linear-gradient(135deg, #1e3a8a, #2b6cb0); padding: 16px; text-align: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  header p { margin: 4px 0 0; font-size: 12px; opacity: .8; }
+  .wrap { padding: 12px; max-width: 600px; margin: 0 auto; }
+  .card { background: #1e293b; border-radius: 14px; padding: 14px; margin-bottom: 12px; border: 1px solid #334155; }
+  .card h2 { margin: 0 0 10px; font-size: 15px; color: #93c5fd; }
+  .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 8px; transition: transform .08s, opacity .2s; }
+  .btn:active { transform: scale(.98); }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary.recording { background: #dc2626; }
+  .btn-secondary { background: #334155; color: #e2e8f0; }
+  .btn-ghost { background: transparent; border: 1px solid #475569; color: #94a3b8; }
+  .btn:disabled { opacity: .4; }
+  select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 15px; margin-bottom: 8px; }
+  #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
+  #cameraWrap.active { display: block; }
+  #cameraPreview { width: 100%; height: 100%; object-fit: cover; }
+  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #2563eb; }
+  #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+  #liveTranscript { min-height: 60px; background: #0f172a; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+  .interim { color: #64748b; font-style: italic; }
+  .punch-item { background: #0f172a; border-radius: 8px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #2563eb; }
+  .punch-item .trade { display: inline-block; font-size: 11px; background: #1e3a8a; color: #93c5fd; padding: 2px 8px; border-radius: 10px; margin-bottom: 4px; }
+  .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
+  .status { font-size: 13px; padding: 8px; border-radius: 8px; margin-bottom: 8px; }
+  .status.ok { background: #14532d; color: #86efac; }
+  .status.err { background: #7f1d1d; color: #fca5a5; }
+  .status.info { background: #1e3a8a; color: #93c5fd; }
+  .report-out { background: #fff; color: #0f172a; padding: 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+  .report-out h3 { margin: 16px 0 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+  .report-out .trade-tag { font-weight: 700; color: #1e3a8a; }
+  .hidden { display: none !important; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📍 SiteWalk</h1>
+  <p>Walk • Talk • Snap • Report by Trade</p>
+</header>
+<div class="wrap">
+
+  <div class="card">
+    <h2>🎥 Walk-Around</h2>
+    <div id="walkStatus" class="status info">Ready. Tap to begin.</div>
+    <button id="startWalkBtn" class="btn btn-primary">Start Walk</button>
+    <button id="stopWalkBtn" class="btn btn-secondary hidden">Stop & Save</button>
+  </div>
+
+  <div class="card">
+    <h2>📷 Camera</h2>
+    <div id="cameraWrap">
+      <video id="cameraPreview" autoplay playsinline muted></video>
+      <button id="captureBtn"></button>
+      <button id="closeCamBtn">Close</button>
+    </div>
+    <button id="openCamBtn" class="btn btn-secondary">Open Camera</button>
+  </div>
+
+  <div class="card">
+    <h2>🏷️ Trade Tag</h2>
+    <select id="tradeSelect">
+      <option value="General">General</option>
+      <option value="Plumbing">Plumbing</option>
+      <option value="Electrical">Electrical</option>
+      <option value="Framing">Framing</option>
+      <option value="Drywall">Drywall</option>
+      <option value="Flooring">Flooring</option>
+      <option value="Roofing">Roofing</option>
+      <option value="HVAC">HVAC</option>
+      <option value="Painting">Painting</option>
+      <option value="Windows">Windows</option>
+      <option value="Concrete">Concrete</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h2>🎙️ Voice Notes</h2>
+    <div id="liveTranscript"><span class="interim">Transcript appears here…</span></div>
+    <button id="voiceBtn" class="btn btn-secondary">Start Recording</button>
+  </div>
+
+  <div class="card">
+    <h2>✅ Punch List</h2>
+    <div class="row">
+      <input type="text" id="punchInput" placeholder="Type a punch item…">
+      <button id="addPunchBtn" class="btn btn-primary" style="width:auto;padding:12px 16px;">Add</button>
+    </div>
+    <div id="punchList"></div>
+  </div>
+
+  <div class="card">
+    <h2>🖼️ Captured Photos</h2>
+    <div id="photoGrid" class="photo-grid"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 Report</h2>
+    <button id="genReportBtn" class="btn btn-primary">Generate Report</button>
+    <button id="printBtn" class="btn btn-secondary hidden">Print Report</button>
+    <div id="reportOut" class="hidden"></div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const trades = ['General','Plumbing','Electrical','Framing','Drywall','Flooring','Roofing','HVAC','Painting','Windows','Concrete'];
+
+let photos = [];
+let notes = [];
+let punchList = [];
+let mediaRecorder, audioChunks = [];
+let audioStream = null;
+let cameraStream = null;
+let recognition = null;
+let isListening = false;
+let walkActive = false;
+let finalTranscript = '';
+let currentNote = '';
+let lastFinalAt = 0;
+const PAUSE_MS = 1800;
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const FATAL = new Set(['not-allowed','service-not-allowed','audio-capture','language-not-supported']);
+
+function load() {
+  try {
+    photos = JSON.parse(localStorage.getItem('sw_photos') || '[]');
+    notes = JSON.parse(localStorage.getItem('sw_notes') || '[]');
+    punchList = JSON.parse(localStorage.getItem('sw_punch') || '[]');
+  } catch(e) { photos=[]; notes=[]; punchList=[]; }
+  renderAll();
+}
+function save() {
+  localStorage.setItem('sw_photos', JSON.stringify(photos));
+  localStorage.setItem('sw_notes', JSON.stringify(notes));
+  localStorage.setItem('sw_punch', JSON.stringify(punchList));
+}
+function renderAll() {
+  renderPhotos();
+  renderPunch();
+  renderTranscript();
+}
+
+function setStatus(msg, kind) {
+  const el = $('walkStatus');
+  el.className = 'status ' + (kind||'info');
+  el.textContent = msg;
+}
+
+// ---------- CAMERA ----------
+async function openCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    const v = $('cameraPreview');
+    v.srcObject = cameraStream;
+    $('cameraWrap').classList.add('active');
+    $('openCamBtn').classList.add('hidden');
+  } catch(e) {
+    setStatus('Camera blocked — falling back to file upload.', 'err');
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
+    inp.onchange = e => { if(e.target.files[0]) handleFile(e.target.files[0]); };
+    inp.click();
+  }
+}
+function closeCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('cameraWrap').classList.remove('active');
+  $('openCamBtn').classList.remove('hidden');
+}
+function capturePhoto() {
+  const v = $('cameraPreview');
+  const c = document.createElement('canvas');
+  c.width = v.videoWidth || 1280; c.height = v.videoHeight || 960;
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  const dataUrl = c.toDataURL('image/jpeg', 0.7);
+  const trade = $('tradeSelect').value;
+  photos.push({ data: dataUrl, trade, time: new Date().toLocaleString() });
+  save(); renderPhotos();
+  setStatus('Photo captured — ' + trade + '.', 'ok');
+}
+function handleFile(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    photos.push({ data: e.target.result, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
+    save(); renderPhotos();
+  };
+  r.readAsDataURL(file);
+}
+function renderPhotos() {
+  const g = $('photoGrid');
+  if (!photos.length) { g.innerHTML = '<p style="color:#64748b;font-size:13px;">No photos yet.</p>'; return; }
+  g.innerHTML = photos.map((p,i) =>
+    `<div style="position:relative;">
+      <img src="${p.data}" alt="photo">
+      <span style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,.7);color:#93c5fd;font-size:10px;padding:1px 5px;border-radius:4px;">${p.trade}</span>
+      <button onclick="deletePhoto(${i})" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,.85);color:#fff;border:none;border-radius:4px;font-size:11px;padding:1px 5px;">✕</button>
+    </div>`).join('');
+}
+window.deletePhoto = i => { photos.splice(i,1); save(); renderPhotos(); };
+
+// ---------- VOICE / STT ----------
+function startVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setStatus('Speech recognition not supported. Use Chrome on Android.', 'err'); return; }
+  recognition = new SR();
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.lang = 'en-US';
+  recognition.continuous = !isIOS;
+  finalTranscript = ''; currentNote = ''; lastFinalAt = 0;
+  isListening = true;
+
+  recognition.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const piece = e.results[i][0].transcript;
+      if (e.results[i].isFinal) {
+        const now = Date.now();
+        if (currentNote && lastFinalAt && now - lastFinalAt > PAUSE_MS) flushNote();
+        currentNote += (currentNote ? ' ' : '') + piece.trim();
+        finalTranscript += piece + ' ';
+        lastFinalAt = now;
+      } else { interim += piece; }
+    }
+    renderTranscript(interim);
+  };
+  recognition.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    if (FATAL.has(e.error)) { isListening = false; setStatus('Mic error: ' + e.error, 'err'); return; }
+    setStatus('Speech hiccup (' + e.error + ')', 'info');
+  };
+  recognition.onend = () => {
+    if (!isListening) return;
+    setTimeout(() => { try { recognition.start(); } catch(_){} }, isIOS ? 220 : 120);
+  };
+  try { recognition.start(); } catch(e) { setStatus('Could not start mic: ' + e.message, 'err'); }
+  setStatus('Listening — walk and talk.', 'ok');
+  $('voiceBtn').textContent = 'Stop Recording';
+  $('voiceBtn').classList.add('recording');
+}
+function flushNote() {
+  const t = currentNote.trim();
+  if (!t) return;
+  notes.push({ text: t, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
+  currentNote = '';
+  save(); renderPunch();
+}
+function stopVoice() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(_){} }
+  flushNote();
+  if (currentNote.trim()) { notes.push({ text: currentNote.trim(), trade: $('tradeSelect').value, time: new Date().toLocaleString() }); currentNote=''; save(); renderPunch(); }
+  setStatus('Voice note stopped.', 'info');
+  $('voiceBtn').textContent = 'Start Recording';
+  $('voiceBtn').classList.remove('recording');
+  renderTranscript('');
+}
+function renderTranscript(interim) {
+  const el = $('liveTranscript');
+  const saved = notes.map(n => `<div><span class="trade-tag" style="font-size:11px;background:#1e3a8a;color:#93c5fd;padding:1px 6px;border-radius:8px;margin-right:4px;">${n.trade}</span>${n.text}</div>`).join('');
+  const live = currentNote ? `<div style="opacity:.7;">${currentNote}</div>` : '';
+  const pend = interim ? `<div class="interim">${interim}</div>` : '';
+  el.innerHTML = (saved || '<span class="interim">Transcript appears here…</span>') + live + pend;
+}
+
+// ---------- PUNCH LIST ----------
+function addPunch() {
+  const v = $('punchInput').value.trim();
+  if (!v) return;
+  punchList.push({ text: v, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
+  $('punchInput').value = '';
+  save(); renderPunch();
+}
+function renderPunch() {
+  const el = $('punchList');
+  const all = [...notes.map(n => ({...n, src:'voice'})), ...punchList.map(p => ({...p, src:'typed'}))];
+  if (!all.length) { el.innerHTML = '<p style="color:#64748b;font-size:13px;">No items yet.</p>'; return; }
+  el.innerHTML = all.map((p,i) =>
+    `<div class="punch-item">
+      <span class="trade">${p.trade}</span>
+      <span style="font-size:11px;color:#64748b;float:right;">${p.time}</span>
+      <div style="margin-top:4px;">${p.text}</div>
+      <button onclick="delPunch(${i})" style="background:none;border:none;color:#f87171;font-size:12px;padding:0;margin-top:4px;">remove</button>
+    </div>`).join('');
+}
+window.delPunch = i => {
+  const all = [...notes.map(n => ({...n, src:'voice'})), ...punchList.map(p => ({...p, src:'typed'}))];
+  const item = all[i];
+  if (item.src === 'voice') { const idx = notes.findIndex(n => n.text===item.text && n.time===item.time); if(idx>=0) notes.splice(idx,1); }
+  else { const idx = punchList.findIndex(p => p.text===item.text && p.time===item.time); if(idx>=0) punchList.splice(idx,1); }
+  save(); renderPunch();
+};
+
+// ---------- REPORT ----------
+function genReport() {
+  const out = $('reportOut');
+  let html = '<h3>SiteWalk Report</h3>';
+  html += `<p><b>Generated:</b> ${new Date().toLocaleString()}</p>`;
+  html += `<p><b>Photos:</b> ${photos.length} &nbsp; <b>Voice notes:</b> ${notes.length} &nbsp; <b>Punch items:</b> ${punchList.length}</p>`;
+  trades.forEach(t => {
+    const tp = photos.filter(p => p.trade === t);
+    const tn = notes.filter(n => n.trade === t);
+    const tpu = punchList.filter(p => p.trade === t);
+    if (!tp.length && !tn.length && !tpu.length) return;
+    html += `<h3 class="trade-tag">${t}</h3>`;
+    if (tn.length) { html += '<b>Voice notes:</b><ul>' + tn.map(n => `<li>${n.text}</li>`).join('') + '</ul>'; }
+    if (tpu.length) { html += '<b>Punch list:</b><ul>' + tpu.map(p => `<li>${p.text}</li>`).join('') + '</ul>'; }
+    if (tp.length) { html += '<b>Photos:</b><div class="photo-grid" style="margin-top:6px;">' + tp.map(p => `<img src="${p.data}">`).join('') + '</div>'; }
+  });
+  out.innerHTML = html;
+  out.classList.remove('hidden');
+  $('printBtn').classList.remove('hidden');
+}
+
+// ---------- WALK (one button) ----------
+async function startWalk() {
+  walkActive = true;
+  $('startWalkBtn').classList.add('hidden');
+  $('stopWalkBtn').classList.remove('hidden');
+  await openCamera();
+  startVoice();
+}
+function stopWalk() {
+  walkActive = false;
+  closeCamera();
+  stopVoice();
+  $('startWalkBtn').classList.remove('hidden');
+  $('stopWalkBtn').classList.add('hidden');
+  setStatus('Walk saved. ' + photos.length + ' photos, ' + notes.length + ' notes.', 'ok');
+}
+
+// ---------- EVENTS ----------
+$('startWalkBtn').onclick = startWalk;
+$('stopWalkBtn').onclick = stopWalk;
+$('openCamBtn').onclick = openCamera;
+$('closeCamBtn').onclick = closeCamera;
+$('captureBtn').onclick = capturePhoto;
+$('voiceBtn').onclick = () => { if (isListening) stopVoice(); else startVoice(); };
+$('addPunchBtn').onclick = addPunch;
+$('punchInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPunch(); });
+$('genReportBtn').onclick = genReport;
+$('printBtn').onclick = () => window.print();
+$('tradeSelect').addEventListener('change', () => setStatus('Trade set to ' + $('tradeSelect').value + '.', 'info'));
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+load();
+</script>
+</body>
+</html>
