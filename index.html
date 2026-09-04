@@ -26,6 +26,10 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 .photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
 .photo-card img { max-width: 100%; border-radius: 6px; display: block; }
 .trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
+.note-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
+.note-card .meta { font-size: 11px; color: #666; margin-top: 4px; }
+.note-card audio { width: 100%; margin-top: 8px; }
+.interim { opacity: 0.6; font-style: italic; }
 #report { background: white; padding: 16px; border-radius: 8px; margin-top: 12px; border: 1px solid #e2e8f0; }
 .report-section { margin: 16px 0; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
@@ -72,6 +76,7 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 <h2>🎤 Voice Notes</h2>
 <button id="startBtn">Start Recording</button>
 <button id="stopBtn" disabled>Stop</button>
+<div id="liveTranscript" class="note-card interim" style="display:none"></div>
 <div id="notes"></div>
 </div>
 
@@ -92,21 +97,196 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 
 <script>
 let photos = []; // {src, trade, time}
-let notes = [];
+let notes = [];  // {text, trade, time, url}
 let punch = [];
 let mediaRec, audioChunks = [];
+let voiceSession = null;
+let pendingAudioUrl = '';
 
-// Trade select stays sticky
 const tradeSelect = document.getElementById('tradeSelect');
+const TRADE_ORDER = ['Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','General','Other'];
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function setStatus(msg, kind) {
+  const el = document.getElementById('walkStatus');
+  el.className = 'status ' + (kind || 'info');
+  el.textContent = msg;
+}
+
+function renderNotes() {
+  const box = document.getElementById('notes');
+  box.innerHTML = notes.map(function(n) {
+    const text = n.text ? escapeHtml(n.text) : '<span class="interim">Audio only — no transcript</span>';
+    const audio = n.url ? '<audio controls src="' + n.url + '"></audio>' : '';
+    return '<div class="note-card"><span class="trade-tag">' + escapeHtml(n.trade || 'General') + '</span> ' +
+      text + '<div class="meta">' + escapeHtml(n.time || '') + '</div>' + audio + '</div>';
+  }).join('');
+}
+
+// --- Speech-to-Text for SiteWalk voice notes ---
+const FATAL_STT_ERRORS = {
+  'not-allowed': 1,
+  'service-not-allowed': 1,
+  'audio-capture': 1,
+  'language-not-supported': 1
+};
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function sttSupported() {
+  return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+}
+
+function createVoiceNoteSession(opts) {
+  opts = opts || {};
+  const lang = opts.lang || 'en-US';
+  const onTranscript = opts.onTranscript;
+  const onStatus = opts.onStatus;
+  const getMeta = opts.getMeta;
+  const pauseMs = opts.pauseMs || 1800;
+
+  if (!sttSupported()) {
+    if (onStatus) onStatus('Live captions not supported in this browser. Audio will still record. Try Chrome on Android.', 'info');
+    return null;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.lang = lang;
+  recognition.continuous = !isIOS;
+
+  let listening = false;
+  let starting = false;
+  let sessionFinal = '';
+  let sessionNotes = [];
+  let current = '';
+  let lastFinalAt = 0;
+  let restartTimer = null;
+
+  function meta() {
+    return typeof getMeta === 'function' ? (getMeta() || {}) : {};
+  }
+
+  function flushNote() {
+    const text = current.trim();
+    if (!text) return;
+    const m = meta();
+    sessionNotes.push({
+      text: text,
+      time: new Date().toLocaleString(),
+      trade: m.trade || 'General'
+    });
+    current = '';
+  }
+
+  function emit(interim) {
+    if (onTranscript) onTranscript(sessionFinal, interim || '', sessionNotes.slice());
+  }
+
+  function safeStart() {
+    if (!listening || starting) return;
+    starting = true;
+    try {
+      recognition.start();
+    } catch (err) {
+      if (!/already started/i.test(String(err))) {
+        if (onStatus) onStatus('Could not restart mic: ' + err.message, 'err');
+      }
+    } finally {
+      starting = false;
+    }
+  }
+
+  recognition.onresult = function(event) {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const piece = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        const now = Date.now();
+        if (current && lastFinalAt && now - lastFinalAt > pauseMs) flushNote();
+        current += (current ? ' ' : '') + piece.trim();
+        sessionFinal += piece + ' ';
+        lastFinalAt = now;
+      } else {
+        interim += piece;
+      }
+    }
+    emit(interim);
+  };
+
+  recognition.onerror = function(event) {
+    const err = event.error;
+    if (err === 'no-speech' || err === 'aborted') return;
+    if (FATAL_STT_ERRORS[err]) {
+      listening = false;
+      const msg = err === 'not-allowed'
+        ? 'Mic permission blocked. Enable microphone for this site.'
+        : 'Speech recognition stopped: ' + err;
+      if (onStatus) onStatus(msg, 'err');
+      return;
+    }
+    if (onStatus) onStatus('Speech hiccup (' + err + ') — still listening.', 'info');
+  };
+
+  recognition.onend = function() {
+    if (!listening) return;
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(safeStart, isIOS ? 220 : 120);
+  };
+
+  return {
+    start: function() {
+      if (listening) return;
+      listening = true;
+      sessionFinal = '';
+      current = '';
+      sessionNotes = [];
+      lastFinalAt = 0;
+      if (onStatus) onStatus('Listening — walk and talk.', 'ok');
+      safeStart();
+    },
+    stop: function() {
+      listening = false;
+      clearTimeout(restartTimer);
+      flushNote();
+      try { recognition.stop(); } catch (e) {}
+      emit('');
+      if (onStatus) onStatus('Voice note stopped.', 'info');
+      return sessionNotes.slice();
+    },
+    isListening: function() { return listening; }
+  };
+}
+
+voiceSession = createVoiceNoteSession({
+  getMeta: function() { return { trade: tradeSelect.value }; },
+  onStatus: setStatus,
+  onTranscript: function(finalText, interim) {
+    const live = document.getElementById('liveTranscript');
+    if (interim) {
+      live.style.display = 'block';
+      live.textContent = interim;
+    } else {
+      live.style.display = 'none';
+      live.textContent = '';
+    }
+  }
+});
 
 window.startWalk = function() {
-  const status = document.getElementById('walkStatus');
-  status.className = 'status info';
-  status.textContent = 'Starting...';
+  setStatus('Starting walk — take photos & speak notes.', 'ok');
   document.getElementById('photoInput').click();
-  setTimeout(function(){ document.getElementById('startBtn').click(); }, 700);
-  status.className = 'status ok';
-  status.textContent = '🔴 Walk active — take photos & speak notes.';
+  window.startVoice();
 };
 document.getElementById('walkBtn').addEventListener('click', window.startWalk);
 
@@ -126,59 +306,76 @@ document.getElementById('photoInput').addEventListener('change', function(e) {
       photos.push(item);
       const card = document.createElement('div');
       card.className = 'photo-card';
-      card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>';
+      card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + escapeHtml(item.trade) + '</span>';
       document.getElementById('photos').appendChild(card);
-      document.getElementById('walkStatus').className = 'status ok';
-      document.getElementById('walkStatus').textContent = 'Photo tagged as ' + trade + ' (' + photos.length + ' total)';
+      setStatus('Photo tagged as ' + trade + ' (' + photos.length + ' total)', 'ok');
     };
     r.readAsDataURL(f);
   }
   e.target.value = '';
 });
 
-// Voice
 window.startVoice = function() {
-  const status = document.getElementById('walkStatus');
+  if (mediaRec && mediaRec.state === 'recording') return;
   if (!navigator.mediaDevices) {
-    status.className = 'status err';
-    status.textContent = 'Mic not supported';
+    setStatus('Mic not supported', 'err');
     return;
   }
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
     mediaRec = new MediaRecorder(stream);
     audioChunks = [];
-    mediaRec.ondataavailable = function(e){ audioChunks.push(e.data); };
+    mediaRec.ondataavailable = function(e) { audioChunks.push(e.data); };
     mediaRec.onstop = function() {
       const blob = new Blob(audioChunks, { type: 'audio/webm' });
-      const url = URL.createObjectURL(blob);
-      const div = document.createElement('div');
-      div.innerHTML = '<audio controls src="' + url + '"></audio>';
-      document.getElementById('notes').appendChild(div);
-      notes.push({ url: url, time: new Date().toLocaleString() });
-      stream.getTracks().forEach(t => t.stop());
+      pendingAudioUrl = URL.createObjectURL(blob);
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      attachAudioToLatestNotes();
+      renderNotes();
     };
     mediaRec.start();
     document.getElementById('startBtn').disabled = true;
     document.getElementById('stopBtn').disabled = false;
-    status.className = 'status ok';
-    status.textContent = '🔴 Recording voice...';
+    setStatus('Recording voice...', 'ok');
+    if (voiceSession) voiceSession.start();
   }).catch(function(err) {
-    status.className = 'status err';
-    status.textContent = 'Mic blocked: ' + (err.message || err.name);
+    setStatus('Mic blocked: ' + (err.message || err.name), 'err');
   });
 };
 document.getElementById('startBtn').addEventListener('click', window.startVoice);
 
+function attachAudioToLatestNotes() {
+  if (!pendingAudioUrl) return;
+  const withoutAudio = notes.filter(function(n) { return !n.url; });
+  if (withoutAudio.length) {
+    withoutAudio.forEach(function(n) { n.url = pendingAudioUrl; });
+  } else {
+    notes.push({
+      text: '',
+      trade: tradeSelect.value,
+      time: new Date().toLocaleString(),
+      url: pendingAudioUrl
+    });
+  }
+  pendingAudioUrl = '';
+}
+
 window.stopVoice = function() {
+  let transcribed = [];
+  if (voiceSession && voiceSession.isListening()) {
+    transcribed = voiceSession.stop() || [];
+  }
+  transcribed.forEach(function(n) { notes.push(n); });
+  renderNotes();
+  document.getElementById('liveTranscript').style.display = 'none';
+
   if (mediaRec && mediaRec.state !== 'inactive') {
     mediaRec.stop();
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
   }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
 };
 document.getElementById('stopBtn').addEventListener('click', window.stopVoice);
 
-// Punch list
 document.getElementById('addPunchBtn').addEventListener('click', function() {
   const val = document.getElementById('punchInput').value.trim();
   if (!val) return;
@@ -190,53 +387,62 @@ document.getElementById('addPunchBtn').addEventListener('click', function() {
   document.getElementById('punchInput').value = '';
 });
 
-// Generate report with photos grouped by trade
 window.generateReport = function() {
-  const trades = {};
-  photos.forEach(p => {
-    if (!trades[p.trade]) trades[p.trade] = [];
-    trades[p.trade].push(p);
+  const photoTrades = {};
+  photos.forEach(function(p) {
+    if (!photoTrades[p.trade]) photoTrades[p.trade] = [];
+    photoTrades[p.trade].push(p);
+  });
+
+  const noteTrades = {};
+  notes.forEach(function(n) {
+    const t = n.trade || 'General';
+    if (!noteTrades[t]) noteTrades[t] = [];
+    noteTrades[t].push(n);
+  });
+
+  const allTrades = {};
+  TRADE_ORDER.concat(Object.keys(photoTrades), Object.keys(noteTrades)).forEach(function(t) {
+    allTrades[t] = true;
   });
 
   let html = '<div style="text-align:center;margin-bottom:16px">';
   html += '<strong style="font-size:18px">SiteWalk Report</strong><br>';
-  html += '<span style="font-size:12px;color:#666">' + new Date().toLocaleString() + '</span></div>';
+  html += '<span style="font-size:12px;color:#666">' + escapeHtml(new Date().toLocaleString()) + '</span></div>';
 
-  // Photos by trade
-  const order = ['Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','General','Other'];
-  order.forEach(t => {
-    if (!trades[t] || !trades[t].length) return;
-    html += '<div class="report-section"><h3>' + t + ' (' + trades[t].length + ')</h3>';
-    trades[t].forEach(p => {
-      html += '<img src="' + p.src + '"><div style="font-size:11px;color:#666;margin-bottom:8px">' + p.time + '</div>';
+  function renderTrade(t) {
+    const pList = photoTrades[t] || [];
+    const nList = noteTrades[t] || [];
+    if (!pList.length && !nList.length) return;
+    html += '<div class="report-section"><h3>' + escapeHtml(t) + ' (' + pList.length + ' photo' + (pList.length === 1 ? '' : 's') + ')</h3>';
+    pList.forEach(function(p) {
+      html += '<img src="' + p.src + '"><div style="font-size:11px;color:#666;margin-bottom:8px">' + escapeHtml(p.time) + '</div>';
     });
-    html += '</div>';
-  });
-
-  // Any leftover trades
-  Object.keys(trades).forEach(t => {
-    if (order.indexOf(t) === -1) {
-      html += '<div class="report-section"><h3>' + t + ' (' + trades[t].length + ')</h3>';
-      trades[t].forEach(p => {
-        html += '<img src="' + p.src + '"><div style="font-size:11px;color:#666;margin-bottom:8px">' + p.time + '</div>';
-      });
-      html += '</div>';
-    }
-  });
-
-  // Punch list
-  if (punch.length) {
-    html += '<div class="report-section"><h3>Punch List</h3>';
-    punch.forEach(item => {
-      html += '<div class="punch-item">☐ ' + item + '</div>';
+    nList.forEach(function(n) {
+      if (!n.text) return;
+      html += '<div class="punch-item">' + escapeHtml(n.text) +
+        '<div style="font-size:11px;color:#666">' + escapeHtml(n.time) + '</div></div>';
     });
     html += '</div>';
   }
 
-  // Notes count
+  TRADE_ORDER.forEach(renderTrade);
+  Object.keys(allTrades).forEach(function(t) {
+    if (TRADE_ORDER.indexOf(t) === -1) renderTrade(t);
+  });
+
+  if (punch.length) {
+    html += '<div class="report-section"><h3>Punch List</h3>';
+    punch.forEach(function(item) {
+      html += '<div class="punch-item">☐ ' + escapeHtml(item) + '</div>';
+    });
+    html += '</div>';
+  }
+
+  const textNotes = notes.filter(function(n) { return n.text; }).length;
   html += '<div class="report-section" style="border:none"><h3>Summary</h3>';
   html += 'Photos: ' + photos.length + '<br>';
-  html += 'Voice notes: ' + notes.length + '<br>';
+  html += 'Voice notes: ' + notes.length + ' (' + textNotes + ' transcribed)<br>';
   html += 'Punch items: ' + punch.length + '</div>';
 
   document.getElementById('report').innerHTML = html;
@@ -245,11 +451,13 @@ document.getElementById('genBtn').addEventListener('click', window.generateRepor
 
 document.getElementById('printBtn').addEventListener('click', function() {
   window.generateReport();
-  setTimeout(function(){ window.print(); }, 300);
+  setTimeout(function() { window.print(); }, 300);
 });
 
 window.addEventListener('load', function() {
-  document.getElementById('walkStatus').textContent = 'Ready. Select trade, then take photos.';
+  setStatus(sttSupported()
+    ? 'Ready. Select trade, then take photos or start recording.'
+    : 'Ready. Live captions unavailable — audio recording still works.', 'info');
 });
 </script>
 </body>
