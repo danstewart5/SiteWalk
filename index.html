@@ -24,8 +24,11 @@
   select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2e37; background: #0c0d10; color: #e8eaee; font-size: 15px; margin-bottom: 8px; }
   #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
   #cameraWrap.active { display: block; }
-  #cameraPreview { width: 100%; height: 100%; object-fit: cover; }
+  #cameraPreview { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
   #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #4a7ab5; }
+  #captureBtn:disabled { opacity: .35; }
+  #camWait { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #8b919c; font-size: 14px; pointer-events: none; }
+  #camWait.show { display: flex; }
   #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
   #liveTranscript { min-height: 60px; background: #0c0d10; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; }
   .interim { color: #5c6370; font-style: italic; }
@@ -67,8 +70,9 @@
   <div class="card">
     <h2>Camera</h2>
     <div id="cameraWrap">
-      <video id="cameraPreview" autoplay playsinline muted></video>
-      <button id="captureBtn" aria-label="Capture photo"></button>
+      <video id="cameraPreview" autoplay playsinline muted webkit-playsinline></video>
+      <div id="camWait">Waiting for live picture…</div>
+      <button id="captureBtn" aria-label="Capture photo" disabled></button>
       <button id="closeCamBtn">Close</button>
     </div>
     <button id="openCamBtn" class="btn btn-secondary">Open Camera</button>
@@ -235,14 +239,55 @@ window.closeTradeBin = function() {
 };
 $('tradeBinModal').addEventListener('click', e => { if (e.target === $('tradeBinModal')) closeTradeBin(); });
 
+async function getCameraStream() {
+  const tries = [
+    { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } } },
+    { audio: false, video: { facingMode: { ideal: 'user' } } },
+    { audio: false, video: true }
+  ];
+  let last;
+  for (const c of tries) {
+    try { return await navigator.mediaDevices.getUserMedia(c); } catch (e) { last = e; }
+  }
+  throw last;
+}
+function waitForVideoFrame(v) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Camera opened but no picture yet')), 6000);
+    const done = () => {
+      if (v.videoWidth > 0) { clearTimeout(t); resolve(); }
+    };
+    v.addEventListener('loadedmetadata', done);
+    v.addEventListener('loadeddata', done);
+    v.addEventListener('playing', done);
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(done);
+    done();
+  });
+}
 async function openCamera() {
+  const wrap = $('cameraWrap');
+  const v = $('cameraPreview');
+  wrap.classList.add('active');
+  $('openCamBtn').classList.add('hidden');
+  $('camWait').classList.add('show');
+  $('captureBtn').disabled = true;
+  v.setAttribute('playsinline', 'true');
+  v.setAttribute('webkit-playsinline', 'true');
+  v.muted = true;
+  v.autoplay = true;
+  v.playsInline = true;
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    $('cameraPreview').srcObject = cameraStream;
-    $('cameraWrap').classList.add('active');
-    $('openCamBtn').classList.add('hidden');
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = await getCameraStream();
+    v.srcObject = cameraStream;
+    try { await v.play(); } catch (_) {}
+    await waitForVideoFrame(v);
+    $('camWait').classList.remove('show');
+    $('captureBtn').disabled = false;
+    setStatus('Camera live. Snap as you go.', 'ok');
   } catch(e) {
     setStatus('Camera blocked — falling back to file upload.', 'err');
+    $('camWait').classList.remove('show');
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
     inp.onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
@@ -251,13 +296,23 @@ async function openCamera() {
 }
 function closeCamera() {
   if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  const v = $('cameraPreview');
+  try { v.pause(); } catch(_) {}
+  v.srcObject = null;
   $('cameraWrap').classList.remove('active');
   $('openCamBtn').classList.remove('hidden');
+  $('camWait').classList.remove('show');
+  $('captureBtn').disabled = true;
 }
 function capturePhoto() {
   const v = $('cameraPreview');
+  if (!v.videoWidth) {
+    setStatus('Wait until you see the live picture, then snap.', 'err');
+    return;
+  }
   const c = document.createElement('canvas');
-  c.width = v.videoWidth || 1280; c.height = v.videoHeight || 960;
+  c.width = v.videoWidth;
+  c.height = v.videoHeight;
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
   addPhoto(c.toDataURL('image/jpeg', 0.7));
 }
