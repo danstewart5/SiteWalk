@@ -42,6 +42,11 @@
   .status.err { background: #3a1a1a; color: #f8d8d8; }
   .status.info { background: #1c1f26; color: #8b919c; }
   .hidden { display: none !important; }
+  .file-cam { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+  label.btn { text-align: center; }
+  #lastShot { margin: 8px 0 12px; }
+  #lastShot img { width: 100%; border-radius: 12px; display: block; background: #0c0d10; }
+  #lastShot p { margin: 6px 0 0; font-size: 12px; color: #8b919c; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   .trade-bin { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #0c0d10; border: 1px solid #2a2e37; border-radius: 12px; padding: 12px; margin-bottom: 8px; }
@@ -70,9 +75,14 @@
 
   <div class="card">
     <h2>Camera</h2>
-    <p class="interim" style="margin-top:0;">Tap Snap photo. That opens your phone’s rear camera so the shot is real — not a black box.</p>
-    <input id="nativeSnap" type="file" accept="image/*" capture="environment" class="hidden">
-    <button id="snapBtn" class="btn btn-primary">Snap photo</button>
+    <p class="interim" style="margin-top:0;">Take photo opens the phone camera. The shot lands here so you can see it.</p>
+    <label for="nativeSnap" class="btn btn-primary">Take photo</label>
+    <input id="nativeSnap" type="file" accept="image/*" capture="environment" class="file-cam">
+    <div id="lastShot" class="hidden">
+      <img id="lastShotImg" alt="Last photo">
+      <p id="lastShotMeta"></p>
+    </div>
+    <div id="photoGrid" class="photo-grid"></div>
     <div id="cameraWrap">
       <video id="cameraPreview" autoplay playsinline muted webkit-playsinline></video>
       <div id="camWait"></div>
@@ -118,11 +128,6 @@
   <div class="card">
     <h2>Trade bins</h2>
     <div id="tradeBins"><p class="interim">Tagged photos and notes sort into a bin per trade.</p></div>
-  </div>
-
-  <div class="card">
-    <h2>Captured photos</h2>
-    <div id="photoGrid" class="photo-grid"></div>
   </div>
 
   <div class="card">
@@ -421,13 +426,18 @@ function addPhoto(dataUrl) {
   const item = { id: uid(), type: 'photo', trade, url: dataUrl, timestamp: Date.now(), sent: false };
   photos.push(item);
   addToTradeBin(item);
-  save(); renderPhotos();
+  try { save(); } catch (_) {}
+  renderPhotos();
+  $('lastShotImg').src = dataUrl;
+  $('lastShotMeta').textContent = trade + ' · just now';
+  $('lastShot').classList.remove('hidden');
+  $('lastShot').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   setStatus('Photo captured — ' + trade + '.', 'ok');
 }
 function renderPhotos() {
   const g = $('photoGrid');
-  if (!photos.length) { g.innerHTML = '<p class="interim">No photos yet.</p>'; return; }
-  g.innerHTML = photos.map(p =>
+  if (!photos.length) { g.innerHTML = ''; return; }
+  g.innerHTML = photos.slice().reverse().map(p =>
     `<div style="position:relative;">
       <img src="${p.url || p.data}" alt="">
       <span style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,.7);color:#c8ccd4;font-size:10px;padding:1px 5px;border-radius:4px;">${esc(p.trade)}</span>
@@ -556,7 +566,6 @@ function stopWalk() {
 
 $('startWalkBtn').onclick = startWalk;
 $('stopWalkBtn').onclick = stopWalk;
-$('snapBtn').onclick = snapPhoto;
 $('nativeSnap').onchange = e => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]); };
 $('openCamBtn').onclick = () => openCamera({ facingMode: 'environment' });
 $('closeCamBtn').onclick = closeCamera;
