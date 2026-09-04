@@ -24,13 +24,13 @@
   select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2e37; background: #0c0d10; color: #e8eaee; font-size: 15px; margin-bottom: 8px; }
   #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
   #cameraWrap.active { display: block; }
-  #cameraPreview { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
-  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #4a7ab5; }
+  #cameraPreview { width: 100%; min-height: 240px; height: 100%; object-fit: cover; background: #000; display: block; }
+  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #4a7ab5; z-index: 4; }
   #captureBtn:disabled { opacity: .35; }
-  #camWait { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: #8b919c; font-size: 14px; pointer-events: none; }
-  #camWait.show { display: flex; }
-  #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
-  #flipCamBtn { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+  #camWait { position: absolute; left: 8px; right: 8px; bottom: 84px; display: none; color: #e8eaee; font-size: 13px; text-align: center; pointer-events: none; background: rgba(0,0,0,.55); padding: 6px 8px; border-radius: 8px; z-index: 2; }
+  #camWait.show { display: block; }
+  #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; z-index: 4; }
+  #flipCamBtn { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; z-index: 4; }
   #liveTranscript { min-height: 60px; background: #0c0d10; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; }
   .interim { color: #5c6370; font-style: italic; }
   .punch-item { background: #0c0d10; border-radius: 8px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #4a7ab5; }
@@ -145,6 +145,8 @@ let punchList = [];
 let tradeBins = {};
 let currentStream = null;
 let currentFacingMode = 'environment';
+let videoInputs = [];
+let videoInputIndex = 0;
 let recognition = null;
 let isListening = false;
 let walkActive = false;
@@ -242,68 +244,113 @@ window.closeTradeBin = function() {
 };
 $('tradeBinModal').addEventListener('click', e => { if (e.target === $('tradeBinModal')) closeTradeBin(); });
 
-function isVideoReady(v) {
-  return v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0;
-}
-function waitForVideoReady(v) {
-  return new Promise((resolve, reject) => {
-    if (isVideoReady(v)) { resolve(); return; }
-    const t = setTimeout(() => { cleanup(); reject(new Error('Camera opened but no picture yet')); }, 8000);
-    const events = ['loadedmetadata', 'loadeddata', 'canplay', 'playing'];
-    const check = () => { if (isVideoReady(v)) { cleanup(); resolve(); } };
-    const cleanup = () => {
-      clearTimeout(t);
-      events.forEach(e => v.removeEventListener(e, check));
-    };
-    events.forEach(e => v.addEventListener(e, check));
-    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(check);
-  });
-}
-async function openCamera(facingMode) {
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function stopStream() {
   if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
+    currentStream.getTracks().forEach(t => t.stop());
     currentStream = null;
   }
-  currentFacingMode = facingMode || 'environment';
-  const wrap = $('cameraWrap');
   const v = $('cameraPreview');
-  wrap.classList.add('active');
-  $('openCamBtn').classList.add('hidden');
-  $('camWait').textContent = 'Waiting for live picture…';
-  $('camWait').classList.add('show');
-  $('captureBtn').disabled = true;
+  try { v.pause(); } catch(_) {}
+  v.srcObject = null;
+}
+async function refreshVideoInputs() {
+  try {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    videoInputs = all.filter(d => d.kind === 'videoinput');
+  } catch (_) { videoInputs = []; }
+}
+function frameSize(v) {
+  const s = currentStream && currentStream.getVideoTracks()[0] ? currentStream.getVideoTracks()[0].getSettings() : {};
+  return {
+    w: v.videoWidth || s.width || 0,
+    h: v.videoHeight || s.height || 0
+  };
+}
+function attachAndPlay(v, stream) {
   v.setAttribute('playsinline', 'true');
   v.setAttribute('webkit-playsinline', 'true');
   v.muted = true;
   v.autoplay = true;
   v.playsInline = true;
-  try {
-    currentStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: currentFacingMode } }
-    });
-    v.srcObject = currentStream;
-    await v.play();
-    await waitForVideoReady(v);
-    $('camWait').classList.remove('show');
-    $('captureBtn').disabled = false;
-    setStatus(currentFacingMode === 'environment' ? 'Rear camera live. Snap as you go.' : 'Front camera live.', 'ok');
-  } catch (err) {
-    const msg = (err && err.message) ? err.message : String(err);
-    $('camWait').textContent = "Couldn't open that camera: " + msg;
-    $('camWait').classList.add('show');
-    setStatus("Couldn't open that camera: " + msg, 'err');
-  }
+  v.srcObject = stream;
+  const ready = new Promise(resolve => {
+    const done = () => { if (v.videoWidth > 0 || v.readyState >= 2) resolve(); };
+    v.addEventListener('loadedmetadata', done);
+    v.addEventListener('loadeddata', done);
+    v.addEventListener('canplay', done);
+    v.addEventListener('playing', done);
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => resolve());
+  });
+  v.play().catch(() => {});
+  return Promise.race([ready, sleep(1500)]);
 }
-function flipCamera() {
+async function openCamera(opts) {
+  if (typeof opts === 'string') opts = { facingMode: opts };
+  opts = opts || { facingMode: 'environment' };
+  const wrap = $('cameraWrap');
+  const v = $('cameraPreview');
+  wrap.classList.add('active');
+  $('openCamBtn').classList.add('hidden');
+  $('camWait').textContent = 'Starting camera…';
+  $('camWait').classList.add('show');
+  $('captureBtn').disabled = true;
+
+  stopStream();
+  await sleep(300);
+
+  let stream;
+  const tries = [];
+  if (opts.deviceId) {
+    tries.push({ audio: false, video: { deviceId: { exact: opts.deviceId } } });
+    tries.push({ audio: false, video: { deviceId: { ideal: opts.deviceId } } });
+  }
+  currentFacingMode = opts.facingMode || currentFacingMode || 'environment';
+  tries.push({ audio: false, video: { facingMode: { exact: currentFacingMode } } });
+  tries.push({ audio: false, video: { facingMode: { ideal: currentFacingMode } } });
+  tries.push({ audio: false, video: true });
+
+  let lastErr;
+  for (const c of tries) {
+    try { stream = await navigator.mediaDevices.getUserMedia(c); lastErr = null; break; }
+    catch (e) { lastErr = e; }
+  }
+  if (!stream) {
+    const msg = (lastErr && lastErr.message) ? lastErr.message : String(lastErr);
+    $('camWait').textContent = "Couldn't open that camera: " + msg;
+    setStatus("Couldn't open that camera: " + msg, 'err');
+    return;
+  }
+
+  currentStream = stream;
+  $('camWait').classList.remove('show');
+  await attachAndPlay(v, stream);
+  $('captureBtn').disabled = false;
+
+  await refreshVideoInputs();
+  const settings = stream.getVideoTracks()[0] ? stream.getVideoTracks()[0].getSettings() : {};
+  if (settings.deviceId) {
+    const i = videoInputs.findIndex(d => d.deviceId === settings.deviceId);
+    if (i >= 0) videoInputIndex = i;
+  }
+  if (settings.facingMode === 'user' || settings.facingMode === 'environment') {
+    currentFacingMode = settings.facingMode;
+  }
+  const label = (videoInputs[videoInputIndex] && videoInputs[videoInputIndex].label) || currentFacingMode;
+  setStatus('Camera live (' + label + '). Flip switches lens.', 'ok');
+}
+async function flipCamera() {
+  await refreshVideoInputs();
+  if (videoInputs.length >= 2) {
+    videoInputIndex = (videoInputIndex + 1) % videoInputs.length;
+    await openCamera({ deviceId: videoInputs[videoInputIndex].deviceId });
+    return;
+  }
   currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-  openCamera(currentFacingMode);
+  await openCamera({ facingMode: currentFacingMode });
 }
 function closeCamera() {
-  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
-  const v = $('cameraPreview');
-  try { v.pause(); } catch(_) {}
-  v.srcObject = null;
+  stopStream();
   $('cameraWrap').classList.remove('active');
   $('openCamBtn').classList.remove('hidden');
   $('camWait').classList.remove('show');
@@ -311,17 +358,16 @@ function closeCamera() {
 }
 async function capturePhoto() {
   const v = $('cameraPreview');
-  try { if (v.paused) await v.play(); } catch (_) {
-    setStatus('Camera is not playing yet — tap snap again.', 'err');
-    return;
-  }
-  if (!isVideoReady(v)) {
-    setStatus('Wait until you see the live picture, then snap.', 'err');
+  if (!currentStream) return;
+  try { if (v.paused) await v.play(); } catch (_) {}
+  const size = frameSize(v);
+  if (!size.w || !size.h) {
+    setStatus('No picture yet — wait a beat then snap.', 'err');
     return;
   }
   const c = document.createElement('canvas');
-  c.width = v.videoWidth;
-  c.height = v.videoHeight;
+  c.width = size.w;
+  c.height = size.h;
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
   addPhoto(c.toDataURL('image/jpeg', 0.7));
 }
@@ -451,7 +497,7 @@ async function startWalk() {
   walkActive = true;
   $('startWalkBtn').classList.add('hidden');
   $('stopWalkBtn').classList.remove('hidden');
-  await openCamera();
+  await openCamera({ facingMode: 'environment' });
   startVoice();
 }
 function stopWalk() {
@@ -465,7 +511,7 @@ function stopWalk() {
 
 $('startWalkBtn').onclick = startWalk;
 $('stopWalkBtn').onclick = stopWalk;
-$('openCamBtn').onclick = () => openCamera('environment');
+$('openCamBtn').onclick = () => openCamera({ facingMode: 'environment' });
 $('closeCamBtn').onclick = closeCamera;
 $('flipCamBtn').onclick = flipCamera;
 $('captureBtn').onclick = capturePhoto;
