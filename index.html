@@ -22,11 +22,12 @@
   .btn-secondary { background: #1c1f26; color: #e8eaee; border: 1px solid #2a2e37; }
   .btn-sm { width: auto; padding: 10px 14px; font-size: 13px; margin: 0; }
   select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2e37; background: #0c0d10; color: #e8eaee; font-size: 15px; margin-bottom: 8px; }
-  #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
+  #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; margin-bottom: 8px; }
   #cameraWrap.active { display: block; }
-  #cameraPreview { width: 100%; min-height: 240px; height: 100%; object-fit: cover; background: #000; display: block; }
-  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #4a7ab5; z-index: 4; }
-  #captureBtn:disabled { opacity: .35; }
+  #cameraPreview { width: 100%; min-height: 240px; height: 100%; object-fit: cover; background: #111; display: block; transform: translateZ(0); }
+  #captureBtn { display: none; }
+  #shutterBtn { display: none; }
+  #cameraWrap.active + #shutterBtn, #shutterBtn.show { display: block; }
   #camWait { position: absolute; left: 8px; right: 8px; bottom: 84px; display: none; color: #e8eaee; font-size: 13px; text-align: center; pointer-events: none; background: rgba(0,0,0,.55); padding: 6px 8px; border-radius: 8px; z-index: 2; }
   #camWait.show { display: block; }
   #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; z-index: 4; }
@@ -75,22 +76,22 @@
 
   <div class="card">
     <h2>Camera</h2>
-    <p class="interim" style="margin-top:0;">Take photo opens the phone camera. The shot lands here so you can see it.</p>
-    <label for="nativeSnap" class="btn btn-primary">Take photo</label>
-    <input id="nativeSnap" type="file" accept="image/*" capture="environment" class="file-cam">
+    <p class="interim" style="margin-top:0;">Start Walk opens the rear camera and keeps it open. Capture grabs the picture you see.</p>
+    <div id="cameraWrap">
+      <video id="cameraPreview" autoplay playsinline muted webkit-playsinline></video>
+      <div id="camWait"></div>
+      <button id="flipCamBtn">Flip</button>
+      <button id="closeCamBtn">Close</button>
+    </div>
+    <button id="shutterBtn" class="btn btn-primary">Capture</button>
     <div id="lastShot" class="hidden">
       <img id="lastShotImg" alt="Last photo">
       <p id="lastShotMeta"></p>
     </div>
     <div id="photoGrid" class="photo-grid"></div>
-    <div id="cameraWrap">
-      <video id="cameraPreview" autoplay playsinline muted webkit-playsinline></video>
-      <div id="camWait"></div>
-      <button id="captureBtn" aria-label="Capture live frame"></button>
-      <button id="flipCamBtn">Flip</button>
-      <button id="closeCamBtn">Close</button>
-    </div>
-    <button id="openCamBtn" class="btn btn-secondary">Try live preview</button>
+    <button id="openCamBtn" class="btn btn-secondary">Open camera</button>
+    <label for="nativeSnap" class="btn btn-secondary">Use phone camera</label>
+    <input id="nativeSnap" type="file" accept="image/*" capture="environment" class="file-cam">
   </div>
 
   <div class="card">
@@ -300,9 +301,9 @@ async function openCamera(opts) {
   const v = $('cameraPreview');
   wrap.classList.add('active');
   $('openCamBtn').classList.add('hidden');
+  $('shutterBtn').classList.add('show');
   $('camWait').textContent = 'Starting camera…';
   $('camWait').classList.add('show');
-  $('captureBtn').disabled = true;
 
   stopStream();
   await sleep(300);
@@ -333,7 +334,6 @@ async function openCamera(opts) {
   currentStream = stream;
   $('camWait').classList.remove('show');
   await attachAndPlay(v, stream);
-  $('captureBtn').disabled = false;
 
   await refreshVideoInputs();
   const settings = stream.getVideoTracks()[0] ? stream.getVideoTracks()[0].getSettings() : {};
@@ -360,9 +360,9 @@ async function flipCamera() {
 function closeCamera() {
   stopStream();
   $('cameraWrap').classList.remove('active');
+  $('shutterBtn').classList.remove('show');
   $('openCamBtn').classList.remove('hidden');
   $('camWait').classList.remove('show');
-  $('captureBtn').disabled = true;
 }
 async function capturePhoto() {
   snapPhoto();
@@ -400,7 +400,7 @@ function nativeSnap() {
   inp.click();
 }
 function snapPhoto() {
-  if (!isIOS && currentStream) {
+  if (currentStream) {
     const v = $('cameraPreview');
     const size = frameSize(v);
     if (size.w && size.h) {
@@ -412,6 +412,7 @@ function snapPhoto() {
         return;
       }
     }
+    setStatus('Live frame was blank — use phone camera instead.', 'err');
   }
   nativeSnap();
 }
@@ -547,13 +548,11 @@ async function startWalk() {
   walkActive = true;
   $('startWalkBtn').classList.add('hidden');
   $('stopWalkBtn').classList.remove('hidden');
-  if (isIOS) {
-    setStatus('Walk on. Tap Snap photo — uses the phone camera.', 'ok');
-    startVoice();
-    return;
-  }
+  setStatus('Opening rear camera…', 'info');
   await openCamera({ facingMode: 'environment' });
+  await sleep(400);
   startVoice();
+  setStatus('Camera stays open. Tap Capture for each shot.', 'ok');
 }
 function stopWalk() {
   walkActive = false;
@@ -570,7 +569,7 @@ $('nativeSnap').onchange = e => { if (e.target.files && e.target.files[0]) handl
 $('openCamBtn').onclick = () => openCamera({ facingMode: 'environment' });
 $('closeCamBtn').onclick = closeCamera;
 $('flipCamBtn').onclick = flipCamera;
-$('captureBtn').onclick = snapPhoto;
+$('shutterBtn').onclick = snapPhoto;
 $('voiceBtn').onclick = () => { if (isListening) stopVoice(); else startVoice(); };
 $('addPunchBtn').onclick = addPunch;
 $('punchInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPunch(); });
