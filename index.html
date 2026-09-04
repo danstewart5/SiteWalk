@@ -39,10 +39,11 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 #cameraPreview { width: 100%; border-radius: 8px; background: #000; display: none; margin: 8px 0; }
 .cam-actions { display: flex; gap: 8px; }
 .cam-actions button { margin: 0; }
+#bigWalkBtn { font-size: 20px; padding: 22px 16px; }
 @media print {
   body { background: white; padding: 0; }
   .container { box-shadow: none; }
-  button, .section:not(#reportSection), #walkStatus, .subtitle, #cameraPreview, .cam-actions { display: none !important; }
+  button, .section:not(#reportSection), #walkStatus, .subtitle, #cameraPreview, .cam-actions, #bigWalkBtn { display: none !important; }
   #reportSection { display: block !important; border: none; }
 }
 </style>
@@ -54,7 +55,7 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 
 <div class="section">
 <h2>🎥 Walk-Around</h2>
-<button id="walkBtn" class="green">Start Walk-Around</button>
+<button id="bigWalkBtn" class="green">Start Walk</button>
 <div id="walkStatus" class="status info">Ready. Tap to begin.</div>
 </div>
 
@@ -108,13 +109,14 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 </div>
 
 <script>
-let photos = []; // {src, trade, time}
-let notes = [];  // {text, trade, time, url}
+let photos = [];
+let notes = [];
 let punch = [];
 let mediaRec, audioChunks = [];
 let voiceSession = null;
 let pendingAudioUrl = '';
 let cameraStream = null;
+let walkActive = false;
 
 const tradeSelect = document.getElementById('tradeSelect');
 const TRADE_ORDER = ['Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','General','Other'];
@@ -122,10 +124,10 @@ const STORE_KEY = 'sitewalk_v1';
 
 function escapeHtml(str) {
   return String(str == null ? '' : str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"');
 }
 
 function setStatus(msg, kind) {
@@ -186,7 +188,6 @@ function renderPunch() {
   }).join('');
 }
 
-// --- Speech-to-Text for SiteWalk voice notes ---
 const FATAL_STT_ERRORS = {
   'not-allowed': 1,
   'service-not-allowed': 1,
@@ -546,30 +547,63 @@ window.generateReport = function() {
   if (punch.length) {
     html += '<div class="report-section"><h3>Punch List</h3>';
     punch.forEach(function(item) {
-      html += '<div class="punch-item">☐ ' + escapeHtml(item) + '</div>';
+      html += '<div class="punch-item">• ' + escapeHtml(item) + '</div>';
     });
     html += '</div>';
   }
 
-  const textNotes = notes.filter(function(n) { return n.text; }).length;
-  html += '<div class="report-section" style="border:none"><h3>Summary</h3>';
-  html += 'Photos: ' + photos.length + '<br>';
-  html += 'Voice notes: ' + notes.length + ' (' + textNotes + ' transcribed)<br>';
-  html += 'Punch items: ' + punch.length + '</div>';
+  html += '<div class="report-section"><h3>Summary</h3>';
+  html += '<div class="punch-item">Photos: ' + photos.length + '</div>';
+  html += '<div class="punch-item">Voice notes: ' + notes.length + '</div>';
+  html += '<div class="punch-item">Punch items: ' + punch.length + '</div>';
+  html += '</div>';
 
   document.getElementById('report').innerHTML = html;
+  setStatus('Report generated.', 'ok');
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 
 document.getElementById('printBtn').addEventListener('click', function() {
   window.generateReport();
-  setTimeout(function() { window.print(); }, 300);
+  setTimeout(function() { window.print(); }, 100);
 });
+
+async function startWalk() {
+  if (walkActive) {
+    await stopWalk();
+    return;
+  }
+  walkActive = true;
+  const btn = document.getElementById('bigWalkBtn');
+  btn.textContent = 'Stop Walk';
+  btn.classList.remove('green');
+  btn.classList.add('red');
+  setStatus('Walk started — camera and mic are ready. Talk and snap as you go.', 'ok');
+  try {
+    await openCamera();
+  } catch (e) {}
+  try {
+    window.startVoice();
+  } catch (e) {}
+}
+
+async function stopWalk() {
+  walkActive = false;
+  const btn = document.getElementById('bigWalkBtn');
+  btn.textContent = 'Start Walk';
+  btn.classList.remove('red');
+  btn.classList.add('green');
+  closeCamera();
+  window.stopVoice();
+  setStatus('Walk stopped. Data saved.', 'info');
+}
+
+document.getElementById('bigWalkBtn').addEventListener('click', startWalk);
 
 window.addEventListener('load', function() {
   loadState();
   setStatus(sttSupported()
-    ? 'Ready. Select trade, then take photos or start recording.'
+    ? 'Ready. Tap Start Walk to begin.'
     : 'Ready. Live captions unavailable — audio recording still works.', 'info');
 });
 
