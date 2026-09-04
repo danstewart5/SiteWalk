@@ -143,8 +143,8 @@ let photos = [];
 let notes = [];
 let punchList = [];
 let tradeBins = {};
-let cameraStream = null;
-let camFacing = 'environment';
+let currentStream = null;
+let currentFacingMode = 'environment';
 let recognition = null;
 let isListening = false;
 let walkActive = false;
@@ -242,25 +242,6 @@ window.closeTradeBin = function() {
 };
 $('tradeBinModal').addEventListener('click', e => { if (e.target === $('tradeBinModal')) closeTradeBin(); });
 
-async function getCameraStream(facing) {
-  facing = facing || 'environment';
-  const labeled = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.label);
-  const re = facing === 'environment' ? /back|rear|environment|world/i : /front|user|face|selfie/i;
-  const byLabel = labeled.find(d => re.test(d.label));
-  const tries = [];
-  if (byLabel) tries.push({ audio: false, video: { deviceId: { exact: byLabel.deviceId } } });
-  tries.push(
-    { audio: false, video: { facingMode: { exact: facing } } },
-    { audio: false, video: { facingMode: { ideal: facing } } },
-    { audio: false, video: { facingMode: facing } }
-  );
-  let last;
-  for (const c of tries) {
-    try { return await navigator.mediaDevices.getUserMedia(c); } catch (e) { last = e; }
-  }
-  try { return await navigator.mediaDevices.getUserMedia({ audio: false, video: true }); } catch (e) { last = e; }
-  throw last;
-}
 function isVideoReady(v) {
   return v.readyState >= 2 && v.videoWidth > 0 && v.videoHeight > 0;
 }
@@ -278,12 +259,17 @@ function waitForVideoReady(v) {
     if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(check);
   });
 }
-async function openCamera(facing) {
-  camFacing = facing || 'environment';
+async function openCamera(facingMode) {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+  currentFacingMode = facingMode || 'environment';
   const wrap = $('cameraWrap');
   const v = $('cameraPreview');
   wrap.classList.add('active');
   $('openCamBtn').classList.add('hidden');
+  $('camWait').textContent = 'Waiting for live picture…';
   $('camWait').classList.add('show');
   $('captureBtn').disabled = true;
   v.setAttribute('playsinline', 'true');
@@ -292,28 +278,29 @@ async function openCamera(facing) {
   v.autoplay = true;
   v.playsInline = true;
   try {
-    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = await getCameraStream(camFacing);
-    v.srcObject = cameraStream;
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: currentFacingMode } }
+    });
+    v.srcObject = currentStream;
     await v.play();
     await waitForVideoReady(v);
     $('camWait').classList.remove('show');
     $('captureBtn').disabled = false;
-    setStatus(camFacing === 'environment' ? 'Rear camera live. Snap as you go.' : 'Front camera live.', 'ok');
-  } catch(e) {
-    setStatus('Camera blocked — falling back to file upload.', 'err');
-    $('camWait').classList.remove('show');
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
-    inp.onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
-    inp.click();
+    setStatus(currentFacingMode === 'environment' ? 'Rear camera live. Snap as you go.' : 'Front camera live.', 'ok');
+  } catch (err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    $('camWait').textContent = "Couldn't open that camera: " + msg;
+    $('camWait').classList.add('show');
+    setStatus("Couldn't open that camera: " + msg, 'err');
   }
 }
-async function flipCamera() {
-  await openCamera(camFacing === 'environment' ? 'user' : 'environment');
+function flipCamera() {
+  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+  openCamera(currentFacingMode);
 }
 function closeCamera() {
-  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
   const v = $('cameraPreview');
   try { v.pause(); } catch(_) {}
   v.srcObject = null;
