@@ -5,73 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SiteWalk</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2b6cb0">
+<meta name="theme-color" content="#0c0d10">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-  header { background: linear-gradient(135deg, #1e3a8a, #2b6cb0); padding: 16px; text-align: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 10px rgba(0,0,0,.4); }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
-  header p { margin: 4px 0 0; font-size: 12px; opacity: .8; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #0c0d10; color: #e8eaee; min-height: 100vh; }
+  header { background: #15171c; padding: 16px; text-align: left; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #2a2e37; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+  header p { margin: 4px 0 0; font-size: 13px; color: #8b919c; }
   .wrap { padding: 12px; max-width: 600px; margin: 0 auto; }
-  .card { background: #1e293b; border-radius: 14px; padding: 14px; margin-bottom: 12px; border: 1px solid #334155; }
-  .card h2 { margin: 0 0 10px; font-size: 15px; color: #93c5fd; }
-  .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; margin-bottom: 8px; transition: transform .08s, opacity .2s; }
+  .card { background: #15171c; border-radius: 16px; padding: 14px; margin-bottom: 12px; border: 1px solid #2a2e37; }
+  .card h2 { margin: 0 0 10px; font-size: 14px; color: #c8ccd4; font-weight: 600; }
+  .btn { display: block; width: 100%; padding: 14px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
   .btn:active { transform: scale(.98); }
-  .btn-primary { background: #2563eb; color: #fff; }
-  .btn-primary.recording { background: #dc2626; }
-  .btn-secondary { background: #334155; color: #e2e8f0; }
-  .btn-ghost { background: transparent; border: 1px solid #475569; color: #94a3b8; }
-  .btn:disabled { opacity: .4; }
-  select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 15px; margin-bottom: 8px; }
+  .btn-primary { background: #4a7ab5; color: #f4f7fb; }
+  .btn-danger { background: #b54a4a; color: #f8d8d8; }
+  .btn-secondary { background: #1c1f26; color: #e8eaee; border: 1px solid #2a2e37; }
+  .btn-sm { width: auto; padding: 10px 14px; font-size: 13px; margin: 0; }
+  select, input[type=text] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2e37; background: #0c0d10; color: #e8eaee; font-size: 15px; margin-bottom: 8px; }
   #cameraWrap { position: relative; width: 100%; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 4/3; display: none; }
   #cameraWrap.active { display: block; }
   #cameraPreview { width: 100%; height: 100%; object-fit: cover; }
-  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #2563eb; }
+  #captureBtn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; border-radius: 50%; background: #fff; border: 4px solid #4a7ab5; }
   #closeCamBtn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
-  #liveTranscript { min-height: 60px; background: #0f172a; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-  .interim { color: #64748b; font-style: italic; }
-  .punch-item { background: #0f172a; border-radius: 8px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #2563eb; }
-  .punch-item .trade { display: inline-block; font-size: 11px; background: #1e3a8a; color: #93c5fd; padding: 2px 8px; border-radius: 10px; margin-bottom: 4px; }
+  #liveTranscript { min-height: 60px; background: #0c0d10; border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.5; }
+  .interim { color: #5c6370; font-style: italic; }
+  .punch-item { background: #0c0d10; border-radius: 8px; padding: 10px; margin-bottom: 6px; border-left: 3px solid #4a7ab5; }
+  .punch-item .trade { display: inline-block; font-size: 11px; background: #1c1f26; color: #4a7ab5; padding: 2px 8px; border-radius: 10px; margin-bottom: 4px; }
   .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; }
   .status { font-size: 13px; padding: 8px; border-radius: 8px; margin-bottom: 8px; }
-  .status.ok { background: #14532d; color: #86efac; }
-  .status.err { background: #7f1d1d; color: #fca5a5; }
-  .status.info { background: #1e3a8a; color: #93c5fd; }
-  .report-out { background: #fff; color: #0f172a; padding: 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
-  .report-out h3 { margin: 16px 0 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
-  .report-out .trade-tag { font-weight: 700; color: #1e3a8a; }
+  .status.ok { background: #163022; color: #d8f3e2; }
+  .status.err { background: #3a1a1a; color: #f8d8d8; }
+  .status.info { background: #1c1f26; color: #8b919c; }
   .hidden { display: none !important; }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
+  .trade-bin { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: #0c0d10; border: 1px solid #2a2e37; border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+  .trade-bin .meta { font-size: 12px; color: #8b919c; margin-top: 2px; }
+  .modal-scrim { position: fixed; inset: 0; background: rgba(12,13,16,.78); z-index: 80; display: none; align-items: flex-end; justify-content: center; padding: 12px; }
+  .modal-scrim.show { display: flex; }
+  .modal-card { background: #15171c; border: 1px solid #2a2e37; border-radius: 16px; padding: 16px; width: 100%; max-width: 520px; max-height: 88vh; overflow: auto; }
+  .bin-item { background: #0c0d10; border: 1px solid #2a2e37; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+  .bin-item img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; }
+  .bin-item small { color: #5c6370; font-size: 11px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>📍 SiteWalk</h1>
-  <p>Walk • Talk • Snap • Report by Trade</p>
+  <h1>SiteWalk</h1>
+  <p>Tag by trade. Bin. Review. Then send.</p>
 </header>
 <div class="wrap">
 
   <div class="card">
-    <h2>🎥 Walk-Around</h2>
-    <div id="walkStatus" class="status info">Ready. Tap to begin.</div>
+    <h2>Walk-around</h2>
+    <div id="walkStatus" class="status info">Ready. Tap Start Walk.</div>
     <button id="startWalkBtn" class="btn btn-primary">Start Walk</button>
-    <button id="stopWalkBtn" class="btn btn-secondary hidden">Stop & Save</button>
+    <button id="stopWalkBtn" class="btn btn-danger hidden">Stop & Save</button>
   </div>
 
   <div class="card">
-    <h2>📷 Camera</h2>
+    <h2>Camera</h2>
     <div id="cameraWrap">
       <video id="cameraPreview" autoplay playsinline muted></video>
-      <button id="captureBtn"></button>
+      <button id="captureBtn" aria-label="Capture photo"></button>
       <button id="closeCamBtn">Close</button>
     </div>
     <button id="openCamBtn" class="btn btn-secondary">Open Camera</button>
   </div>
 
   <div class="card">
-    <h2>🏷️ Trade Tag</h2>
+    <h2>Trade tag</h2>
     <select id="tradeSelect">
       <option value="General">General</option>
       <option value="Plumbing">Plumbing</option>
@@ -88,73 +92,82 @@
   </div>
 
   <div class="card">
-    <h2>🎙️ Voice Notes</h2>
+    <h2>Voice notes</h2>
     <div id="liveTranscript"><span class="interim">Transcript appears here…</span></div>
     <button id="voiceBtn" class="btn btn-secondary">Start Recording</button>
   </div>
 
   <div class="card">
-    <h2>✅ Punch List</h2>
+    <h2>Punch list</h2>
     <div class="row">
       <input type="text" id="punchInput" placeholder="Type a punch item…">
-      <button id="addPunchBtn" class="btn btn-primary" style="width:auto;padding:12px 16px;">Add</button>
+      <button id="addPunchBtn" class="btn btn-primary btn-sm">Add</button>
     </div>
     <div id="punchList"></div>
   </div>
 
   <div class="card">
-    <h2>🖼️ Captured Photos</h2>
+    <h2>Trade bins</h2>
+    <div id="tradeBins"><p class="interim">Tagged photos and notes sort into a bin per trade.</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Captured photos</h2>
     <div id="photoGrid" class="photo-grid"></div>
   </div>
 
   <div class="card">
-    <h2>📋 Report</h2>
+    <h2>Report</h2>
     <button id="genReportBtn" class="btn btn-primary">Generate Report</button>
     <button id="printBtn" class="btn btn-secondary hidden">Print Report</button>
     <div id="reportOut" class="hidden"></div>
   </div>
+</div>
 
+<div id="tradeBinModal" class="modal-scrim">
+  <div class="modal-card" id="tradeBinModalBody"></div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const trades = ['General','Plumbing','Electrical','Framing','Drywall','Flooring','Roofing','HVAC','Painting','Windows','Concrete'];
+const KEY = 'sitewalk_v4';
 
 let photos = [];
 let notes = [];
 let punchList = [];
-let mediaRecorder, audioChunks = [];
-let audioStream = null;
+let tradeBins = {};
 let cameraStream = null;
 let recognition = null;
 let isListening = false;
 let walkActive = false;
-let finalTranscript = '';
 let currentNote = '';
 let lastFinalAt = 0;
 const PAUSE_MS = 1800;
-
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const FATAL = new Set(['not-allowed','service-not-allowed','audio-capture','language-not-supported']);
 
+function uid() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
 function load() {
   try {
-    photos = JSON.parse(localStorage.getItem('sw_photos') || '[]');
-    notes = JSON.parse(localStorage.getItem('sw_notes') || '[]');
-    punchList = JSON.parse(localStorage.getItem('sw_punch') || '[]');
-  } catch(e) { photos=[]; notes=[]; punchList=[]; }
+    const d = JSON.parse(localStorage.getItem(KEY) || '{}');
+    photos = d.photos || [];
+    notes = d.notes || [];
+    punchList = d.punch || [];
+    tradeBins = d.bins || {};
+  } catch(e) { photos=[]; notes=[]; punchList=[]; tradeBins={}; }
   renderAll();
 }
 function save() {
-  localStorage.setItem('sw_photos', JSON.stringify(photos));
-  localStorage.setItem('sw_notes', JSON.stringify(notes));
-  localStorage.setItem('sw_punch', JSON.stringify(punchList));
+  localStorage.setItem(KEY, JSON.stringify({ photos, notes, punch: punchList, bins: tradeBins }));
 }
-function renderAll() {
-  renderPhotos();
-  renderPunch();
-  renderTranscript();
-}
+function renderAll() { renderPhotos(); renderPunch(); renderTranscript(); renderTradeBins(); }
 
 function setStatus(msg, kind) {
   const el = $('walkStatus');
@@ -162,19 +175,77 @@ function setStatus(msg, kind) {
   el.textContent = msg;
 }
 
-// ---------- CAMERA ----------
+function addToTradeBin(item) {
+  const trade = item.trade || 'General';
+  if (!tradeBins[trade]) tradeBins[trade] = [];
+  tradeBins[trade].push(item);
+  renderTradeBins();
+}
+
+function unsent(trade) { return (tradeBins[trade] || []).filter(i => !i.sent); }
+
+function renderTradeBins() {
+  const container = $('tradeBins');
+  const keys = Object.keys(tradeBins).filter(t => unsent(t).length);
+  if (!keys.length) {
+    container.innerHTML = '<p class="interim">Tagged photos and notes sort into a bin per trade.</p>';
+    return;
+  }
+  container.innerHTML = keys.map(trade => {
+    const items = unsent(trade);
+    const photosN = items.filter(i => i.type === 'photo').length;
+    const notesN = items.filter(i => i.type === 'note').length;
+    return `<div class="trade-bin">
+      <div>
+        <strong>${esc(trade)}</strong>
+        <div class="meta">${items.length} unsent · ${photosN} photo${photosN===1?'':'s'} · ${notesN} note${notesN===1?'':'s'}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openTradeBin('${esc(trade)}')">Review</button>
+    </div>`;
+  }).join('');
+}
+
+window.openTradeBin = function(trade) {
+  const items = unsent(trade);
+  const body = $('tradeBinModalBody');
+  body.innerHTML = `
+    <p style="font-size:12px;color:#8b919c;margin:0 0 4px;text-transform:uppercase;letter-spacing:.08em;">Ready to send</p>
+    <h3 style="margin:0 0 6px;">${esc(trade)}</h3>
+    <p style="font-size:13px;color:#8b919c;margin:0 0 12px;">${items.length} items staged. Nothing leaves this device yet.</p>
+    ${items.map(i => `
+      <div class="bin-item">
+        ${i.type === 'photo' && i.url ? `<img src="${i.url}" alt="">` : `<p>${esc(i.text || '')}</p>`}
+        <small>${new Date(i.timestamp).toLocaleString()}</small>
+      </div>
+    `).join('')}
+    <button class="btn btn-primary" onclick="markSent('${esc(trade)}')">Mark as sent</button>
+    <button class="btn btn-secondary" onclick="closeTradeBin()">Close</button>
+  `;
+  $('tradeBinModal').classList.add('show');
+};
+window.markSent = function(trade) {
+  (tradeBins[trade] || []).forEach(i => i.sent = true);
+  save();
+  renderTradeBins();
+  closeTradeBin();
+  setStatus(trade + ' marked sent. Email/text comes next.', 'ok');
+};
+window.closeTradeBin = function() {
+  $('tradeBinModal').classList.remove('show');
+};
+$('tradeBinModal').addEventListener('click', e => { if (e.target === $('tradeBinModal')) closeTradeBin(); });
+
 async function openCamera() {
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    const v = $('cameraPreview');
-    v.srcObject = cameraStream;
+    $('cameraPreview').srcObject = cameraStream;
     $('cameraWrap').classList.add('active');
     $('openCamBtn').classList.add('hidden');
   } catch(e) {
     setStatus('Camera blocked — falling back to file upload.', 'err');
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/*'; inp.capture = 'environment';
-    inp.onchange = e => { if(e.target.files[0]) handleFile(e.target.files[0]); };
+    inp.onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
     inp.click();
   }
 }
@@ -188,33 +259,31 @@ function capturePhoto() {
   const c = document.createElement('canvas');
   c.width = v.videoWidth || 1280; c.height = v.videoHeight || 960;
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  const dataUrl = c.toDataURL('image/jpeg', 0.7);
-  const trade = $('tradeSelect').value;
-  photos.push({ data: dataUrl, trade, time: new Date().toLocaleString() });
-  save(); renderPhotos();
-  setStatus('Photo captured — ' + trade + '.', 'ok');
+  addPhoto(c.toDataURL('image/jpeg', 0.7));
 }
 function handleFile(file) {
   const r = new FileReader();
-  r.onload = e => {
-    photos.push({ data: e.target.result, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
-    save(); renderPhotos();
-  };
+  r.onload = e => addPhoto(e.target.result);
   r.readAsDataURL(file);
+}
+function addPhoto(dataUrl) {
+  const trade = $('tradeSelect').value;
+  const item = { id: uid(), type: 'photo', trade, url: dataUrl, timestamp: Date.now(), sent: false };
+  photos.push(item);
+  addToTradeBin(item);
+  save(); renderPhotos();
+  setStatus('Photo captured — ' + trade + '.', 'ok');
 }
 function renderPhotos() {
   const g = $('photoGrid');
-  if (!photos.length) { g.innerHTML = '<p style="color:#64748b;font-size:13px;">No photos yet.</p>'; return; }
-  g.innerHTML = photos.map((p,i) =>
+  if (!photos.length) { g.innerHTML = '<p class="interim">No photos yet.</p>'; return; }
+  g.innerHTML = photos.map(p =>
     `<div style="position:relative;">
-      <img src="${p.data}" alt="photo">
-      <span style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,.7);color:#93c5fd;font-size:10px;padding:1px 5px;border-radius:4px;">${p.trade}</span>
-      <button onclick="deletePhoto(${i})" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,.85);color:#fff;border:none;border-radius:4px;font-size:11px;padding:1px 5px;">✕</button>
+      <img src="${p.url || p.data}" alt="">
+      <span style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,.7);color:#c8ccd4;font-size:10px;padding:1px 5px;border-radius:4px;">${esc(p.trade)}</span>
     </div>`).join('');
 }
-window.deletePhoto = i => { photos.splice(i,1); save(); renderPhotos(); };
 
-// ---------- VOICE / STT ----------
 function startVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setStatus('Speech recognition not supported. Use Chrome on Android.', 'err'); return; }
@@ -223,9 +292,8 @@ function startVoice() {
   recognition.maxAlternatives = 1;
   recognition.lang = 'en-US';
   recognition.continuous = !isIOS;
-  finalTranscript = ''; currentNote = ''; lastFinalAt = 0;
+  currentNote = ''; lastFinalAt = 0;
   isListening = true;
-
   recognition.onresult = e => {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -234,7 +302,6 @@ function startVoice() {
         const now = Date.now();
         if (currentNote && lastFinalAt && now - lastFinalAt > PAUSE_MS) flushNote();
         currentNote += (currentNote ? ' ' : '') + piece.trim();
-        finalTranscript += piece + ' ';
         lastFinalAt = now;
       } else { interim += piece; }
     }
@@ -252,83 +319,70 @@ function startVoice() {
   try { recognition.start(); } catch(e) { setStatus('Could not start mic: ' + e.message, 'err'); }
   setStatus('Listening — walk and talk.', 'ok');
   $('voiceBtn').textContent = 'Stop Recording';
-  $('voiceBtn').classList.add('recording');
+  $('voiceBtn').className = 'btn btn-danger';
 }
 function flushNote() {
   const t = currentNote.trim();
   if (!t) return;
-  notes.push({ text: t, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
+  const item = { id: uid(), type: 'note', trade: $('tradeSelect').value, text: t, timestamp: Date.now(), sent: false };
+  notes.push(item);
+  addToTradeBin(item);
   currentNote = '';
   save(); renderPunch();
 }
 function stopVoice() {
   isListening = false;
-  if (recognition) { try { recognition.stop(); } catch(_){} }
+  try { if (recognition) recognition.stop(); } catch(_) {}
   flushNote();
-  if (currentNote.trim()) { notes.push({ text: currentNote.trim(), trade: $('tradeSelect').value, time: new Date().toLocaleString() }); currentNote=''; save(); renderPunch(); }
   setStatus('Voice note stopped.', 'info');
   $('voiceBtn').textContent = 'Start Recording';
-  $('voiceBtn').classList.remove('recording');
+  $('voiceBtn').className = 'btn btn-secondary';
   renderTranscript('');
 }
 function renderTranscript(interim) {
   const el = $('liveTranscript');
-  const saved = notes.map(n => `<div><span class="trade-tag" style="font-size:11px;background:#1e3a8a;color:#93c5fd;padding:1px 6px;border-radius:8px;margin-right:4px;">${n.trade}</span>${n.text}</div>`).join('');
-  const live = currentNote ? `<div style="opacity:.7;">${currentNote}</div>` : '';
-  const pend = interim ? `<div class="interim">${interim}</div>` : '';
+  const saved = notes.slice(-6).map(n => `<div><span class="trade">${esc(n.trade)}</span> ${esc(n.text)}</div>`).join('');
+  const live = currentNote ? `<div style="opacity:.7;">${esc(currentNote)}</div>` : '';
+  const pend = interim ? `<div class="interim">${esc(interim)}</div>` : '';
   el.innerHTML = (saved || '<span class="interim">Transcript appears here…</span>') + live + pend;
 }
 
-// ---------- PUNCH LIST ----------
 function addPunch() {
   const v = $('punchInput').value.trim();
   if (!v) return;
-  punchList.push({ text: v, trade: $('tradeSelect').value, time: new Date().toLocaleString() });
+  const item = { id: uid(), type: 'note', trade: $('tradeSelect').value, text: v, timestamp: Date.now(), sent: false };
+  punchList.push(item);
+  addToTradeBin(item);
   $('punchInput').value = '';
   save(); renderPunch();
 }
 function renderPunch() {
   const el = $('punchList');
-  const all = [...notes.map(n => ({...n, src:'voice'})), ...punchList.map(p => ({...p, src:'typed'}))];
-  if (!all.length) { el.innerHTML = '<p style="color:#64748b;font-size:13px;">No items yet.</p>'; return; }
-  el.innerHTML = all.map((p,i) =>
-    `<div class="punch-item">
-      <span class="trade">${p.trade}</span>
-      <span style="font-size:11px;color:#64748b;float:right;">${p.time}</span>
-      <div style="margin-top:4px;">${p.text}</div>
-      <button onclick="delPunch(${i})" style="background:none;border:none;color:#f87171;font-size:12px;padding:0;margin-top:4px;">remove</button>
-    </div>`).join('');
+  const all = [...notes, ...punchList];
+  if (!all.length) { el.innerHTML = '<p class="interim">No items yet.</p>'; return; }
+  el.innerHTML = all.slice(-20).reverse().map(p =>
+    `<div class="punch-item"><span class="trade">${esc(p.trade)}</span><div>${esc(p.text)}</div></div>`
+  ).join('');
 }
-window.delPunch = i => {
-  const all = [...notes.map(n => ({...n, src:'voice'})), ...punchList.map(p => ({...p, src:'typed'}))];
-  const item = all[i];
-  if (item.src === 'voice') { const idx = notes.findIndex(n => n.text===item.text && n.time===item.time); if(idx>=0) notes.splice(idx,1); }
-  else { const idx = punchList.findIndex(p => p.text===item.text && p.time===item.time); if(idx>=0) punchList.splice(idx,1); }
-  save(); renderPunch();
-};
 
-// ---------- REPORT ----------
 function genReport() {
   const out = $('reportOut');
   let html = '<h3>SiteWalk Report</h3>';
   html += `<p><b>Generated:</b> ${new Date().toLocaleString()}</p>`;
-  html += `<p><b>Photos:</b> ${photos.length} &nbsp; <b>Voice notes:</b> ${notes.length} &nbsp; <b>Punch items:</b> ${punchList.length}</p>`;
   trades.forEach(t => {
     const tp = photos.filter(p => p.trade === t);
     const tn = notes.filter(n => n.trade === t);
     const tpu = punchList.filter(p => p.trade === t);
     if (!tp.length && !tn.length && !tpu.length) return;
-    html += `<h3 class="trade-tag">${t}</h3>`;
-    if (tn.length) { html += '<b>Voice notes:</b><ul>' + tn.map(n => `<li>${n.text}</li>`).join('') + '</ul>'; }
-    if (tpu.length) { html += '<b>Punch list:</b><ul>' + tpu.map(p => `<li>${p.text}</li>`).join('') + '</ul>'; }
-    if (tp.length) { html += '<b>Photos:</b><div class="photo-grid" style="margin-top:6px;">' + tp.map(p => `<img src="${p.data}">`).join('') + '</div>'; }
+    html += `<h3 style="color:#4a7ab5;">${esc(t)}</h3>`;
+    tn.concat(tpu).forEach(n => html += `<p>${esc(n.text)}</p>`);
+    if (tp.length) html += '<div class="photo-grid">' + tp.map(p => `<img src="${p.url || p.data}">`).join('') + '</div>';
   });
   out.innerHTML = html;
   out.classList.remove('hidden');
   $('printBtn').classList.remove('hidden');
 }
 
-// ---------- WALK (one button) ----------
 async function startWalk() {
   walkActive = true;
   $('startWalkBtn').classList.add('hidden');
@@ -345,7 +399,6 @@ function stopWalk() {
   setStatus('Walk saved. ' + photos.length + ' photos, ' + notes.length + ' notes.', 'ok');
 }
 
-// ---------- EVENTS ----------
 $('startWalkBtn').onclick = startWalk;
 $('stopWalkBtn').onclick = stopWalk;
 $('openCamBtn').onclick = openCamera;
