@@ -70,14 +70,17 @@
 
   <div class="card">
     <h2>Camera</h2>
+    <p class="interim" style="margin-top:0;">Tap Snap photo. That opens your phone’s rear camera so the shot is real — not a black box.</p>
+    <input id="nativeSnap" type="file" accept="image/*" capture="environment" class="hidden">
+    <button id="snapBtn" class="btn btn-primary">Snap photo</button>
     <div id="cameraWrap">
       <video id="cameraPreview" autoplay playsinline muted webkit-playsinline></video>
-      <div id="camWait">Waiting for live picture…</div>
-      <button id="captureBtn" aria-label="Capture photo" disabled></button>
+      <div id="camWait"></div>
+      <button id="captureBtn" aria-label="Capture live frame"></button>
       <button id="flipCamBtn">Flip</button>
       <button id="closeCamBtn">Close</button>
     </div>
-    <button id="openCamBtn" class="btn btn-secondary">Open Camera</button>
+    <button id="openCamBtn" class="btn btn-secondary">Try live preview</button>
   </div>
 
   <div class="card">
@@ -357,23 +360,60 @@ function closeCamera() {
   $('captureBtn').disabled = true;
 }
 async function capturePhoto() {
-  const v = $('cameraPreview');
-  if (!currentStream) return;
-  try { if (v.paused) await v.play(); } catch (_) {}
-  const size = frameSize(v);
-  if (!size.w || !size.h) {
-    setStatus('No picture yet — wait a beat then snap.', 'err');
-    return;
+  snapPhoto();
+}
+function isMostlyBlack(canvas) {
+  try {
+    const ctx = canvas.getContext('2d');
+    const w = Math.min(canvas.width, 48);
+    const h = Math.min(canvas.height, 48);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let sum = 0, n = 0;
+    for (let i = 0; i < data.length; i += 16) { sum += data[i] + data[i+1] + data[i+2]; n++; }
+    return n === 0 || (sum / n / 3) < 14;
+  } catch (_) { return true; }
+}
+function compressImage(src, cb) {
+  const img = new Image();
+  img.onload = () => {
+    const max = 1280;
+    let w = img.naturalWidth || img.width;
+    let h = img.naturalHeight || img.height;
+    if (!w || !h) { cb(src); return; }
+    if (w > max) { h = Math.round(h * max / w); w = max; }
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    cb(c.toDataURL('image/jpeg', 0.72));
+  };
+  img.onerror = () => cb(src);
+  img.src = src;
+}
+function nativeSnap() {
+  const inp = $('nativeSnap');
+  inp.value = '';
+  inp.click();
+}
+function snapPhoto() {
+  if (!isIOS && currentStream) {
+    const v = $('cameraPreview');
+    const size = frameSize(v);
+    if (size.w && size.h) {
+      const c = document.createElement('canvas');
+      c.width = size.w; c.height = size.h;
+      c.getContext('2d').drawImage(v, 0, 0, size.w, size.h);
+      if (!isMostlyBlack(c)) {
+        addPhoto(c.toDataURL('image/jpeg', 0.7));
+        return;
+      }
+    }
   }
-  const c = document.createElement('canvas');
-  c.width = size.w;
-  c.height = size.h;
-  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  addPhoto(c.toDataURL('image/jpeg', 0.7));
+  nativeSnap();
 }
 function handleFile(file) {
+  if (!file) return;
   const r = new FileReader();
-  r.onload = e => addPhoto(e.target.result);
+  r.onload = e => compressImage(e.target.result, addPhoto);
   r.readAsDataURL(file);
 }
 function addPhoto(dataUrl) {
@@ -497,6 +537,11 @@ async function startWalk() {
   walkActive = true;
   $('startWalkBtn').classList.add('hidden');
   $('stopWalkBtn').classList.remove('hidden');
+  if (isIOS) {
+    setStatus('Walk on. Tap Snap photo — uses the phone camera.', 'ok');
+    startVoice();
+    return;
+  }
   await openCamera({ facingMode: 'environment' });
   startVoice();
 }
@@ -511,10 +556,12 @@ function stopWalk() {
 
 $('startWalkBtn').onclick = startWalk;
 $('stopWalkBtn').onclick = stopWalk;
+$('snapBtn').onclick = snapPhoto;
+$('nativeSnap').onchange = e => { if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]); };
 $('openCamBtn').onclick = () => openCamera({ facingMode: 'environment' });
 $('closeCamBtn').onclick = closeCamera;
 $('flipCamBtn').onclick = flipCamera;
-$('captureBtn').onclick = capturePhoto;
+$('captureBtn').onclick = snapPhoto;
 $('voiceBtn').onclick = () => { if (isListening) stopVoice(); else startVoice(); };
 $('addPunchBtn').onclick = addPunch;
 $('punchInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPunch(); });
