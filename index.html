@@ -18,6 +18,7 @@ button:disabled { background: #a0aec0; }
 button.green { background: #38a169; }
 button.orange { background: #dd6b20; }
 button.gray { background: #718096; }
+button.red { background: #e53e3e; }
 .status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
@@ -35,10 +36,13 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 .report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
 .report-section img { max-width: 100%; border-radius: 6px; margin: 6px 0; }
 .punch-item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+#cameraPreview { width: 100%; border-radius: 8px; background: #000; display: none; margin: 8px 0; }
+.cam-actions { display: flex; gap: 8px; }
+.cam-actions button { margin: 0; }
 @media print {
   body { background: white; padding: 0; }
   .container { box-shadow: none; }
-  button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !important; }
+  button, .section:not(#reportSection), #walkStatus, .subtitle, #cameraPreview, .cam-actions { display: none !important; }
   #reportSection { display: block !important; border: none; }
 }
 </style>
@@ -67,7 +71,15 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
   <option value="Landscaping">Landscaping</option>
   <option value="Other">Other</option>
 </select>
-<button id="photoBtn">Take Photo (uses selected trade)</button>
+<div class="cam-actions">
+  <button id="cameraBtn">Open Camera</button>
+  <button id="photoBtn" class="gray">Upload Photo</button>
+</div>
+<video id="cameraPreview" autoplay playsinline></video>
+<div class="cam-actions" id="captureActions" style="display:none">
+  <button id="captureBtn" class="green">Capture</button>
+  <button id="closeCamBtn" class="red">Close</button>
+</div>
 <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
 <div id="photos"></div>
 </div>
@@ -102,9 +114,11 @@ let punch = [];
 let mediaRec, audioChunks = [];
 let voiceSession = null;
 let pendingAudioUrl = '';
+let cameraStream = null;
 
 const tradeSelect = document.getElementById('tradeSelect');
 const TRADE_ORDER = ['Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','General','Other'];
+const STORE_KEY = 'sitewalk_v1';
 
 function escapeHtml(str) {
   return String(str == null ? '' : str)
@@ -120,6 +134,41 @@ function setStatus(msg, kind) {
   el.textContent = msg;
 }
 
+function saveState() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      photos: photos,
+      notes: notes.map(function(n){ return { text: n.text, trade: n.trade, time: n.time }; }),
+      punch: punch
+    }));
+  } catch (e) {
+    console.warn('Could not save state', e);
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    photos = data.photos || [];
+    notes = data.notes || [];
+    punch = data.punch || [];
+    renderPhotos();
+    renderNotes();
+    renderPunch();
+  } catch (e) {
+    console.warn('Could not load state', e);
+  }
+}
+
+function renderPhotos() {
+  const box = document.getElementById('photos');
+  box.innerHTML = photos.map(function(p, i) {
+    return '<div class="photo-card"><img src="' + p.src + '"><span class="trade-tag">' + escapeHtml(p.trade) + '</span><div class="meta">' + escapeHtml(p.time) + '</div></div>';
+  }).join('');
+}
+
 function renderNotes() {
   const box = document.getElementById('notes');
   box.innerHTML = notes.map(function(n) {
@@ -127,6 +176,13 @@ function renderNotes() {
     const audio = n.url ? '<audio controls src="' + n.url + '"></audio>' : '';
     return '<div class="note-card"><span class="trade-tag">' + escapeHtml(n.trade || 'General') + '</span> ' +
       text + '<div class="meta">' + escapeHtml(n.time || '') + '</div>' + audio + '</div>';
+  }).join('');
+}
+
+function renderPunch() {
+  const box = document.getElementById('punchList');
+  box.innerHTML = punch.map(function(item) {
+    return '<div class="punch-item">• ' + escapeHtml(item) + '</div>';
   }).join('');
 }
 
@@ -283,17 +339,68 @@ voiceSession = createVoiceNoteSession({
   }
 });
 
-window.startWalk = function() {
-  setStatus('Starting walk — take photos & speak notes.', 'ok');
-  document.getElementById('photoInput').click();
-  window.startVoice();
-};
-document.getElementById('walkBtn').addEventListener('click', window.startWalk);
+function addPhoto(src, trade) {
+  const item = { src: src, trade: trade || tradeSelect.value, time: new Date().toLocaleString() };
+  photos.push(item);
+  saveState();
+  renderPhotos();
+  setStatus('Photo tagged as ' + item.trade + ' (' + photos.length + ' total)', 'ok');
+}
 
-window.takePhoto = function() {
+async function openCamera() {
+  const preview = document.getElementById('cameraPreview');
+  const captureActions = document.getElementById('captureActions');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('Camera API not available. Using file upload instead.', 'info');
+    document.getElementById('photoInput').click();
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    preview.srcObject = cameraStream;
+    preview.style.display = 'block';
+    captureActions.style.display = 'flex';
+    setStatus('Camera open. Frame the shot and tap Capture.', 'ok');
+  } catch (err) {
+    setStatus('Camera blocked or unavailable: ' + (err.message || err.name) + '. Falling back to upload.', 'err');
+    document.getElementById('photoInput').click();
+  }
+}
+
+function capturePhoto() {
+  const preview = document.getElementById('cameraPreview');
+  if (!preview.videoWidth) {
+    setStatus('Camera not ready yet.', 'err');
+    return;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = preview.videoWidth;
+  canvas.height = preview.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  addPhoto(dataUrl, tradeSelect.value);
+  closeCamera();
+}
+
+function closeCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(function(t) { t.stop(); });
+    cameraStream = null;
+  }
+  const preview = document.getElementById('cameraPreview');
+  preview.srcObject = null;
+  preview.style.display = 'none';
+  document.getElementById('captureActions').style.display = 'none';
+}
+
+document.getElementById('cameraBtn').addEventListener('click', openCamera);
+document.getElementById('captureBtn').addEventListener('click', capturePhoto);
+document.getElementById('closeCamBtn').addEventListener('click', closeCamera);
+
+document.getElementById('photoBtn').addEventListener('click', function() {
   document.getElementById('photoInput').click();
-};
-document.getElementById('photoBtn').addEventListener('click', window.takePhoto);
+});
 
 document.getElementById('photoInput').addEventListener('change', function(e) {
   const files = e.target.files;
@@ -302,13 +409,7 @@ document.getElementById('photoInput').addEventListener('change', function(e) {
   for (let f of files) {
     const r = new FileReader();
     r.onload = function(ev) {
-      const item = { src: ev.target.result, trade: trade, time: new Date().toLocaleString() };
-      photos.push(item);
-      const card = document.createElement('div');
-      card.className = 'photo-card';
-      card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + escapeHtml(item.trade) + '</span>';
-      document.getElementById('photos').appendChild(card);
-      setStatus('Photo tagged as ' + trade + ' (' + photos.length + ' total)', 'ok');
+      addPhoto(ev.target.result, trade);
     };
     r.readAsDataURL(f);
   }
@@ -322,15 +423,26 @@ window.startVoice = function() {
     return;
   }
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
-    mediaRec = new MediaRecorder(stream);
+    let options = {};
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      options.mimeType = 'audio/webm;codecs=opus';
+    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+      options.mimeType = 'audio/mp4';
+    }
+    try {
+      mediaRec = new MediaRecorder(stream, options);
+    } catch (e) {
+      mediaRec = new MediaRecorder(stream);
+    }
     audioChunks = [];
     mediaRec.ondataavailable = function(e) { audioChunks.push(e.data); };
     mediaRec.onstop = function() {
-      const blob = new Blob(audioChunks, { type: 'audio/webm' });
+      const blob = new Blob(audioChunks, { type: mediaRec.mimeType || 'audio/webm' });
       pendingAudioUrl = URL.createObjectURL(blob);
       stream.getTracks().forEach(function(t) { t.stop(); });
       attachAudioToLatestNotes();
       renderNotes();
+      saveState();
     };
     mediaRec.start();
     document.getElementById('startBtn').disabled = true;
@@ -366,6 +478,7 @@ window.stopVoice = function() {
   }
   transcribed.forEach(function(n) { notes.push(n); });
   renderNotes();
+  saveState();
   document.getElementById('liveTranscript').style.display = 'none';
 
   if (mediaRec && mediaRec.state !== 'inactive') {
@@ -380,11 +493,10 @@ document.getElementById('addPunchBtn').addEventListener('click', function() {
   const val = document.getElementById('punchInput').value.trim();
   if (!val) return;
   punch.push(val);
-  const div = document.createElement('div');
-  div.className = 'punch-item';
-  div.textContent = '• ' + val;
-  document.getElementById('punchList').appendChild(div);
+  saveState();
+  renderPunch();
   document.getElementById('punchInput').value = '';
+  setStatus('Added to punch list.', 'ok');
 });
 
 window.generateReport = function() {
@@ -455,9 +567,14 @@ document.getElementById('printBtn').addEventListener('click', function() {
 });
 
 window.addEventListener('load', function() {
+  loadState();
   setStatus(sttSupported()
     ? 'Ready. Select trade, then take photos or start recording.'
     : 'Ready. Live captions unavailable — audio recording still works.', 'info');
+});
+
+window.addEventListener('beforeunload', function() {
+  if (cameraStream) closeCamera();
 });
 </script>
 </body>
