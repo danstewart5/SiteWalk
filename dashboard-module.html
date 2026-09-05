@@ -1,0 +1,63 @@
+<!--
+INSTRUCTIONS FOR GROK — File 5 of 7: Open Items Dashboard
+Merge after Files 1-4 (RFI, Daily Log, Submittals, Safety) are already
+in the app, since this reads their data. Also replace the punchList/
+changeOrders placeholder checks below with the real arrays already
+used by the existing punch list and change order features, and wire
+in swClockEvents once File 7 (GPS Clock-In) is merged, so the
+"Missed Clock-Outs" row shows a real count instead of 0.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — Open Items Dashboard</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .meta { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+
+<h2>Open Items Dashboard</h2>
+<p class="meta">Rolls up open items across the app by status.</p>
+<div class="card" id="dashboardCard"></div>
+
+<script>
+function load(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return (v !== null && v !== undefined) ? v : fallback; }
+  catch (e) { return fallback; }
+}
+
+function buildDashboard() {
+  const rfis = load('swRFIs', []);
+  const submittals = load('swSubmittals', []);
+  const clockEvents = load('swClockEvents', []);
+
+  const openRFIs = rfis.filter(r => r.status === 'Open').length;
+  const answeredRFIs = rfis.filter(r => r.status === 'Answered').length;
+  const pendingSubs = submittals.filter(s => s.status === 'Pending').length;
+  const approvedSubs = submittals.filter(s => s.status === 'Approved').length;
+  const missedClockOuts = clockEvents.filter(e => e.flagged).length;
+
+  // TODO (Grok): replace with real arrays from the existing punch list / change order features
+  const openPunchItems = (typeof punchList !== 'undefined') ? punchList.filter(p => !p.done).length : 'N/A';
+  const openChangeOrders = (typeof changeOrders !== 'undefined') ? changeOrders.filter(c => c.status === 'Pending').length : 'N/A';
+
+  document.getElementById('dashboardCard').innerHTML = `
+    <table style="width:100%; border-collapse:collapse;">
+      <tr><td style="padding:6px;">Open RFIs</td><td style="padding:6px; text-align:right; font-weight:bold;">${openRFIs}</td></tr>
+      <tr><td style="padding:6px;">Answered RFIs</td><td style="padding:6px; text-align:right;">${answeredRFIs}</td></tr>
+      <tr><td style="padding:6px;">Pending Submittals</td><td style="padding:6px; text-align:right; font-weight:bold;">${pendingSubs}</td></tr>
+      <tr><td style="padding:6px;">Approved Submittals</td><td style="padding:6px; text-align:right;">${approvedSubs}</td></tr>
+      <tr><td style="padding:6px;">Open Punch Items</td><td style="padding:6px; text-align:right; font-weight:bold;">${openPunchItems}</td></tr>
+      <tr><td style="padding:6px;">Open Change Orders</td><td style="padding:6px; text-align:right; font-weight:bold;">${openChangeOrders}</td></tr>
+      <tr><td style="padding:6px;">Missed Clock-Outs</td><td style="padding:6px; text-align:right; font-weight:bold;">${missedClockOuts}</td></tr>
+    </table>`;
+}
+buildDashboard();
+</script>
+</body>
+</html>
