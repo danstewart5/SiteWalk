@@ -1,0 +1,136 @@
+<!--
+INSTRUCTIONS FOR GROK — File 1 of 7: RFI Module
+Merge the HTML below into SiteWalk's index.html, alongside the existing
+punch list section. Merge the <style> into the existing stylesheet
+(skip any duplicate class names). Merge the <script> into the existing
+JS — if load()/save()/escapeHtml() already exist in the main app, use
+those instead of the copies below to avoid duplicate function errors.
+Notification recipient field currently only logs to console — leave a
+TODO to wire in real email/SMS sending (SendGrid/Twilio) later.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — RFI Module</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-top: 8px; font-size: 13px; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { min-height: 60px; }
+  button { padding: 10px 16px; margin-top: 10px; margin-right: 8px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-mic { background: #16a34a; color: #fff; }
+  .btn-mic.recording { background: #dc2626; }
+  .btn-danger { background: #b91c1c; color: #fff; }
+  .status-open { color: #b91c1c; font-weight: bold; }
+  .status-answered { color: #15803d; font-weight: bold; }
+  .item-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #666; }
+  .thumb { max-width: 90px; max-height: 90px; border-radius: 4px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h2>RFIs (Request for Information)</h2>
+<div class="card">
+  <label>Question / Issue</label>
+  <textarea id="rfiQuestion" placeholder="Type or use mic to dictate the question..."></textarea>
+  <button class="btn-mic" id="rfiMicBtn" onclick="toggleMic('rfiQuestion','rfiMicBtn')">🎤 Dictate</button>
+
+  <label>Trade</label>
+  <select id="rfiTrade">
+    <option>General</option><option>Plumbing</option><option>Electrical</option>
+    <option>Framing</option><option>Concrete</option><option>HVAC</option>
+    <option>Roofing</option><option>Finishing</option>
+  </select>
+
+  <label>Sent To (email or phone)</label>
+  <input type="text" id="rfiRecipient" placeholder="e.g. mike@abcplumbing.com or 250-555-0199">
+
+  <label>Photo (optional)</label>
+  <input type="file" id="rfiPhoto" accept="image/*" capture="environment">
+
+  <button class="btn-primary" onclick="addRFI()">Submit RFI</button>
+</div>
+<div id="rfiList"></div>
+
+<script>
+function load(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return (v !== null && v !== undefined) ? v : fallback; }
+  catch (e) { return fallback; }
+}
+function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+let rfis = load('swRFIs', []);
+let recognizer = null, activeField = null;
+
+function toggleMic(fieldId, btnId) {
+  const btn = document.getElementById(btnId), field = document.getElementById(fieldId);
+  if (recognizer && activeField === fieldId) { recognizer.stop(); return; }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('Voice dictation not supported in this browser. Try Chrome.'); return; }
+  recognizer = new SpeechRecognition();
+  recognizer.continuous = true; recognizer.interimResults = true; recognizer.lang = 'en-US';
+  activeField = fieldId;
+  let baseText = field.value ? field.value + ' ' : '';
+  recognizer.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+    field.value = baseText + transcript;
+  };
+  recognizer.onerror = recognizer.onend = () => { btn.classList.remove('recording'); btn.textContent = '🎤 Dictate'; activeField = null; };
+  recognizer.start(); btn.classList.add('recording'); btn.textContent = '⏹ Stop';
+}
+
+function addRFI() {
+  const question = document.getElementById('rfiQuestion').value.trim();
+  const trade = document.getElementById('rfiTrade').value;
+  const recipient = document.getElementById('rfiRecipient').value.trim();
+  const photoInput = document.getElementById('rfiPhoto');
+  if (!question) { alert('Please enter or dictate the RFI question.'); return; }
+  const rfi = { id: Date.now(), question, trade, recipient, status: 'Open', answer: '', createdAt: new Date().toISOString(), photo: null };
+  const finish = () => {
+    rfis.push(rfi); save('swRFIs', rfis); renderRFIs();
+    document.getElementById('rfiQuestion').value = '';
+    document.getElementById('rfiRecipient').value = '';
+    photoInput.value = '';
+    if (recipient) console.log(`[NOTIFY HOOK] Would send RFI to ${recipient}:`, question);
+  };
+  if (photoInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => { rfi.photo = e.target.result; finish(); };
+    reader.readAsDataURL(photoInput.files[0]);
+  } else finish();
+}
+function markAnswered(id) {
+  const rfi = rfis.find(r => r.id === id);
+  if (!rfi) return;
+  const answer = prompt('Enter the answer received:');
+  if (answer === null) return;
+  rfi.answer = answer; rfi.status = 'Answered'; rfi.answeredAt = new Date().toISOString();
+  save('swRFIs', rfis); renderRFIs();
+}
+function deleteRFI(id) { rfis = rfis.filter(r => r.id !== id); save('swRFIs', rfis); renderRFIs(); }
+function renderRFIs() {
+  const list = document.getElementById('rfiList');
+  if (rfis.length === 0) { list.innerHTML = '<p class="meta">No RFIs yet.</p>'; return; }
+  list.innerHTML = rfis.slice().reverse().map(r => `
+    <div class="card item-row">
+      <div><strong>${escapeHtml(r.trade)}</strong> — <span class="status-${r.status.toLowerCase()}">${r.status}</span></div>
+      <div>${escapeHtml(r.question)}</div>
+      ${r.recipient ? `<div class="meta">Sent to: ${escapeHtml(r.recipient)}</div>` : ''}
+      ${r.answer ? `<div class="meta">Answer: ${escapeHtml(r.answer)}</div>` : ''}
+      ${r.photo ? `<img class="thumb" src="${r.photo}">` : ''}
+      <div class="meta">${new Date(r.createdAt).toLocaleString()}</div>
+      ${r.status === 'Open' ? `<button class="btn-primary" onclick="markAnswered(${r.id})">Mark Answered</button>` : ''}
+      <button class="btn-danger" onclick="deleteRFI(${r.id})">Delete</button>
+    </div>`).join('');
+}
+renderRFIs();
+</script>
+</body>
+</html>
