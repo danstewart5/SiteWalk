@@ -1,0 +1,112 @@
+<!--
+INSTRUCTIONS FOR GROK — File 3 of 7: Submittals Module
+Merge the same way as Files 1 and 2. Reuse existing load()/save()/
+escapeHtml() if already merged from a prior file.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — Submittals Module</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-top: 8px; font-size: 13px; }
+  input, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { min-height: 60px; }
+  button { padding: 10px 16px; margin-top: 10px; margin-right: 8px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-mic { background: #16a34a; color: #fff; }
+  .btn-mic.recording { background: #dc2626; }
+  .btn-danger { background: #b91c1c; color: #fff; }
+  .status-open { color: #b91c1c; font-weight: bold; }
+  .status-answered { color: #15803d; font-weight: bold; }
+  .item-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+
+<h2>Submittals</h2>
+<div class="card">
+  <label>Item / Description</label>
+  <textarea id="subItem" placeholder="e.g. Kitchen cabinet shop drawings, window spec sheet..."></textarea>
+  <button class="btn-mic" id="subMicBtn" onclick="toggleMic('subItem','subMicBtn')">🎙 Dictate</button>
+  <label>Trade / Supplier</label>
+  <input type="text" id="subTrade" placeholder="e.g. ABC Cabinets">
+  <label>Sent To (email or phone)</label>
+  <input type="text" id="subRecipient" placeholder="e.g. sales@abccabinets.com">
+  <label>Due Date</label>
+  <input type="date" id="subDueDate">
+  <button class="btn-primary" onclick="addSubmittal()">Submit</button>
+</div>
+<div id="subList"></div>
+
+<script>
+function load(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return (v !== null && v !== undefined) ? v : fallback; }
+  catch (e) { return fallback; }
+}
+function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+let submittals = load('swSubmittals', []);
+let recognizer = null, activeField = null;
+
+function toggleMic(fieldId, btnId) {
+  const btn = document.getElementById(btnId), field = document.getElementById(fieldId);
+  if (recognizer && activeField === fieldId) { recognizer.stop(); return; }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('Voice dictation not supported in this browser. Try Chrome.'); return; }
+  recognizer = new SpeechRecognition();
+  recognizer.continuous = true; recognizer.interimResults = true; recognizer.lang = 'en-US';
+  activeField = fieldId;
+  let baseText = field.value ? field.value + ' ' : '';
+  recognizer.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+    field.value = baseText + transcript;
+  };
+  recognizer.onerror = recognizer.onend = () => { btn.classList.remove('recording'); btn.textContent = '🎙 Dictate'; activeField = null; };
+  recognizer.start(); btn.classList.add('recording'); btn.textContent = '⏹ Stop';
+}
+
+function addSubmittal() {
+  const item = document.getElementById('subItem').value.trim();
+  const trade = document.getElementById('subTrade').value.trim();
+  const recipient = document.getElementById('subRecipient').value.trim();
+  const dueDate = document.getElementById('subDueDate').value;
+  if (!item) { alert('Please enter or dictate the submittal item.'); return; }
+  const sub = { id: Date.now(), item, trade, recipient, dueDate, status: 'Pending', createdAt: new Date().toISOString() };
+  submittals.push(sub); save('swSubmittals', submittals); renderSubmittals();
+  document.getElementById('subItem').value = '';
+  document.getElementById('subTrade').value = '';
+  document.getElementById('subRecipient').value = '';
+  document.getElementById('subDueDate').value = '';
+  if (recipient) console.log(`[NOTIFY HOOK] Would send submittal request to ${recipient}:`, item);
+}
+function markApproved(id) {
+  const sub = submittals.find(s => s.id === id);
+  if (!sub) return;
+  sub.status = 'Approved'; sub.approvedAt = new Date().toISOString();
+  save('swSubmittals', submittals); renderSubmittals();
+}
+function deleteSubmittal(id) { submittals = submittals.filter(s => s.id !== id); save('swSubmittals', submittals); renderSubmittals(); }
+function renderSubmittals() {
+  const list = document.getElementById('subList');
+  if (submittals.length === 0) { list.innerHTML = '<p class="meta">No submittals yet.</p>'; return; }
+  list.innerHTML = submittals.slice().reverse().map(s => `
+    <div class="card item-row">
+      <div><strong>${escapeHtml(s.trade || 'General')}</strong> — <span class="status-${s.status === 'Approved' ? 'answered' : 'open'}">${s.status}</span></div>
+      <div>${escapeHtml(s.item)}</div>
+      ${s.recipient ? `<div class="meta">Sent to: ${escapeHtml(s.recipient)}</div>` : ''}
+      ${s.dueDate ? `<div class="meta">Due: ${escapeHtml(s.dueDate)}</div>` : ''}
+      ${s.status === 'Pending' ? `<button class="btn-primary" onclick="markApproved(${s.id})">Mark Approved</button>` : ''}
+      <button class="btn-danger" onclick="deleteSubmittal(${s.id})">Delete</button>
+    </div>`).join('');
+}
+renderSubmittals();
+</script>
+</body>
+</html>
