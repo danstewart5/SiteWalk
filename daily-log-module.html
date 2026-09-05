@@ -1,0 +1,112 @@
+<!--
+INSTRUCTIONS FOR GROK — File 2 of 7: Daily Log Module
+Merge into SiteWalk the same way as the RFI module (File 1). If
+load()/save()/escapeHtml() already exist from merging File 1, reuse
+those instead of duplicating them.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — Daily Log Module</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-top: 8px; font-size: 13px; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { min-height: 60px; }
+  button { padding: 10px 16px; margin-top: 10px; margin-right: 8px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-mic { background: #16a34a; color: #fff; }
+  .btn-mic.recording { background: #dc2626; }
+  .btn-danger { background: #b91c1c; color: #fff; }
+  .item-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+
+<h2>Daily Log</h2>
+<div class="card">
+  <label>Date</label>
+  <input type="date" id="logDate">
+  <label>Weather</label>
+  <select id="logWeather">
+    <option>Clear</option><option>Cloudy</option><option>Rain</option>
+    <option>Snow</option><option>High Wind</option><option>Extreme Heat/Cold</option>
+  </select>
+  <label>Crew Present (count)</label>
+  <input type="number" id="logCrewCount" min="0" placeholder="e.g. 6">
+  <label>Trades On Site</label>
+  <input type="text" id="logTrades" placeholder="e.g. Framing, Electrical">
+  <label>Delays / Issues</label>
+  <textarea id="logDelays" placeholder="Type or dictate any delays, deliveries, incidents..."></textarea>
+  <button class="btn-mic" id="logMicBtn" onclick="toggleMic('logDelays','logMicBtn')">🎤 Dictate</button>
+  <label>Notes</label>
+  <textarea id="logNotes" placeholder="General notes for the day"></textarea>
+  <button class="btn-primary" onclick="addDailyLog()">Save Daily Log</button>
+</div>
+<div id="logList"></div>
+
+<script>
+function load(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return (v !== null && v !== undefined) ? v : fallback; }
+  catch (e) { return fallback; }
+}
+function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+let dailyLogs = load('swDailyLogs', []);
+let recognizer = null, activeField = null;
+
+function toggleMic(fieldId, btnId) {
+  const btn = document.getElementById(btnId), field = document.getElementById(fieldId);
+  if (recognizer && activeField === fieldId) { recognizer.stop(); return; }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('Voice dictation not supported in this browser. Try Chrome.'); return; }
+  recognizer = new SpeechRecognition();
+  recognizer.continuous = true; recognizer.interimResults = true; recognizer.lang = 'en-US';
+  activeField = fieldId;
+  let baseText = field.value ? field.value + ' ' : '';
+  recognizer.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+    field.value = baseText + transcript;
+  };
+  recognizer.onerror = recognizer.onend = () => { btn.classList.remove('recording'); btn.textContent = '🎤 Dictate'; activeField = null; };
+  recognizer.start(); btn.classList.add('recording'); btn.textContent = '⏹ Stop';
+}
+
+function addDailyLog() {
+  const date = document.getElementById('logDate').value || new Date().toISOString().split('T')[0];
+  const weather = document.getElementById('logWeather').value;
+  const crewCount = document.getElementById('logCrewCount').value;
+  const trades = document.getElementById('logTrades').value.trim();
+  const delays = document.getElementById('logDelays').value.trim();
+  const notes = document.getElementById('logNotes').value.trim();
+  const entry = { id: Date.now(), date, weather, crewCount, trades, delays, notes, createdAt: new Date().toISOString() };
+  dailyLogs.push(entry); save('swDailyLogs', dailyLogs); renderLogs();
+  document.getElementById('logCrewCount').value = '';
+  document.getElementById('logTrades').value = '';
+  document.getElementById('logDelays').value = '';
+  document.getElementById('logNotes').value = '';
+}
+function deleteLog(id) { dailyLogs = dailyLogs.filter(l => l.id !== id); save('swDailyLogs', dailyLogs); renderLogs(); }
+function renderLogs() {
+  const list = document.getElementById('logList');
+  if (dailyLogs.length === 0) { list.innerHTML = '<p class="meta">No daily logs yet.</p>'; return; }
+  list.innerHTML = dailyLogs.slice().reverse().map(l => `
+    <div class="card item-row">
+      <div><strong>${escapeHtml(l.date)}</strong> — ${escapeHtml(l.weather)} — Crew: ${escapeHtml(String(l.crewCount || 'N/A'))}</div>
+      ${l.trades ? `<div class="meta">Trades: ${escapeHtml(l.trades)}</div>` : ''}
+      ${l.delays ? `<div>Delays: ${escapeHtml(l.delays)}</div>` : ''}
+      ${l.notes ? `<div class="meta">${escapeHtml(l.notes)}</div>` : ''}
+      <button class="btn-danger" onclick="deleteLog(${l.id})">Delete</button>
+    </div>`).join('');
+}
+document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+renderLogs();
+</script>
+</body>
+</html>
