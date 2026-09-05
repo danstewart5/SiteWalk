@@ -1,0 +1,118 @@
+<!--
+INSTRUCTIONS FOR GROK — File 4 of 7: Safety Incident / Near-Miss Log Module
+Merge the same way as Files 1-3. Reuse existing load()/save()/
+escapeHtml() if already merged.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — Safety Log Module</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-top: 8px; font-size: 13px; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  textarea { min-height: 60px; }
+  button { padding: 10px 16px; margin-top: 10px; margin-right: 8px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-mic { background: #16a34a; color: #fff; }
+  .btn-mic.recording { background: #dc2626; }
+  .btn-danger { background: #b91c1c; color: #fff; }
+  .item-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #666; }
+  .thumb { max-width: 90px; max-height: 90px; border-radius: 4px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h2>Safety Incident / Near-Miss Log</h2>
+<div class="card">
+  <label>Type</label>
+  <select id="safetyType">
+    <option>Near-Miss</option><option>Minor Incident</option><option>Injury</option>
+    <option>Equipment/Property Damage</option><option>Hazard Observed</option>
+  </select>
+  <label>Description</label>
+  <textarea id="safetyDesc" placeholder="Type or dictate what happened..."></textarea>
+  <button class="btn-mic" id="safetyMicBtn" onclick="toggleMic('safetyDesc','safetyMicBtn')">🎙 Dictate</button>
+  <label>Person(s) Involved (optional)</label>
+  <input type="text" id="safetyPerson" placeholder="Name or trade">
+  <label>Photo (optional)</label>
+  <input type="file" id="safetyPhoto" accept="image/*" capture="environment">
+  <label>Corrective Action Taken</label>
+  <textarea id="safetyAction" placeholder="What was done in response"></textarea>
+  <button class="btn-primary" onclick="addSafety()">Log Incident</button>
+</div>
+<div id="safetyList"></div>
+
+<script>
+function load(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return (v !== null && v !== undefined) ? v : fallback; }
+  catch (e) { return fallback; }
+}
+function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+let safetyLogs = load('swSafety', []);
+let recognizer = null, activeField = null;
+
+function toggleMic(fieldId, btnId) {
+  const btn = document.getElementById(btnId), field = document.getElementById(fieldId);
+  if (recognizer && activeField === fieldId) { recognizer.stop(); return; }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { alert('Voice dictation not supported in this browser. Try Chrome.'); return; }
+  recognizer = new SpeechRecognition();
+  recognizer.continuous = true; recognizer.interimResults = true; recognizer.lang = 'en-US';
+  activeField = fieldId;
+  let baseText = field.value ? field.value + ' ' : '';
+  recognizer.onresult = (event) => {
+    let transcript = '';
+    for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+    field.value = baseText + transcript;
+  };
+  recognizer.onerror = recognizer.onend = () => { btn.classList.remove('recording'); btn.textContent = '🎙 Dictate'; activeField = null; };
+  recognizer.start(); btn.classList.add('recording'); btn.textContent = '⏹ Stop';
+}
+
+function addSafety() {
+  const type = document.getElementById('safetyType').value;
+  const desc = document.getElementById('safetyDesc').value.trim();
+  const person = document.getElementById('safetyPerson').value.trim();
+  const action = document.getElementById('safetyAction').value.trim();
+  const photoInput = document.getElementById('safetyPhoto');
+  if (!desc) { alert('Please enter or dictate a description.'); return; }
+  const entry = { id: Date.now(), type, desc, person, action, createdAt: new Date().toISOString(), photo: null };
+  const finish = () => {
+    safetyLogs.push(entry); save('swSafety', safetyLogs); renderSafety();
+    document.getElementById('safetyDesc').value = '';
+    document.getElementById('safetyPerson').value = '';
+    document.getElementById('safetyAction').value = '';
+    photoInput.value = '';
+  };
+  if (photoInput.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => { entry.photo = e.target.result; finish(); };
+    reader.readAsDataURL(photoInput.files[0]);
+  } else finish();
+}
+function deleteSafety(id) { safetyLogs = safetyLogs.filter(s => s.id !== id); save('swSafety', safetyLogs); renderSafety(); }
+function renderSafety() {
+  const list = document.getElementById('safetyList');
+  if (safetyLogs.length === 0) { list.innerHTML = '<p class="meta">No safety entries yet.</p>'; return; }
+  list.innerHTML = safetyLogs.slice().reverse().map(s => `
+    <div class="card item-row">
+      <div><strong>${escapeHtml(s.type)}</strong></div>
+      <div>${escapeHtml(s.desc)}</div>
+      ${s.person ? `<div class="meta">Involved: ${escapeHtml(s.person)}</div>` : ''}
+      ${s.action ? `<div class="meta">Action taken: ${escapeHtml(s.action)}</div>` : ''}
+      ${s.photo ? `<img class="thumb" src="${s.photo}">` : ''}
+      <div class="meta">${new Date(s.createdAt).toLocaleString()}</div>
+      <button class="btn-danger" onclick="deleteSafety(${s.id})">Delete</button>
+    </div>`).join('');
+}
+renderSafety();
+</script>
+</body>
+</html>
