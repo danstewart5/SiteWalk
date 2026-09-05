@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, Mic, Square } from "lucide-react";
 import { useDictate } from "@/hooks/use-dictate";
+import { useWalkListen } from "@/hooks/use-walk-listen";
 import { useSiteWalk } from "@/lib/store";
-import { parseWalkSpeech } from "@/lib/tag-walk";
+import { parseWalkSpeech, shouldFileUtterance } from "@/lib/tag-walk";
 import { compressImage, fmtDuration, formatWhen } from "@/lib/utils";
 import type { WalkNote } from "@/lib/types";
 import { TRADES } from "@/lib/types";
@@ -208,9 +209,9 @@ export function WalkView() {
         <h2 className="mb-3 text-lg font-medium tracking-tight text-ink">Site walk</h2>
         <Card>
           <p className="text-sm text-muted">
-            Start a walk to record. The camera stays ready — tap the shutter for each photo. Shots
-            save immediately with time and GPS. Hold Dictate to file punch, RFI, safety, change, or
-            log while you walk.
+            Start a walk to record. One tap starts camera, GPS, and voice. Talk as you go — punch,
+            RFI, safety, change, and log items get tagged. Pause voice if you’re just talking to a
+            sub. Shutter still takes photos.
           </p>
           <Button className="mt-4 w-full" onClick={() => startWalk()}>
             Start recording walk
@@ -322,7 +323,7 @@ export function WalkView() {
         {busy ? "Saving photo…" : camMessage(camStatus)}
       </p>
 
-      <WalkVoice />
+      <WalkVoice active />
 
       {notes.length > 0 ? (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -363,43 +364,57 @@ export function WalkView() {
   );
 }
 
-function WalkVoice() {
-  const [draft, setDraft] = useState("");
-  const dictate = useDictate(setDraft);
-  const wasListening = useRef(false);
+function WalkVoice({ active }: { active: boolean }) {
+  const listen = useWalkListen(active, (text) => {
+    if (!shouldFileUtterance(text)) return;
+    const parsed = parseWalkSpeech(text);
+    const store = useSiteWalk.getState();
+    store.addWalkNote({
+      body: text.trim(),
+      tag: parsed.tag,
+      trade: parsed.trade,
+      photo: null,
+      lat: lastWalkCoords?.lat ?? null,
+      lng: lastWalkCoords?.lng ?? null,
+    });
+    const last = store.walkNotes[store.walkNotes.length - 1];
+    if (last && last.tag !== "Note") store.convertWalkNote(last.id);
+  });
 
-  useEffect(() => {
-    if (wasListening.current && !dictate.listening && draft.trim().length > 3) {
-      const parsed = parseWalkSpeech(draft);
-      useSiteWalk.getState().addWalkNote({
-        body: draft.trim(),
-        tag: parsed.tag,
-        trade: parsed.trade,
-        photo: null,
-        lat: lastWalkCoords?.lat ?? null,
-        lng: lastWalkCoords?.lng ?? null,
-      });
-      setDraft("");
-    }
-    wasListening.current = dictate.listening;
-  }, [dictate.listening, draft]);
+  if (!listen.supported) {
+    return (
+      <Card className="mt-4">
+        <p className="text-sm text-muted">This browser has no speech recognition. Photos still save.</p>
+      </Card>
+    );
+  }
 
-  if (!dictate.supported) return null;
   return (
     <Card className="mt-4 space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">Voice while walking</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">Voice</p>
+        {listen.listening && !listen.paused ? (
+          <span className="flex items-center gap-1 text-xs text-danger">
+            <span className="rec-dot inline-block size-1.5 rounded-full bg-danger" />
+            Listening
+          </span>
+        ) : (
+          <span className="text-xs text-muted">{listen.paused ? "Paused" : "Idle"}</span>
+        )}
+      </div>
+      {listen.micError ? <p className="text-sm text-warn">{listen.micError}</p> : null}
+      {listen.interim ? <p className="text-sm">{listen.interim}</p> : null}
       <Button
         type="button"
-        variant={dictate.listening ? "danger" : "mic"}
+        variant={listen.paused ? "mic" : "secondary"}
         className="w-full"
-        onClick={() => dictate.toggle(draft)}
+        onClick={() => (listen.paused ? listen.resume() : listen.pause())}
       >
-        {dictate.listening ? <Square className="size-4" /> : <Mic className="size-4" />}
-        {dictate.listening ? "Stop and file" : "Dictate note"}
+        {listen.paused ? <Mic className="size-4" /> : <Square className="size-4" />}
+        {listen.paused ? "Resume voice" : "Pause voice"}
       </Button>
-      {draft ? <p className="text-sm">{draft}</p> : null}
       <p className="text-xs text-muted">
-        Names a trade and punch / RFI / safety / change / log — filed when you stop.
+        Started with the walk. Pause when you’re talking to a crew, not logging work.
       </p>
     </Card>
   );
