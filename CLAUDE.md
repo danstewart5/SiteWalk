@@ -1,12 +1,11 @@
 # SiteWalk — current snapshot for Claude
 
-Public app (no xAI login): https://danstewart5.github.io/SiteWalk/
+Two public links (no xAI login):
 
-Public repo: https://github.com/danstewart5/SiteWalk
+- **App (phone):** https://danstewart5.github.io/SiteWalk/
+- **Source (you):** this repo. Start here. Code is in `current/`.
 
-Do not use Grok sandbox preview URLs — they redirect to xAI auth.
-
-The live GitHub Pages site is the **full app** (dashboard, walk camera, punch, RFIs, trades, pipeline, clock, safety). Source of truth for code review is `current/`.
+Do not use Grok sandbox preview URLs.
 
 ## Do not touch unless asked
 

@@ -1,7 +1,13 @@
 # SiteWalk
 
-Full app (no login): https://danstewart5.github.io/SiteWalk/
+## Open the app (phone — no login)
 
-Source snapshot: [`current/`](./current/)
+https://danstewart5.github.io/SiteWalk/
 
-Start here for Claude: [CLAUDE.md](./CLAUDE.md)
+If it looks stuck, pull to refresh once.
+
+## Give this to Claude (source — no login)
+
+https://github.com/danstewart5/SiteWalk
+
+Start at `CLAUDE.md`. Code snapshot is in `current/`.
