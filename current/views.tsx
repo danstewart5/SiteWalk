@@ -13,7 +13,9 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { draftSiteReport } from "@/lib/ai-report";
+import { generateDailyReport } from "@/lib/report";
+import { pendingReviewItems } from "@/lib/review";
+import { sendPendingToTrades } from "@/lib/send-batch";
 import { useSiteWalk } from "@/lib/store";
 import { TRADES, type View, type Weather } from "@/lib/types";
 import { fmtDuration, formatDate, formatWhen, haversineMeters, todayISO } from "@/lib/utils";
@@ -23,6 +25,7 @@ import { Badge, Button, Card, Empty, Field, Input, Select, Textarea } from "./ui
 import { WalkView } from "./walk-view";
 import { ItemRoute, RouteBadge, RouteBanner } from "./route-status";
 import { PipelineView } from "./pipeline-view";
+import { ReviewView } from "./review-view";
 
 const WEATHER: Weather[] = [
   "Clear",
@@ -47,9 +50,16 @@ function DeleteBtn({ onClick }: { onClick: () => void }) {
 
 export function AppViews() {
   const view = useSiteWalk((s) => s.view);
+  const wanted = useSiteWalk((s) => s.reportWantedAt);
+  const reportAt = useSiteWalk((s) => s.reportAt);
+  const reportBusy = useSiteWalk((s) => s.reportBusy);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [view]);
+  useEffect(() => {
+    if (!wanted || reportAt === wanted || reportBusy) return;
+    void generateDailyReport();
+  }, [wanted, reportAt, reportBusy]);
   switch (view) {
     case "home":
       return <HomeView />;
@@ -77,6 +87,8 @@ export function AppViews() {
       return <ReportView />;
     case "pipeline":
       return <PipelineView />;
+    case "review":
+      return <ReviewView />;
     default:
       return <HomeView />;
   }
@@ -92,6 +104,7 @@ function HomeView() {
     s.punch.filter((p) => p.notificationStatus === "unrouted" && !p.done).length +
     s.rfis.filter((r) => r.notificationStatus === "unrouted" && r.status === "Open").length +
     s.changes.filter((c) => c.notificationStatus === "unrouted" && c.status === "Pending").length;
+  const pendingSend = pendingReviewItems(s).length;
   const tiles: { view: View; label: string; count: number; icon: typeof FileText }[] = [
     { view: "rfis", label: "Open RFIs", count: openRfis, icon: FileText },
     { view: "punch", label: "Punch items", count: openPunch, icon: Wrench },
@@ -126,10 +139,41 @@ function HomeView() {
         </div>
       </Card>
 
+      {pendingSend > 0 ? (
+        <Card className="space-y-2">
+          <p className="text-sm">
+            <span className="font-mono tabular-nums">{pendingSend}</span> pending, ready for trades.
+          </p>
+          <Button
+            className="w-full"
+            onClick={() => void sendPendingToTrades()}
+          >
+            {pendingSend} pending, Send to trades
+          </Button>
+          <Button variant="secondary" className="w-full" onClick={() => s.setView("review")}>
+            Review first
+          </Button>
+        </Card>
+      ) : null}
+
+      {s.dailyReport || s.reportBusy || s.reportError ? (
+        <Card>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">Latest report</p>
+          {s.reportBusy ? <p className="mt-2 text-sm text-muted">Drafting from this walk…</p> : null}
+          {s.reportError ? <p className="mt-2 text-sm text-danger">{s.reportError}</p> : null}
+          {s.dailyReport ? (
+            <p className="mt-2 line-clamp-4 text-sm">{s.dailyReport}</p>
+          ) : null}
+          <Button variant="secondary" className="mt-3 w-full" onClick={() => s.setView("report")}>
+            Open report
+          </Button>
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={() => s.startWalk()}>Start site walk</Button>
-        <Button variant="secondary" onClick={() => s.setView("report")}>
-          Draft report
+        <Button variant="secondary" onClick={() => s.requestReport()}>
+          {s.dailyReport ? "Regenerate report" : "Draft report"}
         </Button>
       </div>
 
@@ -171,6 +215,7 @@ function MoreView() {
     { view: "trades", label: "Trade directory", icon: Users },
     { view: "report", label: "AI site report", icon: FileText },
     { view: "pipeline", label: "Land-to-closing map", icon: NotebookPen },
+    { view: "review", label: "Review before send", icon: Users },
     { view: "clock", label: "GPS clock-in", icon: MapPin },
     { view: "safety", label: "Safety", icon: HardHat },
   ];
@@ -1050,50 +1095,29 @@ function ClockView() {
 }
 
 function ReportView() {
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function draft() {
-    setBusy(true);
-    setError("");
-    const s = useSiteWalk.getState();
-    const snapshot = {
-      company: s.company,
-      employee: s.employeeName,
-      rfis: s.rfis,
-      logs: s.logs,
-      submittals: s.submittals,
-      safety: s.safety,
-      punch: s.punch,
-      changes: s.changes,
-      clockEvents: s.clockEvents.slice(-20),
-    };
-    try {
-      const res = await draftSiteReport({ data: { snapshot: JSON.stringify(snapshot) } });
-      if (!res.ok) setError(res.error);
-      else setText(res.text);
-    } catch {
-      setError("Could not draft the report.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const text = useSiteWalk((s) => s.dailyReport);
+  const error = useSiteWalk((s) => s.reportError);
+  const busy = useSiteWalk((s) => s.reportBusy);
+  const at = useSiteWalk((s) => s.reportAt);
+  const requestReport = useSiteWalk((s) => s.requestReport);
 
   return (
     <div>
       <SectionTitle>AI site report</SectionTitle>
       <p className="mb-3 text-sm text-muted">
-        Pulls from today's logs, RFIs, punch, safety, and clock events. Nothing is sent until you tap draft.
+        Drafts itself when you end a walk, from that walk plus today’s logs, RFIs, punch, and safety.
       </p>
-      <Button className="w-full" onClick={draft} disabled={busy}>
-        {busy ? "Drafting…" : "Draft today's report"}
+      <Button className="w-full" onClick={() => requestReport()} disabled={busy}>
+        {busy ? "Drafting…" : text ? "Regenerate report" : "Draft today's report"}
       </Button>
       {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+      {at ? <p className="mt-2 text-xs text-muted">{formatWhen(at)}</p> : null}
       {text ? (
         <Card className="mt-4">
           <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{text}</pre>
         </Card>
+      ) : !busy ? (
+        <Empty>No report yet. End a walk or tap draft.</Empty>
       ) : null}
     </div>
   );

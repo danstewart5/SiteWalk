@@ -6,6 +6,7 @@ import { Badge, Button, Card, Select } from "./ui";
 
 export function RouteBadge({ status }: { status?: NoticeStatus | null }) {
   if (!status) return null;
+  if (status === "pending") return <Badge tone="warn">Pending review</Badge>;
   if (status === "unrouted") return <Badge tone="warn">Unrouted</Badge>;
   if (status === "sent" || status === "delivered") return <Badge tone="ok">Sent</Badge>;
   if (status === "failed") return <Badge tone="danger">Failed</Badge>;

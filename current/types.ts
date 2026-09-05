@@ -30,7 +30,7 @@ export type Weather =
   | "Extreme Heat/Cold";
 
 export type PreferredChannel = "sms" | "email" | "both";
-export type NoticeStatus = "queued" | "sent" | "failed" | "delivered" | "unrouted";
+export type NoticeStatus = "pending" | "queued" | "sent" | "failed" | "delivered" | "unrouted";
 export type NoticeChannel = "sms" | "email";
 export type RoutableKind = "punch" | "rfi" | "change";
 
@@ -47,7 +47,8 @@ export type View =
   | "trades"
   | "report"
   | "more"
-  | "pipeline";
+  | "pipeline"
+  | "review";
 
 export type Rfi = {
   id: string;

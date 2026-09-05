@@ -72,6 +72,16 @@ type SiteWalkState = {
   walkStartedAt: string | null;
   startWalk: () => void;
   endWalk: () => void;
+  dailyReport: string;
+  reportError: string;
+  reportAt: string | null;
+  reportWantedAt: string | null;
+  reportBusy: boolean;
+  setReportBusy: (busy: boolean) => void;
+  setReport: (p: { text: string; error: string; at: string | null }) => void;
+  requestReport: () => void;
+  updatePendingBody: (kind: RoutableKind, id: string, body: string) => void;
+  discardPending: (kind: RoutableKind, id: string) => void;
   pipeline: PipelineStage[];
   pipelineQuestions: PipelineQuestion[];
   updatePipeline: (id: string, patch: Partial<Omit<PipelineStage, "id">>) => void;
@@ -112,7 +122,7 @@ export const useSiteWalk = create<SiteWalkState>()(
               answer: "",
               photo: null,
               createdAt: now,
-              notificationStatus: "unrouted",
+              notificationStatus: "pending",
               notifiedAt: now,
             },
             {
@@ -170,7 +180,7 @@ export const useSiteWalk = create<SiteWalkState>()(
               photo: null,
               done: false,
               createdAt: now,
-              notificationStatus: "unrouted",
+              notificationStatus: "pending",
               notifiedAt: now,
             },
             {
@@ -181,7 +191,7 @@ export const useSiteWalk = create<SiteWalkState>()(
               photo: null,
               done: false,
               createdAt: now,
-              notificationStatus: "queued",
+              notificationStatus: "pending",
               notifiedAt: now,
             },
           ],
@@ -193,7 +203,7 @@ export const useSiteWalk = create<SiteWalkState>()(
               trade: "Electrical",
               status: "Pending",
               createdAt: now,
-              notificationStatus: "queued",
+              notificationStatus: "pending",
               notifiedAt: now,
             },
           ],
@@ -222,9 +232,6 @@ export const useSiteWalk = create<SiteWalkState>()(
             },
           ],
         });
-        get().punch.forEach((p) => get().routeItem("punch", p.id));
-        get().rfis.forEach((r) => get().routeItem("rfi", r.id));
-        get().changes.forEach((c) => get().routeItem("change", c.id));
       },
       rfis: [],
       addRfi: (r) => {
@@ -232,10 +239,16 @@ export const useSiteWalk = create<SiteWalkState>()(
         set({
           rfis: [
             ...get().rfis,
-            { ...r, id, status: "Open", answer: "", createdAt: new Date().toISOString() },
+            {
+              ...r,
+              id,
+              status: "Open",
+              answer: "",
+              createdAt: new Date().toISOString(),
+              notificationStatus: "pending",
+            },
           ],
         });
-        get().routeItem("rfi", id);
       },
       answerRfi: (id, answer) =>
         set({
@@ -250,7 +263,9 @@ export const useSiteWalk = create<SiteWalkState>()(
         const current = get().rfis.find((r) => r.id === id);
         if (!current || current.trade === trade) return;
         set({ rfis: get().rfis.map((r) => (r.id === id ? { ...r, trade } : r)) });
-        get().routeItem("rfi", id);
+        if (current.notificationStatus && current.notificationStatus !== "pending") {
+          get().routeItem("rfi", id);
+        }
       },
       logs: [],
       addLog: (l) =>
@@ -279,9 +294,17 @@ export const useSiteWalk = create<SiteWalkState>()(
       addPunch: (p) => {
         const id = uid();
         set({
-          punch: [...get().punch, { ...p, id, done: false, createdAt: new Date().toISOString() }],
+          punch: [
+            ...get().punch,
+            {
+              ...p,
+              id,
+              done: false,
+              createdAt: new Date().toISOString(),
+              notificationStatus: "pending",
+            },
+          ],
         });
-        get().routeItem("punch", id);
       },
       togglePunch: (id) =>
         set({ punch: get().punch.map((p) => (p.id === id ? { ...p, done: !p.done } : p)) }),
@@ -289,7 +312,9 @@ export const useSiteWalk = create<SiteWalkState>()(
         const current = get().punch.find((p) => p.id === id);
         if (!current || current.trade === trade) return;
         set({ punch: get().punch.map((p) => (p.id === id ? { ...p, trade } : p)) });
-        get().routeItem("punch", id);
+        if (current.notificationStatus && current.notificationStatus !== "pending") {
+          get().routeItem("punch", id);
+        }
       },
       deletePunch: (id) => set({ punch: get().punch.filter((p) => p.id !== id) }),
       changes: [],
@@ -298,10 +323,15 @@ export const useSiteWalk = create<SiteWalkState>()(
         set({
           changes: [
             ...get().changes,
-            { ...c, id, status: "Pending", createdAt: new Date().toISOString() },
+            {
+              ...c,
+              id,
+              status: "Pending",
+              createdAt: new Date().toISOString(),
+              notificationStatus: "pending",
+            },
           ],
         });
-        get().routeItem("change", id);
       },
       setChangeStatus: (id, status) =>
         set({ changes: get().changes.map((c) => (c.id === id ? { ...c, status } : c)) }),
@@ -309,7 +339,9 @@ export const useSiteWalk = create<SiteWalkState>()(
         const current = get().changes.find((c) => c.id === id);
         if (!current || current.trade === trade) return;
         set({ changes: get().changes.map((c) => (c.id === id ? { ...c, trade } : c)) });
-        get().routeItem("change", id);
+        if (current.notificationStatus && current.notificationStatus !== "pending") {
+          get().routeItem("change", id);
+        }
       },
       deleteChange: (id) => set({ changes: get().changes.filter((c) => c.id !== id) }),
       trades: [],
@@ -359,7 +391,37 @@ export const useSiteWalk = create<SiteWalkState>()(
             ? { view: "walk" }
             : { view: "walk", walkActive: true, walkStartedAt: new Date().toISOString() },
         ),
-      endWalk: () => set({ walkActive: false }),
+      endWalk: () =>
+        set({
+          walkActive: false,
+          view: "report",
+          reportWantedAt: new Date().toISOString(),
+        }),
+      dailyReport: "",
+      reportError: "",
+      reportAt: null,
+      reportWantedAt: null,
+      reportBusy: false,
+      setReportBusy: (busy) => set({ reportBusy: busy }),
+      setReport: ({ text, error, at }) =>
+        set({ dailyReport: text, reportError: error, reportAt: at, reportBusy: false }),
+      requestReport: () => set({ reportWantedAt: new Date().toISOString(), view: "report" }),
+      updatePendingBody: (kind, id, body) => {
+        if (kind === "punch") {
+          set({ punch: get().punch.map((p) => (p.id === id ? { ...p, item: body } : p)) });
+        } else if (kind === "rfi") {
+          set({ rfis: get().rfis.map((r) => (r.id === id ? { ...r, question: body } : r)) });
+        } else {
+          set({
+            changes: get().changes.map((c) => (c.id === id ? { ...c, description: body } : c)),
+          });
+        }
+      },
+      discardPending: (kind, id) => {
+        if (kind === "punch") get().deletePunch(id);
+        else if (kind === "rfi") get().deleteRfi(id);
+        else get().deleteChange(id);
+      },
       pipeline: DEFAULT_PIPELINE,
       pipelineQuestions: DEFAULT_PIPELINE_QUESTIONS,
       updatePipeline: (id, patch) =>
@@ -554,6 +616,9 @@ export const useSiteWalk = create<SiteWalkState>()(
         walkStartedAt: s.walkStartedAt,
         pipeline: s.pipeline,
         pipelineQuestions: s.pipelineQuestions,
+        dailyReport: s.dailyReport,
+        reportError: s.reportError,
+        reportAt: s.reportAt,
         notifications: s.notifications,
       }),
     },
