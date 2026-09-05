@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — Firebase Persistent Backend Layer</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  code { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  .meta { font-size: 12px; color: #666; }
+  ol li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<h1>SiteWalk — Firebase Persistent Backend</h1>
+
+<div class="card">
+  <h2 style="margin-top:0;">Why Firebase</h2>
+  <p>Every module so far (punch list, RFIs, daily logs, submittals, safety log, GPS clock events, trade directory)
+  stores data in <code>localStorage</code>, which only lives on one device/browser. Firebase Firestore replaces
+  that with real cloud storage — no server to rent or maintain, works from the same client-side JS you already
+  have, and has a free tier that comfortably covers a pilot with 2-3 developers.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Setup Steps (for Grok / whoever wires this in)</h2>
+  <ol>
+    <li>Go to <code>console.firebase.google.com</code>, create a project (free "Spark" plan).</li>
+    <li>Enable <strong>Firestore Database</strong> (start in test mode for the pilot, lock down security rules before going live with real customers).</li>
+    <li>In Project Settings, register a "Web App" to get a config object (apiKey, projectId, etc.).</li>
+    <li>Add the Firebase SDK script tags and config below to every SiteWalk HTML file.</li>
+    <li>Replace every module's <code>load()</code> / <code>save()</code> localStorage calls with the Firestore equivalents below.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Firebase Init (add to every page, or one shared file)</h2>
+  <pre id="initCode"></pre>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Drop-in Replacement for load()/save()</h2>
+  <p class="meta">This keeps the exact same function names used across all the modules built so far, so Grok can
+  swap this block in without rewriting every render/add/delete function.</p>
+  <pre id="dataLayerCode"></pre>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">What changes in each module</h2>
+  <p>Because <code>load()</code> becomes async (Firestore reads happen over the network), every place that does:</p>
+  <pre>let rfis = load('swRFIs');</pre>
+  <p>needs to become:</p>
+  <pre>let rfis = [];
+loadCollection('swRFIs').then(data => { rfis = data; renderRFIs(); });</pre>
+  <p>And every <code>save(key, fullArray)</code> call becomes an individual <code>addDoc</code>/<code>updateDoc</code>/<code>deleteDoc</code>
+  call per item (see helper functions below) — Firestore works per-document, not as one big array dump like localStorage.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">Real-time sync (recommended)</h2>
+  <p>Instead of a one-time <code>loadCollection()</code>, using <code>onSnapshot()</code> means every device sees
+  updates live — e.g. a supervisor clears a punch item and it disappears from the sub's phone instantly. Worth
+  having Grok wire this in from the start rather than retrofitting later.</p>
+  <pre id="realtimeCode"></pre>
+</div>
+
+<script>
+document.getElementById('initCode').textContent =
+`<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+<\/script>`;
+
+document.getElementById('dataLayerCode').textContent =
+`import {
+  collection, addDoc, updateDoc, deleteDoc, doc, getDocs
+} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
+// Fetch all documents in a collection (e.g. "swRFIs", "swDailyLogs", "swSubmittals",
+// "swSafety", "swClockEvents", "swJobSites", "swTrades")
+async function loadCollection(collectionName) {
+  const snapshot = await getDocs(collection(db, collectionName));
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+// Add one new item
+async function addItem(collectionName, data) {
+  const docRef = await addDoc(collection(db, collectionName), data);
+  return docRef.id;
+}
+
+// Update one existing item by its Firestore doc id
+async function updateItem(collectionName, docId, updates) {
+  await updateDoc(doc(db, collectionName, docId), updates);
+}
+
+// Delete one item by its Firestore doc id
+async function deleteItem(collectionName, docId) {
+  await deleteDoc(doc(db, collectionName, docId));
+}`;
+
+document.getElementById('realtimeCode').textContent =
+`import { onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
+// Call once per module on page load instead of loadCollection().
+// Automatically re-renders whenever data changes, on any device.
+function watchCollection(collectionName, onChange) {
+  return onSnapshot(collection(db, collectionName), (snapshot) => {
+    const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    onChange(items);
+  });
+}
+
+// Example usage in the RFI module:
+// watchCollection('swRFIs', (items) => { rfis = items; renderRFIs(); });`;
+</script>
+</body>
+</html>
