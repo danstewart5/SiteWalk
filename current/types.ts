@@ -169,7 +169,8 @@ export type ClockEvent = {
 export type WalkNote = {
   id: string;
   body: string;
-  tag: "Note" | "Punch" | "RFI" | "Safety";
+  tag: "Note" | "Punch" | "RFI" | "Safety" | "Change" | "Log";
+  trade?: string;
   photo: string | null;
   lat?: number | null;
   lng?: number | null;

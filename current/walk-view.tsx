@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Mic, Square } from "lucide-react";
 import { useDictate } from "@/hooks/use-dictate";
 import { useSiteWalk } from "@/lib/store";
+import { parseWalkSpeech } from "@/lib/tag-walk";
 import { compressImage, fmtDuration, formatWhen } from "@/lib/utils";
+import type { WalkNote } from "@/lib/types";
+import { TRADES } from "@/lib/types";
 import { Badge, Button, Card, Empty, Select } from "./ui";
 
 type CamStatus =
@@ -14,6 +17,10 @@ type CamStatus =
   | "insecure"
   | "unsupported"
   | "error";
+
+const TAGS: WalkNote["tag"][] = ["Note", "Punch", "RFI", "Safety", "Change", "Log"];
+
+let lastWalkCoords: { lat: number; lng: number } | null = null;
 
 function inIframe() {
   try {
@@ -105,8 +112,11 @@ export function WalkView() {
     let cancelled = false;
     setCamStatus("requesting");
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
-      .then((s) => {
+      .getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      })
+      .then(async (s) => {
         if (cancelled) {
           s.getTracks().forEach((t) => t.stop());
           return;
@@ -114,8 +124,16 @@ export function WalkView() {
         stream = s;
         const video = videoRef.current;
         if (video) {
+          video.setAttribute("playsinline", "true");
+          video.setAttribute("webkit-playsinline", "true");
+          video.muted = true;
+          video.playsInline = true;
           video.srcObject = s;
-          void video.play();
+          try {
+            await video.play();
+          } catch {
+            /* autoplay can wait for a tap */
+          }
         }
         setLive(true);
         setCamStatus("live");
@@ -138,12 +156,13 @@ export function WalkView() {
 
   useEffect(() => {
     if (!walkActive || !navigator.geolocation) {
-      setGpsLabel("GPS off");
+      setGpsLabel(walkActive ? "GPS off" : "GPS off");
       return;
     }
     const watch = navigator.geolocation.watchPosition(
       (pos) => {
         coordsRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        lastWalkCoords = coordsRef.current;
         setGpsLabel(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
       },
       (err) => setGpsLabel(err.message || "GPS unavailable"),
@@ -179,7 +198,7 @@ export function WalkView() {
   }
 
   const elapsed =
-    walkActive && walkStartedAt ? Date.now() - new Date(walkStartedAt).getTime() + tick * 0 : 0;
+    walkActive && walkStartedAt ? Date.now() - new Date(walkStartedAt).getTime() : 0;
   const shotCount = notes.filter((n) => n.photo).length;
   const selectedNote = notes.find((n) => n.id === selected);
 
@@ -190,7 +209,8 @@ export function WalkView() {
         <Card>
           <p className="text-sm text-muted">
             Start a walk to record. The camera stays ready — tap the shutter for each photo. Shots
-            save immediately with time and GPS.
+            save immediately with time and GPS. Hold Dictate to file punch, RFI, safety, change, or
+            log while you walk.
           </p>
           <Button className="mt-4 w-full" onClick={() => startWalk()}>
             Start recording walk
@@ -302,6 +322,8 @@ export function WalkView() {
         {busy ? "Saving photo…" : camMessage(camStatus)}
       </p>
 
+      <WalkVoice />
+
       {notes.length > 0 ? (
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {[...notes].reverse().map((n) =>
@@ -320,7 +342,7 @@ export function WalkView() {
           )}
         </div>
       ) : (
-        <Empty>Walk is recording. Hit the camera to save the first shot.</Empty>
+        <Empty>Walk is recording. Hit the camera or dictate to save the first note.</Empty>
       )}
 
       {selectedNote ? (
@@ -341,14 +363,56 @@ export function WalkView() {
   );
 }
 
+function WalkVoice() {
+  const [draft, setDraft] = useState("");
+  const dictate = useDictate(setDraft);
+  const wasListening = useRef(false);
+
+  useEffect(() => {
+    if (wasListening.current && !dictate.listening && draft.trim().length > 3) {
+      const parsed = parseWalkSpeech(draft);
+      useSiteWalk.getState().addWalkNote({
+        body: draft.trim(),
+        tag: parsed.tag,
+        trade: parsed.trade,
+        photo: null,
+        lat: lastWalkCoords?.lat ?? null,
+        lng: lastWalkCoords?.lng ?? null,
+      });
+      setDraft("");
+    }
+    wasListening.current = dictate.listening;
+  }, [dictate.listening, draft]);
+
+  if (!dictate.supported) return null;
+  return (
+    <Card className="mt-4 space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">Voice while walking</p>
+      <Button
+        type="button"
+        variant={dictate.listening ? "danger" : "mic"}
+        className="w-full"
+        onClick={() => dictate.toggle(draft)}
+      >
+        {dictate.listening ? <Square className="size-4" /> : <Mic className="size-4" />}
+        {dictate.listening ? "Stop and file" : "Dictate note"}
+      </Button>
+      {draft ? <p className="text-sm">{draft}</p> : null}
+      <p className="text-xs text-muted">
+        Names a trade and punch / RFI / safety / change / log — filed when you stop.
+      </p>
+    </Card>
+  );
+}
+
 function CaptionEditor({
   note,
   onChange,
 }: {
-  note: { id: string; body: string; tag: "Note" | "Punch" | "RFI" | "Safety" };
-  onChange: (patch: { body?: string; tag?: "Note" | "Punch" | "RFI" | "Safety" }) => void;
+  note: Pick<WalkNote, "id" | "body" | "tag" | "trade">;
+  onChange: (patch: { body?: string; tag?: WalkNote["tag"]; trade?: string }) => void;
 }) {
-  const dictate = useDictate((text) => onChange({ body: text }));
+  const dictate = useDictate((text) => onChange({ body: text, ...parseWalkSpeech(text) }));
   return (
     <Card className="mt-4 space-y-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted">Caption this shot</p>
@@ -369,12 +433,19 @@ function CaptionEditor({
       ) : null}
       <Select
         value={note.tag}
-        onChange={(e) => onChange({ tag: e.target.value as typeof note.tag })}
+        onChange={(e) => onChange({ tag: e.target.value as WalkNote["tag"] })}
       >
-        <option>Note</option>
-        <option>Punch</option>
-        <option>RFI</option>
-        <option>Safety</option>
+        {TAGS.map((t) => (
+          <option key={t}>{t}</option>
+        ))}
+      </Select>
+      <Select
+        value={note.trade || "General"}
+        onChange={(e) => onChange({ trade: e.target.value })}
+      >
+        {TRADES.map((t) => (
+          <option key={t}>{t}</option>
+        ))}
       </Select>
     </Card>
   );
@@ -387,15 +458,7 @@ function ShotList({
   onDelete,
   onConvert,
 }: {
-  notes: {
-    id: string;
-    body: string;
-    tag: "Note" | "Punch" | "RFI" | "Safety";
-    photo: string | null;
-    lat?: number | null;
-    lng?: number | null;
-    createdAt: string;
-  }[];
+  notes: WalkNote[];
   selected: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -410,6 +473,7 @@ function ShotList({
             <div className="flex items-center justify-between gap-2">
               <Badge tone={n.tag === "Safety" ? "warn" : n.tag === "RFI" ? "open" : "neutral"}>
                 {n.tag}
+                {n.trade ? ` · ${n.trade}` : ""}
               </Badge>
               <span className="text-xs text-muted">{formatWhen(n.createdAt)}</span>
             </div>

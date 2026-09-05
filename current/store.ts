@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { uid } from "./utils";
+import { uid, todayISO } from "./utils";
+import { parseWalkSpeech } from "./tag-walk";
 import { DEFAULT_PIPELINE, DEFAULT_PIPELINE_QUESTIONS } from "./pipeline";
 import type { PipelineQuestion, PipelineStage } from "./pipeline";
 import { buildRoute } from "./routing";
@@ -64,7 +65,7 @@ type SiteWalkState = {
   resolveFlag: (id: string, outIso: string) => void;
   walkNotes: WalkNote[];
   addWalkNote: (n: Omit<WalkNote, "id" | "createdAt">) => void;
-  updateWalkNote: (id: string, patch: Partial<Pick<WalkNote, "body" | "tag">>) => void;
+  updateWalkNote: (id: string, patch: Partial<Pick<WalkNote, "body" | "tag" | "trade">>) => void;
   deleteWalkNote: (id: string) => void;
   convertWalkNote: (id: string) => void;
   walkActive: boolean;
@@ -392,12 +393,14 @@ export const useSiteWalk = create<SiteWalkState>()(
       convertWalkNote: (id) => {
         const note = get().walkNotes.find((n) => n.id === id);
         if (!note) return;
+        const parsed = parseWalkSpeech(note.body);
+        const trade = note.trade || parsed.trade || "General";
         if (note.tag === "Punch") {
-          get().addPunch({ item: note.body, location: "Site walk", trade: "General", photo: note.photo });
+          get().addPunch({ item: note.body, location: "Site walk", trade, photo: note.photo });
         } else if (note.tag === "RFI") {
           get().addRfi({
             question: note.body,
-            trade: "General",
+            trade,
             recipient: "",
             photo: note.photo,
           });
@@ -408,6 +411,17 @@ export const useSiteWalk = create<SiteWalkState>()(
             person: "",
             action: "",
             photo: note.photo,
+          });
+        } else if (note.tag === "Change") {
+          get().addChange({ description: note.body, amount: "", trade });
+        } else if (note.tag === "Log") {
+          get().addLog({
+            date: todayISO(),
+            weather: "Clear",
+            crewCount: "",
+            trades: trade === "General" ? "" : trade,
+            delays: "",
+            notes: note.body,
           });
         }
         get().deleteWalkNote(id);

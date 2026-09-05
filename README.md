@@ -1,7 +1,7 @@
 # SiteWalk
 
-Public code (no login). Start here: [CLAUDE.md](./CLAUDE.md)
+Full app (no login): https://danstewart5.github.io/SiteWalk/
 
-Current React app source: [`current/`](./current/)
+Source snapshot: [`current/`](./current/)
 
-Phone camera test (HTTPS): https://danstewart5.github.io/SiteWalk/walk.html
+Start here for Claude: [CLAUDE.md](./CLAUDE.md)
