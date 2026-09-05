@@ -1,0 +1,382 @@
+<!--
+INSTRUCTIONS FOR GROK — File 7 of 7: GPS Clock-In Module
+Merge into SiteWalk the same way as prior files. Replace
+GEOCODE_API_KEY with a real Google Maps Geocoding API key (or swap in
+Mapbox — check with Danno on which he wants to pay for). IMPORTANT:
+true background GPS tracking (working when the screen is off or the
+app is backgrounded) requires the app be wrapped as a native shell
+(e.g. Capacitor), not just a browser tab — plain mobile browsers
+suspend location watchers when backgrounded. Flag this back to Danno
+if the current build is browser-only.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SiteWalk — GPS Clock-In Module</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; padding: 0 16px; background: #f7f7f7; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-top: 8px; font-size: 13px; }
+  input, select { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+  button { padding: 10px 16px; margin-top: 10px; margin-right: 8px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-clockin { background: #16a34a; color: #fff; }
+  .btn-clockout { background: #b91c1c; color: #fff; }
+  .btn-danger { background: #b91c1c; color: #fff; }
+  .btn-small { padding: 4px 10px; font-size: 12px; }
+  .item-row { border-bottom: 1px solid #eee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #666; }
+  .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+  .status-in { background: #dcfce7; color: #15803d; }
+  .status-out { background: #f1f5f9; color: #475569; }
+  .status-flagged { background: #fef3c7; color: #92400e; }
+  .status-manual { background: #eef2ff; color: #3730a3; }
+  #liveStatus { font-size: 15px; font-weight: bold; padding: 10px; border-radius: 6px; background: #eef2ff; }
+</style>
+</head>
+<body>
+
+<h1>SiteWalk — GPS Clock-In</h1>
+<p class="meta">
+  Storage keys: "swJobSites", "swClockEvents". Requires browser Geolocation permission set to "Always Allow" for
+  background tracking to work reliably — on iOS/Android this typically requires wrapping the app as a PWA or
+  native shell (Capacitor/Cordova) since plain mobile Safari/Chrome tabs suspend GPS watchers when backgrounded.
+  Flag this to Grok: true background tracking needs a native wrapper, not just browser JS.
+</p>
+
+<div id="liveStatus">Status: Initializing GPS...</div>
+
+<!-- ===================== JOB SITE SETUP ===================== -->
+<h2>Job Sites</h2>
+<div class="card">
+  <label>Job Site Name</label>
+  <input type="text" id="siteName" placeholder="e.g. 123 Main St Build">
+  <label>Address</label>
+  <input type="text" id="siteAddress" placeholder="Full street address">
+  <button class="btn-primary" onclick="addJobSite()">Add Job Site (geocode + save)</button>
+  <p class="meta">Requires a geocoding API key (Google Maps Geocoding API or Mapbox) — see geocodeAddress() below.</p>
+</div>
+<div id="siteList"></div>
+
+<!-- ===================== MANUAL FALLBACK ===================== -->
+<h2>Manual Clock In/Out</h2>
+<div class="card">
+  <label>Employee Name</label>
+  <input type="text" id="manualEmployee" placeholder="Your name">
+  <label>Job Site</label>
+  <select id="manualSite"></select>
+  <button class="btn-clockin" onclick="manualClockIn()">Manual Clock In</button>
+  <button class="btn-clockout" onclick="manualClockOut()">Manual Clock Out</button>
+</div>
+
+<!-- ===================== MISSED CLOCK-OUTS ===================== -->
+<h2>Missed Clock-Outs — Needs Review</h2>
+<div id="flaggedList"></div>
+
+<!-- ===================== EVENT LOG ===================== -->
+<h2>Clock Event Log</h2>
+<div id="eventList"></div>
+
+<script>
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+  catch (e) { return fallback; }
+}
+function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+
+let jobSites = load('swJobSites', []);
+let clockEvents = load('swClockEvents', []);
+
+// Per-site tracking state, kept in memory (not persisted): whether the current
+// device is currently "inside" each site's radius, and any pending clock-out timer.
+let siteState = {}; // { [siteId]: { inside: bool, pendingOutTimer: null } }
+
+const RADIUS_METERS = 100;
+const BUFFER_MS = 5 * 60 * 1000; // 5 minutes
+
+// ---------- Geocoding ----------
+// Replace GEOCODE_API_KEY and the endpoint with your provider of choice
+// (Google Maps Geocoding API shown here).
+const GEOCODE_API_KEY = 'YOUR_API_KEY_HERE';
+
+async function geocodeAddress(address) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GEOCODE_API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.status === 'OK' && data.results.length > 0) {
+    const loc = data.results[0].geometry.location;
+    return { lat: loc.lat, lng: loc.lng };
+  }
+  throw new Error('Geocoding failed: ' + data.status);
+}
+
+async function addJobSite() {
+  const name = document.getElementById('siteName').value.trim();
+  const address = document.getElementById('siteAddress').value.trim();
+  if (!name || !address) { alert('Enter both a site name and address.'); return; }
+
+  try {
+    const coords = await geocodeAddress(address);
+    const site = { id: Date.now(), name, address, lat: coords.lat, lng: coords.lng, active: true };
+    jobSites.push(site);
+    save('swJobSites', jobSites);
+    siteState[site.id] = { inside: false, pendingOutTimer: null };
+    document.getElementById('siteName').value = '';
+    document.getElementById('siteAddress').value = '';
+    renderSites();
+    renderManualSiteOptions();
+  } catch (err) {
+    alert('Could not geocode that address. Check the address or API key.');
+    console.error(err);
+  }
+}
+
+function deleteSite(id) {
+  jobSites = jobSites.filter(s => s.id !== id);
+  save('swJobSites', jobSites);
+  delete siteState[id];
+  renderSites();
+  renderManualSiteOptions();
+}
+
+function renderSites() {
+  const list = document.getElementById('siteList');
+  if (jobSites.length === 0) { list.innerHTML = '<p class="meta">No job sites yet.</p>'; return; }
+  list.innerHTML = jobSites.map(s => `
+    <div class="card item-row">
+      <strong>${escapeHtml(s.name)}</strong>
+      <button class="btn-danger btn-small" onclick="deleteSite(${s.id})">Delete</button>
+      <div class="meta">${escapeHtml(s.address)}</div>
+      <div class="meta">Lat/Lng: ${s.lat.toFixed(5)}, ${s.lng.toFixed(5)} — Radius: ${RADIUS_METERS}m</div>
+    </div>
+  `).join('');
+}
+
+function renderManualSiteOptions() {
+  const sel = document.getElementById('manualSite');
+  sel.innerHTML = jobSites.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+}
+
+// ---------- Distance calc (Haversine) ----------
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ---------- Clock event logging ----------
+// NOTE: employeeId/employeeName here should come from your app's logged-in user session.
+// Hardcoding a placeholder for this standalone module.
+function getCurrentEmployee() {
+  return { id: 'demo-employee', name: document.getElementById('manualEmployee').value.trim() || 'Unknown Employee' };
+}
+
+function logEvent(type, site, isManual) {
+  const employee = getCurrentEmployee();
+  const event = {
+    id: Date.now(),
+    employeeId: employee.id,
+    employeeName: employee.name,
+    siteId: site.id,
+    siteName: site.name,
+    type, // 'in' or 'out'
+    isManual: !!isManual,
+    flagged: false,
+    timestamp: new Date().toISOString()
+  };
+  clockEvents.push(event);
+  save('swClockEvents', clockEvents);
+  renderEvents();
+  renderFlagged();
+
+  // TODO (Grok): push this event to Firebase Firestore here for persistence
+  // across devices, e.g.:
+  // db.collection('clockEvents').add(event);
+}
+
+function autoClockIn(site) {
+  logEvent('in', site, false);
+  updateLiveStatus(`Clocked IN at ${site.name}`);
+}
+
+function autoClockOut(site) {
+  logEvent('out', site, false);
+  updateLiveStatus(`Clocked OUT of ${site.name}`);
+}
+
+function manualClockIn() {
+  const siteId = Number(document.getElementById('manualSite').value);
+  const site = jobSites.find(s => s.id === siteId);
+  if (!site) { alert('Add a job site first.'); return; }
+  logEvent('in', site, true);
+  updateLiveStatus(`Manually clocked IN at ${site.name}`);
+}
+
+function manualClockOut() {
+  const siteId = Number(document.getElementById('manualSite').value);
+  const site = jobSites.find(s => s.id === siteId);
+  if (!site) { alert('Add a job site first.'); return; }
+  logEvent('out', site, true);
+  updateLiveStatus(`Manually clocked OUT of ${site.name}`);
+}
+
+function updateLiveStatus(msg) {
+  document.getElementById('liveStatus').textContent = 'Status: ' + msg;
+}
+
+// ---------- Missed clock-out detection ----------
+// Run periodically (e.g. once per app load, or on a daily cron if using a backend)
+// to flag any "in" event with no matching "out" event within a reasonable window (e.g. 16 hours).
+function checkForMissedClockOuts() {
+  const MAX_SHIFT_MS = 16 * 60 * 60 * 1000;
+  const byEmployee = {};
+
+  clockEvents.forEach(e => {
+    if (!byEmployee[e.employeeId]) byEmployee[e.employeeId] = [];
+    byEmployee[e.employeeId].push(e);
+  });
+
+  Object.values(byEmployee).forEach(events => {
+    events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].type === 'in') {
+        const nextOut = events.slice(i + 1).find(e => e.type === 'out');
+        const inTime = new Date(events[i].timestamp).getTime();
+        const elapsed = Date.now() - inTime;
+        if (!nextOut && elapsed > MAX_SHIFT_MS) {
+          events[i].flagged = true;
+        }
+      }
+    }
+  });
+
+  save('swClockEvents', clockEvents);
+}
+
+function resolveFlag(eventId) {
+  const newTime = prompt('Enter the correct clock-out time (YYYY-MM-DDTHH:MM):');
+  if (!newTime) return;
+  const inEvent = clockEvents.find(e => e.id === eventId);
+  if (!inEvent) return;
+
+  clockEvents.push({
+    id: Date.now(),
+    employeeId: inEvent.employeeId,
+    employeeName: inEvent.employeeName,
+    siteId: inEvent.siteId,
+    siteName: inEvent.siteName,
+    type: 'out',
+    isManual: true,
+    flagged: false,
+    correctedBySupervisor: true,
+    timestamp: new Date(newTime).toISOString()
+  });
+  inEvent.flagged = false;
+  save('swClockEvents', clockEvents);
+  renderEvents();
+  renderFlagged();
+}
+
+function renderFlagged() {
+  const list = document.getElementById('flaggedList');
+  const flagged = clockEvents.filter(e => e.flagged);
+  if (flagged.length === 0) { list.innerHTML = '<p class="meta">No missed clock-outs. 👍</p>'; return; }
+  list.innerHTML = flagged.map(e => `
+    <div class="card item-row">
+      <span class="status-badge status-flagged">NEEDS REVIEW</span>
+      <div><strong>${escapeHtml(e.employeeName)}</strong> — ${escapeHtml(e.siteName)}</div>
+      <div class="meta">Clocked in: ${new Date(e.timestamp).toLocaleString()}, no clock-out recorded</div>
+      <button class="btn-primary btn-small" onclick="resolveFlag(${e.id})">Set Correct Clock-Out</button>
+    </div>
+  `).join('');
+}
+
+function renderEvents() {
+  const list = document.getElementById('eventList');
+  if (clockEvents.length === 0) { list.innerHTML = '<p class="meta">No clock events yet.</p>'; return; }
+  list.innerHTML = clockEvents.slice().reverse().slice(0, 50).map(e => `
+    <div class="card item-row">
+      <span class="status-badge ${e.type === 'in' ? 'status-in' : 'status-out'}">${e.type.toUpperCase()}</span>
+      ${e.isManual ? '<span class="status-badge status-manual">MANUAL</span>' : ''}
+      ${e.flagged ? '<span class="status-badge status-flagged">FLAGGED</span>' : ''}
+      <div><strong>${escapeHtml(e.employeeName)}</strong> — ${escapeHtml(e.siteName)}</div>
+      <div class="meta">${new Date(e.timestamp).toLocaleString()}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ---------- Geofence watcher ----------
+function startWatching() {
+  if (!navigator.geolocation) {
+    updateLiveStatus('Geolocation not supported on this device/browser.');
+    return;
+  }
+
+  navigator.geolocation.watchPosition(
+    (position) => {
+      const { latitude, longitude } = position.coords;
+      let insideAny = false;
+
+      jobSites.filter(s => s.active).forEach(site => {
+        const dist = distanceMeters(latitude, longitude, site.lat, site.lng);
+        const state = siteState[site.id] || (siteState[site.id] = { inside: false, pendingOutTimer: null });
+        const isInside = dist <= RADIUS_METERS;
+
+        if (isInside) insideAny = true;
+
+        if (isInside && !state.inside) {
+          // Just entered radius
+          state.inside = true;
+          if (state.pendingOutTimer) { clearTimeout(state.pendingOutTimer); state.pendingOutTimer = null; }
+          autoClockIn(site);
+        } else if (!isInside && state.inside) {
+          // Just left radius — start buffer timer
+          if (!state.pendingOutTimer) {
+            state.pendingOutTimer = setTimeout(() => {
+              state.inside = false;
+              state.pendingOutTimer = null;
+              autoClockOut(site);
+            }, BUFFER_MS);
+          }
+        } else if (isInside && state.inside && state.pendingOutTimer) {
+          // Re-entered within buffer window — cancel pending clock-out
+          clearTimeout(state.pendingOutTimer);
+          state.pendingOutTimer = null;
+        }
+      });
+
+      if (!insideAny) {
+        updateLiveStatus('Outside all job site radii. Use manual clock-in if needed.');
+      }
+    },
+    (err) => {
+      updateLiveStatus('GPS error: ' + err.message + ' — use manual clock-in.');
+      console.error(err);
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+  );
+}
+
+// ---------- Init ----------
+jobSites.forEach(s => siteState[s.id] = { inside: false, pendingOutTimer: null });
+renderSites();
+renderManualSiteOptions();
+renderEvents();
+checkForMissedClockOuts();
+renderFlagged();
+startWatching();
+</script>
+</body>
+</html>
