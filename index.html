@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#1F4E79" />
     <meta name="description" content="SiteWalk field app. Source: https://github.com/danstewart5/SiteWalk" />
     <title>SiteWalk</title>
+    <link rel="manifest" href="./manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       rel="stylesheet"
@@ -14,16 +15,50 @@
     <style>
       html, body, #root { min-height: 100%; margin: 0; background: #f3efe6; color: #1c1917; font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; }
       .boot { padding: 24px 16px; max-width: 480px; margin: 0 auto; }
+      .boot button {
+        display: block; width: 100%; margin-top: 16px; padding: 14px 16px;
+        border: 0; border-radius: 12px; background: #1F4E79; color: #fff;
+        font: inherit; font-weight: 600;
+      }
     </style>
-    <script type="module" crossorigin src="./assets/app.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/spa.css">
+    <script type="module" crossorigin src="./assets/app.js?v=14"></script>
+    <link rel="stylesheet" crossorigin href="./assets/spa.css?v=14">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(function () {});
+      }
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          if (document.querySelector('#root .boot')) {
+            var btn = document.getElementById('boot-retry');
+            if (btn) btn.textContent = 'Still opening — tap to reload';
+          }
+        }, 4000);
+      });
+      function sitewalkReload() {
+        if (navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }).then(function () {
+            if (window.caches) return caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            });
+          }).finally(function () {
+            location.reload();
+          });
+        } else {
+          location.reload();
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root">
       <div class="boot">
         <p style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#6b645c">SiteWalk</p>
         <h1 style="font-size:22px;margin:4px 0 12px">Opening field book…</h1>
-        <p>If this stays here, refresh. Source for Claude: https://github.com/danstewart5/SiteWalk</p>
+        <p>If this stays here, tap below. That clears the old cached copy.</p>
+        <button id="boot-retry" type="button" onclick="sitewalkReload()">Tap to reload</button>
       </div>
     </div>
   </body>
