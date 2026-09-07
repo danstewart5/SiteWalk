@@ -25,9 +25,18 @@ Do this once from a phone browser (or desktop). Takes ~10 minutes. Free tiers ar
    ```
 5. Copy the `https://….workers.dev` URL Wrangler prints.
 
-## 2b. SITEWALK_KEY (optional, but easy to forget)
+## 2b. SITEWALK_KEY — do this last, in this order
 
 If `SITEWALK_KEY` is **not** set, the Worker still runs. CORS limits callers to the GitHub Pages origin, but anyone who can hit that origin (or call the Worker from a non-browser client) can spend Anthropic credits. The check is off until you set the secret — it does not fail closed.
+
+**Order is mandatory. Do not set the Cloudflare secret the same night you only merge code.**
+
+1. Merge header support (`index.html` sends `X-SiteWalk-Key` when a key is saved) → confirm the live Pages URL `https://danstewart5.github.io/SiteWalk/` actually has the **Shared key** field.
+2. Only then set `SITEWALK_KEY` in Cloudflare (steps below).
+3. Save the same string in the app’s **Shared key** field → **Save Worker URL & key**.
+4. Test one photo check live on that Pages URL before trusting it on site.
+
+Setting the secret before the live page can send the header will 401 every AI check.
 
 **From a phone (no Wrangler):**
 1. Open https://dash.cloudflare.com → **Workers & Pages** → your `sitewalk-ai` worker.
@@ -40,20 +49,21 @@ If `SITEWALK_KEY` is **not** set, the Worker still runs. CORS limits callers to 
 wrangler secret put SITEWALK_KEY
 ```
 
-The Worker then requires header `X-SiteWalk-Key` on every POST. The phone UI does not send that header yet — do not set the secret until the app is updated to send it, or AI checks will 401.
+The Worker then requires header `X-SiteWalk-Key` on every POST. The phone only sends that header when a shared key is saved in the app. Leave the field blank while the Worker secret is unset.
 
 ## 3. Paste into the app
-1. Open https://danstewart5.github.io/SiteWalk/ on the phone.
+1. Open https://danstewart5.github.io/SiteWalk/ on the phone — not a Netlify preview. Preview origins will fail CORS against the tightened Worker and look like a dead network.
 2. Scroll to **AI Code-Check Photo**.
-3. Paste the Worker URL → **Save Worker URL**.
-4. Take a test photo with **AI Code-Check Photo**.
+3. Paste the Worker URL. Leave **Shared key** blank until step 2b is done.
+4. Tap **Save Worker URL & key**.
+5. Take a test photo with **AI Code-Check Photo**.
 
 If the network fails, the app shows *AI check unavailable offline — item saved to punch list (unverified by AI)* and files a punch item prefixed `UNVERIFIED BY AI` so it is not treated as a passed check.
 
 ## Security (already in the Worker)
 - CORS origin is `https://danstewart5.github.io` — that is the live Pages host (path `/SiteWalk/` is not part of the origin). If you later add a custom domain, update `ALLOWED_ORIGIN` in `worker.js` or phone calls will fail with a silent CORS error.
 - To reopen CORS for local testing, change `ALLOWED_ORIGIN` back to `*` (comment is in the file).
-- Optional `SITEWALK_KEY` stops strangers from burning credits once you wire the header.
-- Anthropic key never lives in `index.html`.
+- Optional `SITEWALK_KEY` stops strangers from burning credits once the live app and the Worker both have the same key.
+- Anthropic key never lives in `index.html`. The shared key is stored only in this phone’s `localStorage` (`swAiKey`), not in the repo.
 
 Full detail: `AI_BACKEND_SETUP.md`.
