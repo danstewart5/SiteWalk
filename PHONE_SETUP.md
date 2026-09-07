@@ -19,13 +19,28 @@ Do this once from a phone browser (or desktop). Takes ~10 minutes. Free tiers ar
    wrangler deploy
    ```
    Name suggestion: `sitewalk-ai`.
-4. Store secrets (paste when prompted):
+4. Store the Anthropic key as a Worker secret:
    ```bash
    wrangler secret put ANTHROPIC_API_KEY
-   wrangler secret put SITEWALK_KEY
    ```
-   For `SITEWALK_KEY`, invent any long random string (shared password). You will not type it into the phone UI yet — the hardened Worker expects header `X-SiteWalk-Key` when this secret is set. For the simplest phone pilot you can skip `SITEWALK_KEY` until you are ready; the Worker only enforces it if the secret exists.
 5. Copy the `https://….workers.dev` URL Wrangler prints.
+
+## 2b. SITEWALK_KEY (optional, but easy to forget)
+
+If `SITEWALK_KEY` is **not** set, the Worker still runs. CORS limits callers to the GitHub Pages origin, but anyone who can hit that origin (or call the Worker from a non-browser client) can spend Anthropic credits. The check is off until you set the secret — it does not fail closed.
+
+**From a phone (no Wrangler):**
+1. Open https://dash.cloudflare.com → **Workers & Pages** → your `sitewalk-ai` worker.
+2. **Settings** → **Variables and Secrets**.
+3. Add secret name `SITEWALK_KEY`, value = a long random string you invent, encrypt/save.
+4. Redeploy if the dashboard asks you to.
+
+**From a computer:**
+```bash
+wrangler secret put SITEWALK_KEY
+```
+
+The Worker then requires header `X-SiteWalk-Key` on every POST. The phone UI does not send that header yet — do not set the secret until the app is updated to send it, or AI checks will 401.
 
 ## 3. Paste into the app
 1. Open https://danstewart5.github.io/SiteWalk/ on the phone.
@@ -33,11 +48,12 @@ Do this once from a phone browser (or desktop). Takes ~10 minutes. Free tiers ar
 3. Paste the Worker URL → **Save Worker URL**.
 4. Take a test photo with **AI Code-Check Photo**.
 
-If the network fails, the app shows a friendly offline message and still saves a punch-list note instead of a hard error.
+If the network fails, the app shows *AI check unavailable offline — item saved to punch list (unverified by AI)* and files a punch item prefixed `UNVERIFIED BY AI` so it is not treated as a passed check.
 
 ## Security (already in the Worker)
-- CORS is limited to `https://danstewart5.github.io` (see comment in `worker.js` to open it again for local testing).
-- Optional `X-SiteWalk-Key` / `SITEWALK_KEY` stops random people from burning your Anthropic credits if they find the Worker URL.
+- CORS origin is `https://danstewart5.github.io` — that is the live Pages host (path `/SiteWalk/` is not part of the origin). If you later add a custom domain, update `ALLOWED_ORIGIN` in `worker.js` or phone calls will fail with a silent CORS error.
+- To reopen CORS for local testing, change `ALLOWED_ORIGIN` back to `*` (comment is in the file).
+- Optional `SITEWALK_KEY` stops strangers from burning credits once you wire the header.
 - Anthropic key never lives in `index.html`.
 
 Full detail: `AI_BACKEND_SETUP.md`.
