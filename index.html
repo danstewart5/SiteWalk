@@ -19,11 +19,12 @@ button.green { background: #38a169; }
 button.orange { background: #dd6b20; }
 button.gray { background: #718096; }
 button.red { background: #c53030; }
+button.small { width: auto; display: inline-block; padding: 8px 12px; font-size: 13px; margin: 6px 6px 0 0; }
 .status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
 .status.info { background: #ebf8ff; color: #2b6cb0; }
-select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
+select, input[type=text], input[type=email], input[type=tel], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
 .photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
 .photo-card img { max-width: 100%; border-radius: 6px; display: block; }
 .trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
@@ -39,6 +40,10 @@ select, input[type=text], textarea { width: 100%; padding: 10px; border: 1px sol
 .live-transcript { min-height: 40px; padding: 8px; background: #fffbea; border: 1px dashed #d69e2e; border-radius: 6px; font-size: 13px; color: #744210; margin: 6px 0; }
 .item-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
 .item-card .meta { font-size: 11px; color: #718096; margin-top: 4px; }
+.contact-row { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; }
+.contact-row strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.hint { font-size: 12px; color: #666; margin: 0 0 8px 0; }
+.ai-result { white-space: pre-wrap; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; margin-top: 8px; }
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
@@ -78,7 +83,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 
 <div class="section">
 <h2>🎤 Voice Capture (auto-sorted by AI)</h2>
-<p style="font-size:12px;color:#666;margin:0 0 8px 0">Speak naturally. Each sentence is transcribed live and automatically filed as a Punch Item, Change Order, or RFI. Works best in Chrome / Android.</p>
+<p class="hint">Speak naturally. Each sentence is transcribed live and automatically filed as a Punch Item, Change Order, or RFI. Works best in Chrome / Android.</p>
 <button id="startVoiceBtn">Start Listening</button>
 <button id="stopVoiceBtn" class="red" disabled>Stop Listening</button>
 <div id="liveTranscript" class="live-transcript" style="display:none">Listening…</div>
@@ -101,6 +106,25 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div id="rfiList"></div>
 </div>
 
+<div class="section">
+<h2>👥 Trade Contacts</h2>
+<p class="hint">Save an email and/or phone per trade. “Email Trade” / “Text Trade” on an item opens your own Mail or Messages app — nothing is sent from a server.</p>
+<div id="contactFields"></div>
+<button id="saveContactsBtn" class="green">Save Trade Contacts</button>
+<div id="contactStatus" class="status info" style="display:none"></div>
+</div>
+
+<div class="section">
+<h2>🔍 AI Code-Check Photo</h2>
+<p class="hint">Looks at a photo for likely code / safety issues. Needs the free Cloudflare Worker in AI_BACKEND_SETUP.md plus an Anthropic key. Until that URL is saved, this button only tells you what’s missing.</p>
+<input type="text" id="aiEndpointInput" placeholder="https://your-worker.workers.dev">
+<button id="saveEndpointBtn" class="gray">Save Worker URL</button>
+<button id="aiPhotoBtn">AI Code-Check Photo</button>
+<input type="file" id="aiPhotoInput" accept="image/*" capture="environment" style="display:none">
+<div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
+<div id="aiResult" class="ai-result" style="display:none"></div>
+</div>
+
 <div class="section" id="reportSection">
 <h2>📋 Report</h2>
 <button id="genBtn" class="green">Generate Report</button>
@@ -111,12 +135,179 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 </div>
 
 <script>
+const TRADES = ['General','Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','Other'];
+const LS = {
+  photos: 'swPhotos',
+  punch: 'swPunch',
+  changes: 'swChanges',
+  rfis: 'swRfis',
+  contacts: 'swTradeContacts',
+  aiEndpoint: 'swAiEndpoint'
+};
+
 let photos = []; // {src, trade, time}
 let punch = [];  // {text, trade, time}
 let changes = []; // {text, trade, time}
 let rfis = [];   // {text, trade, time}
+let contacts = {}; // { [trade]: { email, phone } }
 
 const tradeSelect = document.getElementById('tradeSelect');
+
+function loadJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed == null ? fallback : parsed;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function saveJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    const status = document.getElementById('walkStatus');
+    status.className = 'status err';
+    status.textContent = 'Storage full — lists saved if possible, newest photo may not persist. Delete old photos or clear site data.';
+    return false;
+  }
+}
+
+function persistLists() {
+  saveJson(LS.punch, punch);
+  saveJson(LS.changes, changes);
+  saveJson(LS.rfis, rfis);
+}
+
+function persistPhotos() {
+  saveJson(LS.photos, photos);
+}
+
+function persistContacts() {
+  saveJson(LS.contacts, contacts);
+}
+
+function compressImage(dataUrl, cb) {
+  const img = new Image();
+  img.onload = function() {
+    const max = 1280;
+    let w = img.width, h = img.height;
+    if (w > max) { h = Math.round(h * max / w); w = max; }
+    if (h > max) { w = Math.round(w * max / h); h = max; }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    cb(canvas.toDataURL('image/jpeg', 0.72));
+  };
+  img.onerror = function() { cb(dataUrl); };
+  img.src = dataUrl;
+}
+
+function renderPhoto(item) {
+  const card = document.createElement('div');
+  card.className = 'photo-card';
+  card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>';
+  document.getElementById('photos').appendChild(card);
+}
+
+function smsHref(phone, body) {
+  const clean = String(phone || '').replace(/[^\d+]/g, '');
+  const enc = encodeURIComponent(body);
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return 'sms:' + clean + (ios ? '&body=' : '?body=') + enc;
+}
+
+function sendEmail(item, typeLabel) {
+  const c = contacts[item.trade] || {};
+  if (!c.email) {
+    alert('Save an email for ' + item.trade + ' in Trade Contacts first.');
+    return;
+  }
+  const sub = encodeURIComponent('SiteWalk ' + typeLabel + ' — ' + item.trade);
+  const body = encodeURIComponent(item.text + '\n\nTrade: ' + item.trade + '\nTime: ' + item.time + '\n\nSent from SiteWalk');
+  location.href = 'mailto:' + c.email + '?subject=' + sub + '&body=' + body;
+}
+
+function sendText(item, typeLabel) {
+  const c = contacts[item.trade] || {};
+  if (!c.phone) {
+    alert('Save a phone number for ' + item.trade + ' in Trade Contacts first.');
+    return;
+  }
+  location.href = smsHref(c.phone, typeLabel + ' [' + item.trade + ']: ' + item.text);
+}
+
+function renderItemCard(entry, type) {
+  const tagClass = type === 'rfi' ? 'rfi' : type === 'change' ? 'change' : 'punch';
+  const tagLabel = type === 'rfi' ? 'RFI' : type === 'change' ? 'Change Order' : 'Punch Item';
+  const listEl = document.getElementById(type === 'rfi' ? 'rfiList' : type === 'change' ? 'changeList' : 'punchList');
+
+  const card = document.createElement('div');
+  card.className = 'item-card';
+  card.appendChild(document.createTextNode('• ' + entry.text));
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.innerHTML = '<span class="trade-tag">' + entry.trade + '</span>' +
+    '<span class="type-tag ' + tagClass + '">' + tagLabel + '</span> ' + entry.time;
+  card.appendChild(meta);
+
+  const emailBtn = document.createElement('button');
+  emailBtn.className = 'small';
+  emailBtn.type = 'button';
+  emailBtn.textContent = 'Email Trade';
+  emailBtn.addEventListener('click', function() { sendEmail(entry, tagLabel); });
+
+  const textBtn = document.createElement('button');
+  textBtn.className = 'small gray';
+  textBtn.type = 'button';
+  textBtn.textContent = 'Text Trade';
+  textBtn.addEventListener('click', function() { sendText(entry, tagLabel); });
+
+  card.appendChild(emailBtn);
+  card.appendChild(textBtn);
+  listEl.appendChild(card);
+}
+
+function renderAllItems() {
+  document.getElementById('punchList').innerHTML = '';
+  document.getElementById('changeList').innerHTML = '';
+  document.getElementById('rfiList').innerHTML = '';
+  punch.forEach(function(e) { renderItemCard(e, 'punch'); });
+  changes.forEach(function(e) { renderItemCard(e, 'change'); });
+  rfis.forEach(function(e) { renderItemCard(e, 'rfi'); });
+}
+
+function renderContacts() {
+  const wrap = document.getElementById('contactFields');
+  wrap.innerHTML = '';
+  TRADES.forEach(function(trade) {
+    const row = document.createElement('div');
+    row.className = 'contact-row';
+    const c = contacts[trade] || { email: '', phone: '' };
+    row.innerHTML = '<strong>' + trade + '</strong>' +
+      '<input type="email" data-trade="' + trade + '" data-field="email" placeholder="email@example.com" value="' + (c.email || '') + '">' +
+      '<input type="tel" data-trade="' + trade + '" data-field="phone" placeholder="403-555-0100" value="' + (c.phone || '') + '">';
+    wrap.appendChild(row);
+  });
+}
+
+function fileClassifiedItem(text, type) {
+  const trade = tradeSelect.value;
+  const time = new Date().toLocaleString();
+  const entry = { text: text, trade: trade, time: time };
+
+  if (type === 'rfi') rfis.push(entry);
+  else if (type === 'change') changes.push(entry);
+  else punch.push(entry);
+
+  persistLists();
+  renderItemCard(entry, type === 'rfi' ? 'rfi' : type === 'change' ? 'change' : 'punch');
+}
 
 /* ---------- Walk-Around ---------- */
 window.startWalk = function() {
@@ -138,14 +329,14 @@ document.getElementById('photoInput').addEventListener('change', function(e) {
   for (let f of files) {
     const r = new FileReader();
     r.onload = function(ev) {
-      const item = { src: ev.target.result, trade: trade, time: new Date().toLocaleString() };
-      photos.push(item);
-      const card = document.createElement('div');
-      card.className = 'photo-card';
-      card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>';
-      document.getElementById('photos').appendChild(card);
-      document.getElementById('walkStatus').className = 'status ok';
-      document.getElementById('walkStatus').textContent = 'Photo tagged as ' + trade + ' (' + photos.length + ' total)';
+      compressImage(ev.target.result, function(src) {
+        const item = { src: src, trade: trade, time: new Date().toLocaleString() };
+        photos.push(item);
+        persistPhotos();
+        renderPhoto(item);
+        document.getElementById('walkStatus').className = 'status ok';
+        document.getElementById('walkStatus').textContent = 'Photo tagged as ' + trade + ' (' + photos.length + ' total)';
+      });
     };
     r.readAsDataURL(f);
   }
@@ -175,29 +366,6 @@ function classifyText(text) {
     if (t.includes(kw)) return 'change';
   }
   return 'punch';
-}
-
-function fileClassifiedItem(text, type) {
-  const trade = tradeSelect.value;
-  const time = new Date().toLocaleString();
-  const entry = { text: text, trade: trade, time: time };
-
-  let listEl, arr, tagClass, tagLabel;
-  if (type === 'rfi') {
-    arr = rfis; listEl = document.getElementById('rfiList'); tagClass = 'rfi'; tagLabel = 'RFI';
-  } else if (type === 'change') {
-    arr = changes; listEl = document.getElementById('changeList'); tagClass = 'change'; tagLabel = 'Change Order';
-  } else {
-    arr = punch; listEl = document.getElementById('punchList'); tagClass = 'punch'; tagLabel = 'Punch Item';
-  }
-
-  arr.push(entry);
-  const card = document.createElement('div');
-  card.className = 'item-card';
-  card.innerHTML = '• ' + text +
-    '<div class="meta"><span class="trade-tag">' + trade + '</span>' +
-    '<span class="type-tag ' + tagClass + '">' + tagLabel + '</span> ' + time + '</div>';
-  listEl.appendChild(card);
 }
 
 function setupRecognition() {
@@ -231,7 +399,6 @@ function setupRecognition() {
   };
 
   rec.onend = function() {
-    // auto-restart while the user still wants to listen (browsers stop it periodically)
     if (listening) {
       try { rec.start(); } catch (e) { /* already started */ }
     }
@@ -269,12 +436,94 @@ document.getElementById('stopVoiceBtn').addEventListener('click', function() {
   status.textContent = 'Voice capture stopped.';
 });
 
-/* ---------- Manual punch list entry (still available) ---------- */
 document.getElementById('addPunchBtn').addEventListener('click', function() {
   const val = document.getElementById('punchInput').value.trim();
   if (!val) return;
   fileClassifiedItem(val, 'punch');
   document.getElementById('punchInput').value = '';
+});
+
+document.getElementById('saveContactsBtn').addEventListener('click', function() {
+  const inputs = document.querySelectorAll('#contactFields input');
+  inputs.forEach(function(inp) {
+    const trade = inp.getAttribute('data-trade');
+    const field = inp.getAttribute('data-field');
+    if (!contacts[trade]) contacts[trade] = { email: '', phone: '' };
+    contacts[trade][field] = inp.value.trim();
+  });
+  persistContacts();
+  const el = document.getElementById('contactStatus');
+  el.style.display = 'block';
+  el.className = 'status ok';
+  el.textContent = 'Trade contacts saved on this device.';
+});
+
+function currentAiEndpoint() {
+  return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, '');
+}
+
+function setAiStatus(kind, text) {
+  const el = document.getElementById('aiStatus');
+  el.className = 'status ' + kind;
+  el.textContent = text;
+}
+
+function refreshAiStatus() {
+  const url = currentAiEndpoint();
+  document.getElementById('aiEndpointInput').value = url;
+  if (url) setAiStatus('ok', 'Worker URL saved. Photos will be sent only when you tap AI Code-Check.');
+  else setAiStatus('info', 'Worker URL not set. Photo check is inert until setup.');
+}
+
+document.getElementById('saveEndpointBtn').addEventListener('click', function() {
+  const url = document.getElementById('aiEndpointInput').value.trim().replace(/\/$/, '');
+  if (url) localStorage.setItem(LS.aiEndpoint, url);
+  else localStorage.removeItem(LS.aiEndpoint);
+  refreshAiStatus();
+});
+
+document.getElementById('aiPhotoBtn').addEventListener('click', function() {
+  if (!currentAiEndpoint()) {
+    setAiStatus('err', 'No worker URL yet. Follow AI_BACKEND_SETUP.md, then paste the URL and tap Save Worker URL.');
+    return;
+  }
+  document.getElementById('aiPhotoInput').click();
+});
+
+document.getElementById('aiPhotoInput').addEventListener('change', function(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const endpoint = currentAiEndpoint();
+  if (!endpoint) return;
+  setAiStatus('info', 'Checking photo…');
+  document.getElementById('aiResult').style.display = 'none';
+  const r = new FileReader();
+  r.onload = function(ev) {
+    compressImage(ev.target.result, function(src) {
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: src, trade: tradeSelect.value })
+      }).then(function(res) {
+        return res.text().then(function(t) {
+          let data;
+          try { data = JSON.parse(t); } catch (err) { data = { error: t || res.statusText }; }
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        });
+      }).then(function(data) {
+        const text = (data.result || data.text || JSON.stringify(data, null, 2)).trim();
+        document.getElementById('aiResult').style.display = 'block';
+        document.getElementById('aiResult').textContent = text;
+        setAiStatus('ok', 'Check complete. Filed as a punch item for ' + tradeSelect.value + '.');
+        if (text) fileClassifiedItem('AI code-check: ' + text, 'punch');
+      }).catch(function(err) {
+        setAiStatus('err', 'AI check failed: ' + (err.message || 'unknown'));
+      });
+    });
+  };
+  r.readAsDataURL(file);
 });
 
 /* ---------- Report ---------- */
@@ -337,7 +586,24 @@ document.getElementById('printBtn').addEventListener('click', function() {
 });
 
 window.addEventListener('load', function() {
-  document.getElementById('walkStatus').textContent = 'Ready. Select trade, then take photos or start listening.';
+  photos = loadJson(LS.photos, []);
+  punch = loadJson(LS.punch, []);
+  changes = loadJson(LS.changes, []);
+  rfis = loadJson(LS.rfis, []);
+  contacts = loadJson(LS.contacts, {});
+  if (!Array.isArray(photos)) photos = [];
+  if (!Array.isArray(punch)) punch = [];
+  if (!Array.isArray(changes)) changes = [];
+  if (!Array.isArray(rfis)) rfis = [];
+
+  document.getElementById('photos').innerHTML = '';
+  photos.forEach(renderPhoto);
+  renderAllItems();
+  renderContacts();
+  refreshAiStatus();
+
+  document.getElementById('walkStatus').textContent =
+    'Ready. Data stays on this phone after refresh. Select trade, then take photos or start listening.';
 });
 </script>
 </body>
