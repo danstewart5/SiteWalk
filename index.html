@@ -24,7 +24,7 @@ button.small { width: auto; display: inline-block; padding: 8px 12px; font-size:
 .status.ok { background: #c6f6d5; color: #276749; }
 .status.err { background: #fed7d7; color: #c53030; }
 .status.info { background: #ebf8ff; color: #2b6cb0; }
-select, input[type=text], input[type=email], input[type=tel], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
+select, input[type=text], input[type=password], input[type=email], input[type=tel], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
 .photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
 .photo-card img { max-width: 100%; border-radius: 6px; display: block; }
 .trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
@@ -117,9 +117,10 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 
 <div class="section">
 <h2>🔍 AI Code-Check Photo</h2>
-<p class="hint">Looks at a photo for likely code / safety issues. Needs the free Cloudflare Worker in AI_BACKEND_SETUP.md plus an Anthropic key. Until that URL is saved, this button only tells you what’s missing.</p>
-<input type="text" id="aiEndpointInput" placeholder="https://your-worker.workers.dev">
-<button id="saveEndpointBtn" class="gray">Save Worker URL</button>
+<p class="hint">Looks at a photo for likely code / safety issues. Needs the free Cloudflare Worker in AI_BACKEND_SETUP.md plus an Anthropic key. Until that URL is saved, this button only tells you what’s missing. Shared key stays on this phone only — leave it blank until SITEWALK_KEY is set on the Worker (see PHONE_SETUP.md order).</p>
+<input type="text" id="aiEndpointInput" placeholder="https://your-worker.workers.dev" autocomplete="off">
+<input type="password" id="aiKeyInput" placeholder="Shared key (optional — leave blank until SITEWALK_KEY is set)" autocomplete="off">
+<button id="saveEndpointBtn" class="gray">Save Worker URL & key</button>
 <button id="aiPhotoBtn">AI Code-Check Photo</button>
 <input type="file" id="aiPhotoInput" accept="image/*" capture="environment" style="display:none">
 <div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
@@ -143,7 +144,8 @@ const LS = {
   changes: 'swChanges',
   rfis: 'swRfis',
   contacts: 'swTradeContacts',
-  aiEndpoint: 'swAiEndpoint'
+  aiEndpoint: 'swAiEndpoint',
+  aiKey: 'swAiKey'
 };
 
 let photos = [];
@@ -456,6 +458,10 @@ function currentAiEndpoint() {
   return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, '');
 }
 
+function currentAiKey() {
+  return (localStorage.getItem(LS.aiKey) || '').trim();
+}
+
 function setAiStatus(kind, text) {
   const el = document.getElementById('aiStatus');
   el.className = 'status ' + kind;
@@ -464,15 +470,21 @@ function setAiStatus(kind, text) {
 
 function refreshAiStatus() {
   const url = currentAiEndpoint();
+  const key = currentAiKey();
   document.getElementById('aiEndpointInput').value = url;
-  if (url) setAiStatus('ok', 'Worker URL saved. Photos will be sent only when you tap AI Code-Check.');
+  document.getElementById('aiKeyInput').value = key;
+  if (url && key) setAiStatus('ok', 'Worker URL and shared key saved on this phone. Header X-SiteWalk-Key will be sent. Photos go only when you tap AI Code-Check.');
+  else if (url) setAiStatus('ok', 'Worker URL saved. No shared key on this phone — header will not be sent (correct until SITEWALK_KEY is set on the Worker).');
   else setAiStatus('info', 'Worker URL not set. Photo check is inert until setup.');
 }
 
 document.getElementById('saveEndpointBtn').addEventListener('click', function() {
   const url = document.getElementById('aiEndpointInput').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('aiKeyInput').value.trim();
   if (url) localStorage.setItem(LS.aiEndpoint, url);
   else localStorage.removeItem(LS.aiEndpoint);
+  if (key) localStorage.setItem(LS.aiKey, key);
+  else localStorage.removeItem(LS.aiKey);
   refreshAiStatus();
 });
 
@@ -495,9 +507,14 @@ document.getElementById('aiPhotoInput').addEventListener('change', function(e) {
   const r = new FileReader();
   r.onload = function(ev) {
     compressImage(ev.target.result, function(src) {
+      var headers = { 'Content-Type': 'application/json' };
+      var key = currentAiKey();
+      // Only attach the header when a key is saved so an older Worker
+      // (CORS allow-list = Content-Type only) still works during rollout.
+      if (key) headers['X-SiteWalk-Key'] = key;
       fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({ image: src, trade: tradeSelect.value })
       }).then(function(res) {
         return res.text().then(function(t) {
@@ -520,6 +537,8 @@ document.getElementById('aiPhotoInput').addEventListener('change', function(e) {
           setAiStatus('info', 'AI check unavailable offline — item saved to punch list (unverified by AI)');
           fileClassifiedItem('UNVERIFIED BY AI (offline): photo queued for later review — do not treat as a passed code check', 'punch');
           document.getElementById('aiResult').style.display = 'none';
+        } else if (/X-SiteWalk-Key/i.test(msg)) {
+          setAiStatus('err', 'Shared key rejected. Match the phone key to SITEWALK_KEY on the Worker, or clear both and leave the gate off.');
         } else {
           setAiStatus('err', 'AI check failed: ' + msg);
         }
