@@ -4,9 +4,143 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SiteWalk</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
+.container { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+h1 { color: #1a365d; margin: 0 0 4px 0; font-size: 22px; }
+.subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
+.section { margin: 12px 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafafa; }
+h2 { margin: 0 0 10px 0; font-size: 16px; color: #2d3748; }
+button { background: #2b6cb0; color: white; border: none; padding: 13px 16px; border-radius: 8px; font-size: 15px; margin: 5px 0; cursor: pointer; width: 100%; }
+button:active { opacity: 0.85; }
+button:disabled { background: #a0aec0; }
+button.green { background: #38a169; }
+button.orange { background: #dd6b20; }
+button.gray { background: #718096; }
+button.red { background: #c53030; }
+button.small { width: auto; display: inline-block; padding: 8px 12px; font-size: 13px; margin: 6px 6px 0 0; }
+.status { padding: 10px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+.status.ok { background: #c6f6d5; color: #276749; }
+.status.err { background: #fed7d7; color: #c53030; }
+.status.info { background: #ebf8ff; color: #2b6cb0; }
+select, input[type=text], input[type=password], input[type=email], input[type=tel], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
+.photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
+.photo-card img { max-width: 100%; border-radius: 6px; display: block; }
+.trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
+.type-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 4px; margin-top: 4px; color: white; }
+.type-tag.punch { background: #dd6b20; }
+.type-tag.unverified { background: #c53030; }
+.type-tag.change { background: #805ad5; }
+.type-tag.rfi { background: #d69e2e; }
+#report { background: white; padding: 16px; border-radius: 8px; margin-top: 12px; border: 1px solid #e2e8f0; }
+.report-section { margin: 16px 0; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
+.report-section img { max-width: 100%; border-radius: 6px; margin: 6px 0; }
+.punch-item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+.live-transcript { min-height: 40px; padding: 8px; background: #fffbea; border: 1px dashed #d69e2e; border-radius: 6px; font-size: 13px; color: #744210; margin: 6px 0; }
+.item-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
+.item-card .meta { font-size: 11px; color: #718096; margin-top: 4px; }
+.contact-row { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; }
+.contact-row strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.hint { font-size: 12px; color: #666; margin: 0 0 8px 0; }
+.ai-result { white-space: pre-wrap; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; margin-top: 8px; }
+#walkStage { display: none; margin-top: 10px; }
+#walkStage.active { display: block; }
+#walkVideoWrap { background: #111; border-radius: 10px; overflow: hidden; position: relative; }
+#walkVideo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #111; }
+#walkVideo.hidden-cam { display: none; }
+#shutterBtn { width: 72px; height: 72px; border-radius: 50%; margin: 12px auto; display: block; background: #fff; color: #1a365d; border: 4px solid #1a365d; font-size: 13px; font-weight: 600; padding: 0; }
+#gpsLabel { font-family: ui-monospace, monospace; font-size: 11px; color: #718096; margin: 4px 0 0 0; }
+@media print {
+body { background: white; padding: 0; }
+.container { box-shadow: none; }
+button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !important; }
+#reportSection { display: block !important; border: none; }
+}
+</style>
 </head>
 <body>
-<p>Loading SiteWalk… if this stays, pull to refresh.</p>
-<script>location.replace('./?v=15');</script>
+<div class="container">
+<h1>📍 SiteWalk</h1>
+<p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
+<div class="section">
+<h2>🎥 Walk-Around</h2>
+<button id="walkBtn" class="green">Start Walk-Around</button>
+<button id="endWalkBtn" class="red" style="display:none">End Walk</button>
+<div id="walkStatus" class="status info">Ready. Tap to begin.</div>
+<div id="walkStage">
+  <div id="walkVideoWrap">
+    <video id="walkVideo" playsinline muted autoplay></video>
+  </div>
+  <button id="shutterBtn" type="button">Snap</button>
+  <p id="gpsLabel" class="hint"></p>
+  <div id="walkLiveTranscript" class="live-transcript" style="display:none">Listening…</div>
+</div>
+</div>
+<div class="section">
+<h2>📷 Photos + Trade Tag</h2>
+<select id="tradeSelect">
+<option value="General">General</option>
+<option value="Plumbing">Plumbing</option>
+<option value="Electrical">Electrical</option>
+<option value="Framing">Framing</option>
+<option value="Drywall">Drywall</option>
+<option value="Roofing">Roofing</option>
+<option value="Concrete">Concrete</option>
+<option value="Landscaping">Landscaping</option>
+<option value="Other">Other</option>
+</select>
+<button id="photoBtn">Take Photo (uses selected trade)</button>
+<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+<div id="photos"></div>
+</div>
+<div class="section">
+<h2>🎤 Voice Capture (auto-sorted by AI)</h2>
+<p class="hint">Speak naturally. Each sentence is transcribed live and automatically filed as a Punch Item, Change Order, or RFI. Works best in Chrome / Android.</p>
+<button id="startVoiceBtn">Start Listening</button>
+<button id="stopVoiceBtn" class="red" disabled>Stop Listening</button>
+<div id="liveTranscript" class="live-transcript" style="display:none">Listening…</div>
+</div>
+<div class="section">
+<h2>✅ Punch List</h2>
+<input type="text" id="punchInput" placeholder="Add issue manually... e.g. Missing outlet cover in master bath">
+<button id="addPunchBtn" class="orange">Add to Punch List</button>
+<div id="punchList"></div>
+</div>
+<div class="section">
+<h2>📝 Change Orders</h2>
+<div id="changeList"></div>
+</div>
+<div class="section">
+<h2>❓ RFIs</h2>
+<div id="rfiList"></div>
+</div>
+<div class="section">
+<h2>👥 Trade Contacts</h2>
+<p class="hint">Save an email and/or phone per trade. Email Trade / Text Trade on an item opens your own Mail or Messages app.</p>
+<div id="contactFields"></div>
+<button id="saveContactsBtn" class="green">Save Trade Contacts</button>
+<div id="contactStatus" class="status info" style="display:none"></div>
+</div>
+<div class="section">
+<h2>🔍 AI Code-Check Photo</h2>
+<p class="hint">Looks at a photo for likely code / safety issues. Needs the Cloudflare Worker. Shared key stays on this phone only.</p>
+<input type="text" id="aiEndpointInput" placeholder="https://your-worker.workers.dev" autocomplete="off">
+<input type="password" id="aiKeyInput" placeholder="Shared key (optional)" autocomplete="off">
+<button id="saveEndpointBtn" class="gray">Save Worker URL & key</button>
+<button id="aiPhotoBtn">AI Code-Check Photo</button>
+<input type="file" id="aiPhotoInput" accept="image/*" capture="environment" style="display:none">
+<div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
+<div id="aiResult" class="ai-result" style="display:none"></div>
+</div>
+<div class="section" id="reportSection">
+<h2>📋 Report</h2>
+<button id="genBtn" class="green">Generate Report</button>
+<button id="printBtn" class="gray">Print Report</button>
+<div id="report"></div>
+</div>
+</div>
+<script src="./walk.js"></script>
 </body>
 </html>
