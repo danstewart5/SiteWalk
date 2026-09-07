@@ -2,7 +2,8 @@
  * SiteWalk AI code-check — Cloudflare Worker
  *
  * Holds the Anthropic API key as a Worker secret (ANTHROPIC_API_KEY).
- * Optional shared secret: SITEWALK_KEY (set with `wrangler secret put SITEWALK_KEY`).
+ * Optional shared secret: SITEWALK_KEY (dashboard or `wrangler secret put SITEWALK_KEY`).
+ * If SITEWALK_KEY is unset, the header check is skipped (open gate — easy to forget).
  * Never put those keys in index.html or this file in plaintext for production.
  *
  * Deploy: see /AI_BACKEND_SETUP.md and /PHONE_SETUP.md
@@ -10,8 +11,9 @@
 
 const MODEL = 'claude-sonnet-4-5';
 
-// Tightened to the live GitHub Pages origin.
-// To revert to open CORS for local/dev testing, change the Origin value back to '*'.
+// Tightened to the live GitHub Pages origin (host only; /SiteWalk/ is not part of origin).
+// If you add a custom domain later, change ALLOWED_ORIGIN or the phone will get a silent CORS failure.
+// To revert to open CORS for local/dev testing, change ALLOWED_ORIGIN back to '*'.
 const ALLOWED_ORIGIN = 'https://danstewart5.github.io';
 
 const CORS = {
@@ -36,7 +38,7 @@ export default {
       return json({ error: 'POST a JSON body with { image, trade }' }, 405);
     }
 
-    // Shared-secret check (optional until SITEWALK_KEY is set on the Worker).
+    // Shared-secret check. Unset SITEWALK_KEY = check skipped (does not fail closed).
     // Clients should send header: X-SiteWalk-Key: <same value>
     if (env.SITEWALK_KEY) {
       const provided = request.headers.get('X-SiteWalk-Key') || '';
