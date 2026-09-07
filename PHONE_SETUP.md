@@ -60,6 +60,8 @@ The Worker then requires header `X-SiteWalk-Key` on every POST. The phone only s
 
 If the network fails, the app shows *AI check unavailable offline — item saved to punch list (unverified by AI)* and files a punch item prefixed `UNVERIFIED BY AI` so it is not treated as a passed check.
 
+If AI check suddenly 401s or looks dead after a new phone, a browser data clear, or an iOS/Android “clear website data”: check the **Shared key** field first (and re-save it). That value lives only in this phone’s `localStorage` (`swAiKey`). It is not on the Worker, and a wipe will stop sending the header even though Cloudflare is fine.
+
 ## Security (already in the Worker)
 - CORS origin is `https://danstewart5.github.io` — that is the live Pages host (path `/SiteWalk/` is not part of the origin). If you later add a custom domain, update `ALLOWED_ORIGIN` in `worker.js` or phone calls will fail with a silent CORS error.
 - To reopen CORS for local testing, change `ALLOWED_ORIGIN` back to `*` (comment is in the file).
