@@ -49,21 +49,36 @@ Paste the key when prompted.
 
 ## 3. Hook it to the phone
 
-1. Open https://danstewart5.github.io/SiteWalk/
+1. Open https://danstewart5.github.io/SiteWalk/ (live Pages — not a Netlify preview)
 2. In **AI Code-Check Photo**, paste the Worker URL
-3. Tap **Save Worker URL**
-4. Take a test photo
+3. Leave **Shared key** blank until `SITEWALK_KEY` is set on the Worker
+4. Tap **Save Worker URL & key**
+5. Take a test photo
 
 If the URL is missing, the button stays inert and tells you so. That is intentional.
+
+## 4. Optional shared key (after the live page is deployed)
+
+Do **not** set `SITEWALK_KEY` the same night you only merge code.
+
+1. Confirm the live Pages app shows the Shared key field
+2. Then `wrangler secret put SITEWALK_KEY` (or Cloudflare dashboard → Worker → Settings → Variables and Secrets)
+3. Save the same string in the app
+4. Run one live photo check before using it on site
+
+Until that secret exists, the Worker skips the header check (fail-open). Phone only sends `X-SiteWalk-Key` when a key is saved locally.
+
+Phone-oriented version of this list: `PHONE_SETUP.md`.
 
 ## Security notes
 
 - The Anthropic key lives only in the Cloudflare secret store.
-- `index.html` never contains the key.
-- CORS is open (`*`) so the GitHub Pages origin can call the Worker. Tighten `Access-Control-Allow-Origin` to `https://danstewart5.github.io` after the pilot if you want.
-- Anyone who has the Worker URL can spend your Anthropic credits. Don’t post that URL publicly. After the pilot, add a shared site password header or rotate the Worker URL.
+- `index.html` never contains the Anthropic key. The optional shared key lives only in this phone’s `localStorage` (`swAiKey`).
+- CORS is locked to `https://danstewart5.github.io`. Path `/SiteWalk/` is not part of the origin. Localhost, `file://`, and Netlify previews will fail CORS and look like a dead network. To reopen for local/dev, set `ALLOWED_ORIGIN` back to `*` in `worker.js`.
+- Anyone who has the Worker URL can spend Anthropic credits until `SITEWALK_KEY` is set on both sides.
 
 ## Files
 
 - `ai-backend/worker.js` — the function
-- `index.html` — phone UI; stores the Worker URL in `localStorage` key `swAiEndpoint`
+- `index.html` — phone UI; stores the Worker URL in `localStorage` key `swAiEndpoint` and the optional shared key in `swAiKey`
+- `PHONE_SETUP.md` — short checklist including the merge-then-secret order
