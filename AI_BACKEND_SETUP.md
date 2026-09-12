@@ -1,14 +1,18 @@
-# SiteWalk AI Code-Check — one-time setup
+# SiteWalk AI Backend — one-time setup
 
-The phone app can take a photo. It cannot hold an Anthropic API key in a public GitHub Pages file. This Worker is the lockbox.
+The phone app can take photos and hear speech. It cannot hold an Anthropic API key in a public GitHub Pages file. This Worker is the lockbox, and now serves three routes off the same URL:
+
+- `/classify` — voice-to-punch-list: turns one spoken sentence into `{type, trade, text, costImpact}` (Punch Item / Change Order / RFI)
+- `/transcribe` — speech-to-text via Cloudflare Workers AI (Whisper), for phones without built-in `SpeechRecognition` (notably iOS Safari)
+- `/` (root) — the original AI Code-Check Photo flow, unchanged
 
 Takes about 10–15 minutes. Free tier is enough for a pilot.
 
 ## What you will have at the end
 
 1. A URL like `https://sitewalk-ai.YOURNAME.workers.dev`
-2. That URL pasted into the **AI Code-Check Photo** box on the phone
-3. Photos sent only when you tap the button — not in the background
+2. That same URL pasted into the **AI Worker Setup** box on the phone — it now powers voice classification, voice transcription, and the AI Code-Check Photo button
+3. Photos and voice notes sent only when the app is actively capturing — not in the background
 
 ## 1. Anthropic API key
 
@@ -35,7 +39,7 @@ cd ai-backend
 wrangler deploy
 ```
 
-If Cloudflare asks for a worker name, `sitewalk-ai` is fine.
+`wrangler.toml` in this folder names the worker `sitewalk-ai` and declares the Workers AI binding (`AI`) that `/transcribe` needs — no separate API key for that one. If you already deployed a worker under a different name before this file existed, either rename `name` in `wrangler.toml` to match it, or deploy fresh and repoint the phone at the new URL.
 
 4. Store the key as a **secret** (this does not go in the file):
 
@@ -79,6 +83,7 @@ Phone-oriented version of this list: `PHONE_SETUP.md`.
 
 ## Files
 
-- `ai-backend/worker.js` — the function
+- `ai-backend/worker.js` — the function (photo-check, `/classify`, `/transcribe`)
+- `ai-backend/wrangler.toml` — worker name + the Workers AI binding `/transcribe` needs
 - `index.html` — phone UI; stores the Worker URL in `localStorage` key `swAiEndpoint` and the optional shared key in `swAiKey`
 - `PHONE_SETUP.md` — short checklist including the merge-then-secret order

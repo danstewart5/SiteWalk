@@ -1,0 +1,9 @@
+name = "sitewalk-ai"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Workers AI binding — used by the /transcribe route (Whisper) for phones
+# without browser speech recognition (notably iOS Safari). No separate API
+# key needed; billed to this Cloudflare account's Workers AI usage.
+[ai]
+binding = "AI"

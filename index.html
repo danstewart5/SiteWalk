@@ -74,6 +74,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
     <video id="walkVideo" playsinline muted autoplay></video>
   </div>
   <button id="shutterBtn" type="button">Snap</button>
+  <button id="walkRecordBtn" type="button" class="orange" style="display:none">🎤 Tap to Record a Note</button>
   <p id="gpsLabel" class="hint"></p>
   <div id="walkLiveTranscript" class="live-transcript" style="display:none">Listening…</div>
 </div>
@@ -97,9 +98,10 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 </div>
 <div class="section">
 <h2>🎤 Voice Capture (auto-sorted by AI)</h2>
-<p class="hint">Speak naturally. Each sentence is transcribed live and automatically filed as a Punch Item, Change Order, or RFI. Works best in Chrome / Android.</p>
+<p class="hint" id="voiceHint">Speak naturally. Each sentence is transcribed live and automatically filed as a Punch Item, Change Order, or RFI.</p>
 <button id="startVoiceBtn">Start Listening</button>
 <button id="stopVoiceBtn" class="red" disabled>Stop Listening</button>
+<button id="recordVoiceBtn" type="button" class="orange" style="display:none">🎤 Tap to Record a Note</button>
 <div id="liveTranscript" class="live-transcript" style="display:none">Listening…</div>
 </div>
 <div class="section">
@@ -124,8 +126,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div id="contactStatus" class="status info" style="display:none"></div>
 </div>
 <div class="section">
-<h2>🔍 AI Code-Check Photo</h2>
-<p class="hint">Looks at a photo for likely code / safety issues. Needs the Cloudflare Worker. Shared key stays on this phone only.</p>
+<h2>🔍 AI Worker Setup</h2>
+<p class="hint">This one Worker URL powers three things: voice classification (Punch/Change Order/RFI + trade), voice transcription on phones without built-in speech recognition, and this AI Code-Check Photo button. Shared key stays on this phone only.</p>
 <input type="text" id="aiEndpointInput" placeholder="https://your-worker.workers.dev" autocomplete="off">
 <input type="password" id="aiKeyInput" placeholder="Shared key (optional)" autocomplete="off">
 <button id="saveEndpointBtn" class="gray">Save Worker URL & key</button>
