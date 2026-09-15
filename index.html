@@ -185,5 +185,16 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button class="nav-btn" data-tab="setup" type="button">⚙️<span>Setup</span></button>
 </nav>
 <script src="./walk.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(function () {});
+  var swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (swReloaded) return;
+    swReloaded = true;
+    location.reload();
+  });
+}
+</script>
 </body>
 </html>
