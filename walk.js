@@ -212,7 +212,24 @@ function classifyText(text) {
   return 'punch';
 }
 
+// Local (offline) keyword guess at trade, used when the AI Worker isn't set up
+// or a request fails. Updates the on-screen trade select so Snap photos and
+// filed items pick it up without the crew touching the dropdown.
+function classifyTrade(text) {
+  const t = text.toLowerCase();
+  if (/plumb|pipe|water heater|drain|faucet|toilet|sink|leak/.test(t)) return 'Plumbing';
+  if (/electric|outlet|breaker|wiring|panel|switch|circuit/.test(t)) return 'Electrical';
+  if (/frame|framing|\bstud\b|joist|truss|header\b/.test(t)) return 'Framing';
+  if (/drywall|sheetrock|\bmud\b|\btape\b/.test(t)) return 'Drywall';
+  if (/\broof\b|shingle|flashing|gutter/.test(t)) return 'Roofing';
+  if (/concrete|\bslab\b|foundation|rebar/.test(t)) return 'Concrete';
+  if (/landscap|\bsod\b|irrigation|grading/.test(t)) return 'Landscaping';
+  return null;
+}
+
 function localClassify(text) {
+  const guessedTrade = classifyTrade(text);
+  if (guessedTrade) tradeSelect.value = guessedTrade;
   return { text: text, type: classifyText(text), trade: tradeSelect.value, costImpact: null, verified: false };
 }
 
@@ -235,7 +252,8 @@ function fileVoiceUtterance(text) {
       if (timer) clearTimeout(timer);
       if (!data || data.error || !data.type) throw new Error((data && data.error) || 'bad response');
       const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
-      fileEntry({ text: data.text || text, type: type, trade: data.trade, costImpact: data.costImpact, verified: true });
+      if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
+      fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costImpact: data.costImpact, verified: true });
     })
     .catch(function () {
       if (timer) clearTimeout(timer);
@@ -255,14 +273,12 @@ function setupRecognition() {
   rec.interimResults = true;
   rec.lang = 'en-US';
   rec.onresult = function (event) {
-    const liveEl = document.getElementById('liveTranscript');
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript.trim();
       if (event.results[i].isFinal) { if (transcript) fileVoiceUtterance(transcript); }
       else interim += transcript;
     }
-    liveEl.textContent = interim ? ('Listening… "' + interim + '"') : 'Listening…';
     const walkLive = document.getElementById('walkLiveTranscript');
     if (walkLive) walkLive.textContent = interim ? ('AI hearing: "' + interim + '"') : 'AI listening.';
   };
@@ -275,17 +291,10 @@ function startListening() {
   recognition = setupRecognition();
   listening = true;
   try { recognition.start(); } catch (e) { }
-  document.getElementById('startVoiceBtn').disabled = true;
-  document.getElementById('stopVoiceBtn').disabled = false;
-  document.getElementById('liveTranscript').style.display = 'block';
-  document.getElementById('liveTranscript').textContent = 'Listening…';
 }
 function stopListening() {
   listening = false;
   if (recognition) { try { recognition.stop(); } catch (e) { } }
-  document.getElementById('startVoiceBtn').disabled = false;
-  document.getElementById('stopVoiceBtn').disabled = true;
-  document.getElementById('liveTranscript').style.display = 'none';
 }
 
 // --- Voice: push-to-talk fallback (iOS Safari and anything without SpeechRecognition) ---
@@ -311,7 +320,7 @@ function transcribeAndFile(blob) {
   });
 }
 function setRecordButtonsUi(active) {
-  ['recordVoiceBtn', 'walkRecordBtn'].forEach(function (id) {
+  ['walkRecordBtn'].forEach(function (id) {
     const btn = document.getElementById(id);
     if (!btn || btn.style.display === 'none') return;
     btn.classList.toggle('red', active);
@@ -398,11 +407,7 @@ document.getElementById('walkBtn').addEventListener('click', window.startWalk);
 document.getElementById('endWalkBtn').addEventListener('click', window.endWalk);
 document.getElementById('shutterBtn').addEventListener('click', function () { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); });
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
-document.getElementById('photoBtn').addEventListener('click', function () { document.getElementById('photoInput').click(); });
 document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; const trade = tradeSelect.value; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const item = { src: src, trade: trade, time: new Date().toLocaleString() }; photos.push(item); persistPhotos(); renderPhoto(item); setWalkStatus('ok', 'Photo tagged as ' + trade + ' (' + photos.length + ' total)'); }); }; r.readAsDataURL(f); } e.target.value = ''; });
-document.getElementById('startVoiceBtn').addEventListener('click', function () { if (!SpeechRecognition) { setWalkStatus('err', 'Speech not supported. Try Chrome on Android, or use Record a Note.'); return; } startListening(); setWalkStatus('ok', 'Listening.'); });
-document.getElementById('stopVoiceBtn').addEventListener('click', function () { stopListening(); setWalkStatus('info', 'Voice stopped.'); });
-document.getElementById('recordVoiceBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('addPunchBtn').addEventListener('click', function () { const val = document.getElementById('punchInput').value.trim(); if (!val) return; fileEntry({ text: val, type: 'punch', trade: tradeSelect.value, verified: true, costImpact: null }); document.getElementById('punchInput').value = ''; });
 document.getElementById('saveContactsBtn').addEventListener('click', function () { document.querySelectorAll('#contactFields input').forEach(function (inp) { const trade = inp.getAttribute('data-trade'); const field = inp.getAttribute('data-field'); if (!contacts[trade]) contacts[trade] = { email: '', phone: '' }; contacts[trade][field] = inp.value.trim(); }); persistContacts(); const el = document.getElementById('contactStatus'); el.style.display = 'block'; el.className = 'status ok'; el.textContent = 'Trade contacts saved.'; });
 document.getElementById('addSubBtn').addEventListener('click', function () {
@@ -466,10 +471,6 @@ window.addEventListener('load', function () {
   renderDashboard();
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {
-    document.getElementById('startVoiceBtn').style.display = 'none';
-    document.getElementById('stopVoiceBtn').style.display = 'none';
-    document.getElementById('recordVoiceBtn').style.display = 'block';
-    document.getElementById('voiceHint').textContent = 'This browser can’t listen continuously. Tap the button, speak one item, tap again to file it. Needs the AI Worker URL set below.';
     document.getElementById('walkRecordBtn').style.display = 'block';
   }
   document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to open the camera and AI listening.';
