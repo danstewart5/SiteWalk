@@ -6,7 +6,7 @@
 <title>SiteWalk</title>
 <style>
 * { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; padding-bottom: 84px; background: #f0f2f5; color: #1a1a1a; }
 .container { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 h1 { color: #1a365d; margin: 0 0 4px 0; font-size: 22px; }
 .subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
@@ -52,10 +52,17 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #walkVideo.hidden-cam { display: none; }
 #shutterBtn { width: 72px; height: 72px; border-radius: 50%; margin: 12px auto; display: block; background: #fff; color: #1a365d; border: 4px solid #1a365d; font-size: 13px; font-weight: 600; padding: 0; }
 #gpsLabel { font-family: ui-monospace, monospace; font-size: 11px; color: #718096; margin: 4px 0 0 0; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+#bottomNav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; max-width: 640px; margin: 0 auto; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -2px 10px rgba(0,0,0,0.06); z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+.nav-btn { flex: 1; background: none; border: none; color: #718096; padding: 8px 2px 6px; margin: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 20px; cursor: pointer; }
+.nav-btn span { font-size: 10px; font-weight: 600; }
+.nav-btn.active { color: #2b6cb0; }
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { display: none !important; }
+.tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
 </style>
@@ -64,6 +71,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div class="container">
 <h1>📍 SiteWalk</h1>
 <p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
+
+<div class="tab-panel active" id="tab-walk">
 <div class="section">
 <h2>🎥 Start Walk-Around</h2>
 <p class="hint">One button: opens the camera, starts AI listening, and auto-tags the trade as you talk. Snap photos as you go — each one is tagged with whatever trade the AI just heard.</p>
@@ -94,6 +103,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
   <div id="photos"></div>
 </div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-items">
 <div class="section">
 <h2>✅ Punch List</h2>
 <input type="text" id="punchInput" placeholder="Add issue manually... e.g. Missing outlet cover in master bath">
@@ -115,6 +127,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <button id="addSubBtn" class="orange">Add Submittal</button>
 <div id="subList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-time">
 <div class="section">
 <h2>⏱ Clock In/Out</h2>
 <p class="hint">Manual clock in/out. Flags a review if 16+ hours pass with no matching clock-out.</p>
@@ -125,10 +140,16 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div id="clockFlagged"></div>
 <div id="clockLog"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-dashboard">
 <div class="section">
 <h2>📊 Open Items Dashboard</h2>
 <div id="dashboard"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-setup">
 <div class="section">
 <h2>👥 Trade Contacts</h2>
 <p class="hint">Save an email and/or phone per trade. Email Trade / Text Trade on an item opens your own Mail or Messages app.</p>
@@ -154,6 +175,15 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div id="report"></div>
 </div>
 </div>
+
+</div>
+<nav id="bottomNav">
+<button class="nav-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
+<button class="nav-btn" data-tab="items" type="button">✅<span>Items</span></button>
+<button class="nav-btn" data-tab="time" type="button">⏱<span>Time</span></button>
+<button class="nav-btn" data-tab="dashboard" type="button">📊<span>Board</span></button>
+<button class="nav-btn" data-tab="setup" type="button">⚙️<span>Setup</span></button>
+</nav>
 <script src="./walk.js"></script>
 </body>
 </html>
