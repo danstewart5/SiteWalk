@@ -1,6 +1,6 @@
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {};
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [];
 const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -14,6 +14,9 @@ function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(v
 function persistLists() { saveJson(LS.punch, punch); saveJson(LS.changes, changes); saveJson(LS.rfis, rfis); }
 function persistPhotos() { saveJson(LS.photos, photos); }
 function persistContacts() { saveJson(LS.contacts, contacts); }
+function persistSubmittals() { saveJson(LS.submittals, submittals); }
+function persistClock() { saveJson(LS.clockEvents, clockEvents); }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
 function renderPhoto(item) { const card = document.createElement('div'); card.className = 'photo-card'; card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>'; document.getElementById('photos').appendChild(card); }
@@ -38,6 +41,7 @@ function renderItemCard(entry, type) {
   meta.className = 'meta';
   let metaHtml = '<span class="trade-tag">' + entry.trade + '</span><span class="type-tag ' + tagClass + '">' + tagLabel + '</span>';
   if (entry.verified === false) metaHtml += '<span class="type-tag unverified">Unverified</span>';
+  if (type === 'punch' && entry.resolved) metaHtml += '<span class="type-tag change">Resolved</span>';
   metaHtml += ' ' + entry.time;
   if (type === 'change') metaHtml += '<br>Cost impact: ' + (entry.costImpact != null ? ('$' + entry.costImpact) : '—') + ' · Client approval: ' + (entry.approval || 'Pending');
   if (type === 'rfi') metaHtml += '<br>Status: ' + (entry.status || 'Open');
@@ -62,10 +66,10 @@ function renderItemCard(entry, type) {
   if (type === 'change') {
     const approveBtn = document.createElement('button');
     approveBtn.className = 'small green'; approveBtn.type = 'button'; approveBtn.textContent = 'Client Approved';
-    approveBtn.onclick = function () { entry.approval = 'Approved'; persistLists(); renderAllItems(); };
+    approveBtn.onclick = function () { entry.approval = 'Approved'; persistLists(); renderAllItems(); renderDashboard(); };
     const declineBtn = document.createElement('button');
     declineBtn.className = 'small red'; declineBtn.type = 'button'; declineBtn.textContent = 'Client Declined';
-    declineBtn.onclick = function () { entry.approval = 'Declined'; persistLists(); renderAllItems(); };
+    declineBtn.onclick = function () { entry.approval = 'Declined'; persistLists(); renderAllItems(); renderDashboard(); };
     card.appendChild(approveBtn);
     card.appendChild(declineBtn);
   }
@@ -73,8 +77,15 @@ function renderItemCard(entry, type) {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'small gray'; toggleBtn.type = 'button';
     toggleBtn.textContent = entry.status === 'Answered' ? 'Reopen RFI' : 'Mark Answered';
-    toggleBtn.onclick = function () { entry.status = entry.status === 'Answered' ? 'Open' : 'Answered'; persistLists(); renderAllItems(); };
+    toggleBtn.onclick = function () { entry.status = entry.status === 'Answered' ? 'Open' : 'Answered'; persistLists(); renderAllItems(); renderDashboard(); };
     card.appendChild(toggleBtn);
+  }
+  if (type === 'punch') {
+    const resolveBtn = document.createElement('button');
+    resolveBtn.className = 'small gray'; resolveBtn.type = 'button';
+    resolveBtn.textContent = entry.resolved ? 'Reopen' : 'Mark Resolved';
+    resolveBtn.onclick = function () { entry.resolved = !entry.resolved; persistLists(); renderAllItems(); renderDashboard(); };
+    card.appendChild(resolveBtn);
   }
   listEl.appendChild(card);
 }
@@ -100,6 +111,86 @@ function renderContacts() {
   });
 }
 
+function renderSubmittals() {
+  const wrap = document.getElementById('subList');
+  wrap.innerHTML = '';
+  submittals.slice().reverse().forEach(function (s) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<strong>' + escapeHtml(s.trade || 'General') + '</strong> — ' + escapeHtml(s.item) +
+      '<div class="meta"><span class="type-tag ' + (s.status === 'Approved' ? 'change' : 'rfi') + '">' + s.status + '</span> ' + s.time + '</div>';
+    if (s.status === 'Pending') {
+      const btn = document.createElement('button');
+      btn.className = 'small green'; btn.type = 'button'; btn.textContent = 'Mark Approved';
+      btn.onclick = function () { s.status = 'Approved'; s.approvedAt = new Date().toLocaleString(); persistSubmittals(); renderSubmittals(); renderDashboard(); };
+      card.appendChild(btn);
+    }
+    wrap.appendChild(card);
+  });
+}
+
+function checkMissedClockOuts() {
+  const MAX_MS = 16 * 60 * 60 * 1000;
+  const byEmployee = {};
+  clockEvents.forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
+  Object.keys(byEmployee).forEach(function (name) {
+    const events = byEmployee[name].slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+    events.forEach(function (e, i) {
+      if (e.type !== 'in') return;
+      const hasOut = events.slice(i + 1).some(function (o) { return o.type === 'out'; });
+      e.flagged = !hasOut && (Date.now() - new Date(e.time).getTime()) > MAX_MS;
+    });
+  });
+  persistClock();
+}
+function renderClockFlagged() {
+  const wrap = document.getElementById('clockFlagged');
+  const flagged = clockEvents.filter(function (e) { return e.flagged; });
+  wrap.innerHTML = '';
+  flagged.forEach(function (e) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<span class="type-tag unverified">Missed Clock-Out</span> ' + escapeHtml(e.employee) + ' — ' + escapeHtml(e.site) + '<div class="meta">Clocked in ' + e.time + '</div>';
+    const btn = document.createElement('button');
+    btn.className = 'small gray'; btn.type = 'button'; btn.textContent = 'Resolve';
+    btn.onclick = function () {
+      const correction = prompt('Correct clock-out time for ' + e.employee + '? (leave blank to use now)');
+      clockEvents.push({ employee: e.employee, site: e.site, type: 'out', time: correction || new Date().toLocaleString(), flagged: false });
+      e.flagged = false;
+      persistClock(); checkMissedClockOuts(); renderClockFlagged(); renderClockLog(); renderDashboard();
+    };
+    card.appendChild(btn);
+    wrap.appendChild(card);
+  });
+}
+function renderClockLog() {
+  const wrap = document.getElementById('clockLog');
+  wrap.innerHTML = '';
+  clockEvents.slice().reverse().slice(0, 30).forEach(function (e) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<span class="type-tag ' + (e.type === 'in' ? 'change' : 'punch') + '">' + e.type.toUpperCase() + '</span> ' + escapeHtml(e.employee) + ' — ' + escapeHtml(e.site) + '<div class="meta">' + e.time + '</div>';
+    wrap.appendChild(card);
+  });
+}
+
+function renderDashboard() {
+  const wrap = document.getElementById('dashboard');
+  if (!wrap) return;
+  const rows = [
+    ['Open Punch Items', punch.filter(function (p) { return !p.resolved; }).length],
+    ['Open Change Orders', changes.filter(function (c) { return c.approval === 'Pending'; }).length],
+    ['Open RFIs', rfis.filter(function (r) { return r.status !== 'Answered'; }).length],
+    ['Answered RFIs', rfis.filter(function (r) { return r.status === 'Answered'; }).length],
+    ['Pending Submittals', submittals.filter(function (s) { return s.status === 'Pending'; }).length],
+    ['Approved Submittals', submittals.filter(function (s) { return s.status === 'Approved'; }).length],
+    ['Missed Clock-Outs', clockEvents.filter(function (e) { return e.flagged; }).length]
+  ];
+  wrap.innerHTML = '<table style="width:100%;border-collapse:collapse">' + rows.map(function (r) {
+    return '<tr><td style="padding:6px">' + r[0] + '</td><td style="padding:6px;text-align:right;font-weight:bold">' + r[1] + '</td></tr>';
+  }).join('') + '</table>';
+}
+
 // type: 'punch' | 'change' | 'rfi'
 function fileEntry(data) {
   const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), verified: data.verified !== false };
@@ -107,9 +198,10 @@ function fileEntry(data) {
   let type = data.type;
   if (type === 'change') { entry.costImpact = typeof data.costImpact === 'number' ? data.costImpact : null; entry.approval = 'Pending'; changes.push(entry); }
   else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
-  else { type = 'punch'; punch.push(entry); }
+  else { type = 'punch'; entry.resolved = false; punch.push(entry); }
   persistLists();
   renderItemCard(entry, type);
+  renderDashboard();
   return entry;
 }
 
@@ -313,6 +405,23 @@ document.getElementById('stopVoiceBtn').addEventListener('click', function () { 
 document.getElementById('recordVoiceBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('addPunchBtn').addEventListener('click', function () { const val = document.getElementById('punchInput').value.trim(); if (!val) return; fileEntry({ text: val, type: 'punch', trade: tradeSelect.value, verified: true, costImpact: null }); document.getElementById('punchInput').value = ''; });
 document.getElementById('saveContactsBtn').addEventListener('click', function () { document.querySelectorAll('#contactFields input').forEach(function (inp) { const trade = inp.getAttribute('data-trade'); const field = inp.getAttribute('data-field'); if (!contacts[trade]) contacts[trade] = { email: '', phone: '' }; contacts[trade][field] = inp.value.trim(); }); persistContacts(); const el = document.getElementById('contactStatus'); el.style.display = 'block'; el.className = 'status ok'; el.textContent = 'Trade contacts saved.'; });
+document.getElementById('addSubBtn').addEventListener('click', function () {
+  const item = document.getElementById('subItem').value.trim();
+  const trade = document.getElementById('subTrade').value.trim() || 'General';
+  if (!item) return;
+  submittals.push({ item: item, trade: trade, status: 'Pending', time: new Date().toLocaleString() });
+  persistSubmittals(); renderSubmittals(); renderDashboard();
+  document.getElementById('subItem').value = ''; document.getElementById('subTrade').value = '';
+});
+function logClockEvent(type) {
+  const employee = document.getElementById('clockEmployee').value.trim();
+  const site = document.getElementById('clockSite').value.trim();
+  if (!employee || !site) { alert('Enter your name and job site first.'); return; }
+  clockEvents.push({ employee: employee, site: site, type: type, time: new Date().toLocaleString(), flagged: false });
+  persistClock(); checkMissedClockOuts(); renderClockLog(); renderClockFlagged(); renderDashboard();
+}
+document.getElementById('clockInBtn').addEventListener('click', function () { logClockEvent('in'); });
+document.getElementById('clockOutBtn').addEventListener('click', function () { logClockEvent('out'); });
 function currentAiEndpoint() { return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, ''); }
 function currentAiKey() { return (localStorage.getItem(LS.aiKey) || '').trim(); }
 function setAiStatus(kind, text) { const el = document.getElementById('aiStatus'); el.className = 'status ' + kind; el.textContent = text; }
@@ -331,20 +440,30 @@ window.generateReport = function () {
     arr.forEach(function (item) { h += '<div class="punch-item">[' + item.trade + '] ' + item.text + (extra ? extra(item) : '') + '</div>'; });
     return h + '</div>';
   }
-  html += sect('Punch List', punch);
+  html += sect('Punch List', punch, function (i) { return i.resolved ? ' — Resolved' : ''; });
   html += sect('Change Orders', changes, function (i) { return ' — $' + (i.costImpact != null ? i.costImpact : '?') + ' (' + (i.approval || 'Pending') + ')'; });
   html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
+  if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
+  const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
+  if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   document.getElementById('report').innerHTML = html;
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
+  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
+  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = [];
   document.getElementById('photos').innerHTML = '';
   photos.forEach(renderPhoto);
   renderAllItems();
   renderContacts();
+  renderSubmittals();
+  checkMissedClockOuts();
+  renderClockFlagged();
+  renderClockLog();
+  renderDashboard();
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {
     document.getElementById('startVoiceBtn').style.display = 'none';

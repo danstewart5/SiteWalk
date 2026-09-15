@@ -119,6 +119,27 @@ button, .section:not(#reportSection), #walkStatus, .subtitle { display: none !im
 <div id="rfiList"></div>
 </div>
 <div class="section">
+<h2>📄 Submittals</h2>
+<input type="text" id="subItem" placeholder="e.g. Kitchen cabinet shop drawings">
+<input type="text" id="subTrade" placeholder="Trade / supplier">
+<button id="addSubBtn" class="orange">Add Submittal</button>
+<div id="subList"></div>
+</div>
+<div class="section">
+<h2>⏱ Clock In/Out</h2>
+<p class="hint">Manual clock in/out. Flags a review if 16+ hours pass with no matching clock-out.</p>
+<input type="text" id="clockEmployee" placeholder="Your name">
+<input type="text" id="clockSite" placeholder="Job site, e.g. 123 Main St">
+<button id="clockInBtn" class="green">Clock In</button>
+<button id="clockOutBtn" class="red">Clock Out</button>
+<div id="clockFlagged"></div>
+<div id="clockLog"></div>
+</div>
+<div class="section">
+<h2>📊 Open Items Dashboard</h2>
+<div id="dashboard"></div>
+</div>
+<div class="section">
 <h2>👥 Trade Contacts</h2>
 <p class="hint">Save an email and/or phone per trade. Email Trade / Text Trade on an item opens your own Mail or Messages app.</p>
 <div id="contactFields"></div>
