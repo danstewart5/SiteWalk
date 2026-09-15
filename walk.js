@@ -15,8 +15,8 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [];
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [];
 const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -32,6 +32,7 @@ function persistPhotos() { saveJson(LS.photos, photos); }
 function persistContacts() { saveJson(LS.contacts, contacts); }
 function persistSubmittals() { saveJson(LS.submittals, submittals); }
 function persistClock() { saveJson(LS.clockEvents, clockEvents); }
+function persistDailyLogs() { saveJson(LS.dailyLogs, dailyLogs); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
@@ -186,6 +187,21 @@ function renderClockLog() {
     const card = document.createElement('div');
     card.className = 'item-card';
     card.innerHTML = '<span class="type-tag ' + (e.type === 'in' ? 'change' : 'punch') + '">' + e.type.toUpperCase() + '</span> ' + escapeHtml(e.employee) + ' — ' + escapeHtml(e.site) + '<div class="meta">' + e.time + '</div>';
+    wrap.appendChild(card);
+  });
+}
+
+function renderDailyLogs() {
+  const wrap = document.getElementById('logList');
+  wrap.innerHTML = '';
+  dailyLogs.slice().reverse().forEach(function (l) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    let html = '<strong>' + escapeHtml(l.date) + '</strong> — ' + escapeHtml(l.weather) + ' — Crew: ' + escapeHtml(String(l.crewCount || 'N/A'));
+    if (l.trades) html += '<div class="meta">Trades: ' + escapeHtml(l.trades) + '</div>';
+    if (l.delays) html += '<div>Delays: ' + escapeHtml(l.delays) + '</div>';
+    if (l.notes) html += '<div class="meta">' + escapeHtml(l.notes) + '</div>';
+    card.innerHTML = html;
     wrap.appendChild(card);
   });
 }
@@ -443,6 +459,20 @@ function logClockEvent(type) {
 }
 document.getElementById('clockInBtn').addEventListener('click', function () { logClockEvent('in'); });
 document.getElementById('clockOutBtn').addEventListener('click', function () { logClockEvent('out'); });
+document.getElementById('addLogBtn').addEventListener('click', function () {
+  const date = document.getElementById('logDate').value || new Date().toISOString().split('T')[0];
+  const weather = document.getElementById('logWeather').value;
+  const crewCount = document.getElementById('logCrewCount').value;
+  const trades = document.getElementById('logTrades').value.trim();
+  const delays = document.getElementById('logDelays').value.trim();
+  const notes = document.getElementById('logNotes').value.trim();
+  dailyLogs.push({ date: date, weather: weather, crewCount: crewCount, trades: trades, delays: delays, notes: notes });
+  persistDailyLogs(); renderDailyLogs();
+  document.getElementById('logCrewCount').value = '';
+  document.getElementById('logTrades').value = '';
+  document.getElementById('logDelays').value = '';
+  document.getElementById('logNotes').value = '';
+});
 function currentAiEndpoint() { return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, ''); }
 function currentAiKey() { return (localStorage.getItem(LS.aiKey) || '').trim(); }
 function setAiStatus(kind, text) { const el = document.getElementById('aiStatus'); el.className = 'status ' + kind; el.textContent = text; }
@@ -465,6 +495,7 @@ window.generateReport = function () {
   html += sect('Change Orders', changes, function (i) { return ' — $' + (i.costImpact != null ? i.costImpact : '?') + ' (' + (i.approval || 'Pending') + ')'; });
   html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
+  if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   document.getElementById('report').innerHTML = html;
@@ -473,9 +504,9 @@ document.getElementById('genBtn').addEventListener('click', window.generateRepor
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
-  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []);
+  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
-  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = [];
+  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = [];
   document.getElementById('photos').innerHTML = '';
   photos.forEach(renderPhoto);
   renderAllItems();
@@ -484,6 +515,8 @@ window.addEventListener('load', function () {
   checkMissedClockOuts();
   renderClockFlagged();
   renderClockLog();
+  renderDailyLogs();
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
   renderDashboard();
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {

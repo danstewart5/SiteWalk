@@ -140,6 +140,20 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <div id="clockFlagged"></div>
 <div id="clockLog"></div>
 </div>
+<div class="section">
+<h2>📆 Daily Log</h2>
+<input type="date" id="logDate">
+<select id="logWeather">
+<option>Clear</option><option>Cloudy</option><option>Rain</option>
+<option>Snow</option><option>High Wind</option><option>Extreme Heat/Cold</option>
+</select>
+<input type="number" id="logCrewCount" min="0" placeholder="Crew present, e.g. 6">
+<input type="text" id="logTrades" placeholder="Trades on site, e.g. Framing, Electrical">
+<textarea id="logDelays" placeholder="Delays / issues — deliveries, incidents..."></textarea>
+<textarea id="logNotes" placeholder="Notes for the day"></textarea>
+<button id="addLogBtn" class="orange">Save Daily Log</button>
+<div id="logList"></div>
+</div>
 </div>
 
 <div class="tab-panel" id="tab-dashboard">

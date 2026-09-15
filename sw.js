@@ -1,4 +1,4 @@
-const CACHE = 'sitewalk-v20';
+const CACHE = 'sitewalk-v21';
 const ASSETS = ['./', './index.html', './walk.js', './manifest.json'];
 
 self.addEventListener('install', (e) => {
