@@ -127,6 +127,19 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addSubBtn" class="orange">Add Submittal</button>
 <div id="subList"></div>
 </div>
+<div class="section">
+<h2>⚠️ Safety Log</h2>
+<select id="safetyType">
+<option>Near-Miss</option><option>Minor Incident</option><option>Injury</option>
+<option>Equipment/Property Damage</option><option>Hazard Observed</option>
+</select>
+<textarea id="safetyDesc" placeholder="What happened..."></textarea>
+<input type="text" id="safetyPerson" placeholder="Person(s) involved (optional)">
+<textarea id="safetyAction" placeholder="Corrective action taken"></textarea>
+<input type="file" id="safetyPhotoInput" accept="image/*" capture="environment">
+<button id="addSafetyBtn" class="red">Log Incident</button>
+<div id="safetyList"></div>
+</div>
 </div>
 
 <div class="tab-panel" id="tab-time">

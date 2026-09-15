@@ -15,8 +15,8 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [];
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [];
 const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -33,6 +33,7 @@ function persistContacts() { saveJson(LS.contacts, contacts); }
 function persistSubmittals() { saveJson(LS.submittals, submittals); }
 function persistClock() { saveJson(LS.clockEvents, clockEvents); }
 function persistDailyLogs() { saveJson(LS.dailyLogs, dailyLogs); }
+function persistSafety() { saveJson(LS.safety, safetyLogs); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
@@ -202,6 +203,27 @@ function renderDailyLogs() {
     if (l.delays) html += '<div>Delays: ' + escapeHtml(l.delays) + '</div>';
     if (l.notes) html += '<div class="meta">' + escapeHtml(l.notes) + '</div>';
     card.innerHTML = html;
+    wrap.appendChild(card);
+  });
+}
+
+function renderSafetyLogs() {
+  const wrap = document.getElementById('safetyList');
+  wrap.innerHTML = '';
+  safetyLogs.slice().reverse().forEach(function (s) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    let html = '<strong>' + escapeHtml(s.type) + '</strong><div>' + escapeHtml(s.desc) + '</div>';
+    if (s.person) html += '<div class="meta">Involved: ' + escapeHtml(s.person) + '</div>';
+    if (s.action) html += '<div class="meta">Action taken: ' + escapeHtml(s.action) + '</div>';
+    html += '<div class="meta">' + s.time + '</div>';
+    card.innerHTML = html;
+    if (s.photo) {
+      const img = document.createElement('img');
+      img.src = s.photo;
+      img.style.cssText = 'max-width:140px;display:block;margin-top:6px;border-radius:6px';
+      card.appendChild(img);
+    }
     wrap.appendChild(card);
   });
 }
@@ -434,6 +456,10 @@ window.endWalk = function () {
   document.getElementById('endWalkBtn').style.display = 'none';
   document.getElementById('walkStage').classList.remove('active');
   setWalkStatus('info', 'Walk ended. Photos and notes stayed on this phone.');
+  if (confirm('Walk ended. Generate the report now?')) {
+    window.generateReport();
+    showTab('setup');
+  }
 };
 document.getElementById('walkBtn').addEventListener('click', window.startWalk);
 document.getElementById('endWalkBtn').addEventListener('click', window.endWalk);
@@ -473,6 +499,28 @@ document.getElementById('addLogBtn').addEventListener('click', function () {
   document.getElementById('logDelays').value = '';
   document.getElementById('logNotes').value = '';
 });
+document.getElementById('addSafetyBtn').addEventListener('click', function () {
+  const type = document.getElementById('safetyType').value;
+  const desc = document.getElementById('safetyDesc').value.trim();
+  const person = document.getElementById('safetyPerson').value.trim();
+  const action = document.getElementById('safetyAction').value.trim();
+  const photoInput = document.getElementById('safetyPhotoInput');
+  if (!desc) { alert('Enter a description first.'); return; }
+  function finish(photoSrc) {
+    safetyLogs.push({ type: type, desc: desc, person: person, action: action, photo: photoSrc || null, time: new Date().toLocaleString() });
+    persistSafety(); renderSafetyLogs();
+    document.getElementById('safetyDesc').value = '';
+    document.getElementById('safetyPerson').value = '';
+    document.getElementById('safetyAction').value = '';
+    photoInput.value = '';
+  }
+  const file = photoInput.files && photoInput.files[0];
+  if (file) {
+    const r = new FileReader();
+    r.onload = function (ev) { compressImage(ev.target.result, finish); };
+    r.readAsDataURL(file);
+  } else finish(null);
+});
 function currentAiEndpoint() { return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, ''); }
 function currentAiKey() { return (localStorage.getItem(LS.aiKey) || '').trim(); }
 function setAiStatus(kind, text) { const el = document.getElementById('aiStatus'); el.className = 'status ' + kind; el.textContent = text; }
@@ -496,6 +544,7 @@ window.generateReport = function () {
   html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
   if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
+  if (safetyLogs.length) { html += '<div class="report-section"><h3>Safety Log</h3>'; safetyLogs.forEach(function (s) { html += '<div class="punch-item">[' + s.type + '] ' + s.desc + (s.action ? ' — Action: ' + s.action : '') + '</div>'; }); html += '</div>'; }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   document.getElementById('report').innerHTML = html;
@@ -504,9 +553,9 @@ document.getElementById('genBtn').addEventListener('click', window.generateRepor
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
-  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []);
+  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
-  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = [];
+  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = [];
   document.getElementById('photos').innerHTML = '';
   photos.forEach(renderPhoto);
   renderAllItems();
@@ -517,6 +566,7 @@ window.addEventListener('load', function () {
   renderClockLog();
   renderDailyLogs();
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+  renderSafetyLogs();
   renderDashboard();
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {

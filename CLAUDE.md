@@ -23,7 +23,6 @@ Do not use Grok sandbox preview URLs.
 - Twilio / SendGrid hands-off send
 - Chapter 2 GPS geofencing (100m, 5-minute out buffer) — reference implementation in `gps-clock-in-module.html`, not merged; needs a paid geocoding key and a native wrapper (Capacitor) for background tracking
 - Firebase Firestore persistence (`firebase-backend-module.html`) — cross-device sync, needs a real Firebase project
-- Safety Incident Log module (`safety-module.html`) — never merged, no live UI
 - `current/` React tree (see above)
 
 ## 2026-09-14: dashboard, submittals, clock in/out merged into the live app
