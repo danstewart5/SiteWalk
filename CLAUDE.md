@@ -27,15 +27,11 @@ Every item type persists to `localStorage` under real, live keys (see `LS` objec
 
 All eight of the original "File N of 7/8 — INSTRUCTIONS FOR GROK" standalone module snippets (RFI, Daily Log, Submittals, Safety, Dashboard, Trade Directory, GPS Clock-In, Firebase Backend) are now resolved one way or another: RFI/Daily Log/Submittals/Safety/Dashboard are merged into the live app above; GPS geofencing and Firebase sync are explicitly parked (see below), not abandoned by accident. `trade-directory-module.html` was deleted — it never contained real content (the file body was just the placeholder string `content1`), and the practical need is already covered live by Setup's manual Trade Contacts email/SMS.
 
-## Known open issue — NOT yet fixed
+## Known issues
 
-**Camera still opens front/selfie-facing on the user's phone**, even after a fix (commit `0f17af1`) that tries `facingMode: { exact: 'environment' }` → soft `'environment'` → `video: true` in `getWalkStream()` in `walk.js`. The live server confirmed serving that fix, so it's either (a) still a stale client cache, or (b) the fallback chain genuinely isn't landing on the rear camera on this device — `facingMode` constraints are notoriously unreliable across iOS Safari/webviews.
+**Rear-camera fix confirmed working on phone** (2026-09-16) — `getWalkStream()`'s `exact: 'environment'` → soft `'environment'` → `video: true` fallback chain in `walk.js` (commit `0f17af1`) now correctly opens the rear camera on the user's phone.
 
-**Next step, not yet answered by the user:** does the live in-page video preview show (the `#walkVideo` embedded box), or does the phone's native system camera app pop up over the page? Those are two different code paths:
-- Live preview wrong-facing → the `getWalkStream()` fallback chain in `walk.js` needs the more robust fix: after getting *any* stream, call `enumerateDevices()` (labels are populated post-permission) and swap to a device whose label matches `/back|rear/i` if the current track reports `getSettings().facingMode === 'user'` or an ambiguous/absent facingMode.
-- Native camera app pops up → that means `getWalkStream()` is failing entirely and falling through to the `photoInput` file-input fallback (`capture="environment"` attribute) — iOS Safari has historically been flaky about honoring that hint, and there's no further web-level control once the native picker takes over.
-
-Do not re-attempt the same `exact`/`ideal` facingMode fix again without first learning which path is actually running — it's already been tried once.
+**Laptop still opens the front-facing webcam — this is expected, not a bug.** A laptop has one built-in camera, which faces the user; there is no `environment`-facing camera for any rung of the fallback chain to select, so `getWalkStream()` correctly falls through to `video: true` and gets the only camera available. Do not "fix" this — the app is designed for phone use during an actual walk-around.
 
 ## Do not touch unless asked
 
