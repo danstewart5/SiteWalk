@@ -79,17 +79,35 @@ function dateHeaderLabel(ts) {
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
 }
 
-function deletePhoto(item) {
-  const idx = photos.indexOf(item);
-  if (idx === -1) return;
-  if (!confirm('Delete this photo? This can\'t be undone.')) return;
-  photos.splice(idx, 1);
+let selectedPhotos = new Set();
+function updateSelectionBar() {
+  const bar = document.getElementById('photoSelectionBar');
+  const btn = document.getElementById('deleteSelectedBtn');
+  if (!bar || !btn) return;
+  const n = selectedPhotos.size;
+  bar.style.display = n > 0 ? 'block' : 'none';
+  btn.textContent = 'Delete Selected (' + n + ')';
+}
+function togglePhotoSelection(item, checked) {
+  if (checked) selectedPhotos.add(item); else selectedPhotos.delete(item);
+  updateSelectionBar();
+}
+function deleteSelectedPhotos() {
+  const n = selectedPhotos.size;
+  if (!n) return;
+  if (!confirm('Delete ' + n + ' selected photo' + (n === 1 ? '' : 's') + '? This can\'t be undone.')) return;
+  selectedPhotos.forEach(function (item) {
+    const idx = photos.indexOf(item);
+    if (idx !== -1) photos.splice(idx, 1);
+    punch.concat(changes, rfis).forEach(function (e) { if (e.photo === item.src) delete e.photo; });
+  });
+  selectedPhotos.clear();
   persistPhotos();
-  punch.concat(changes, rfis).forEach(function (e) { if (e.photo === item.src) delete e.photo; });
   persistLists();
   renderPhotosTab();
   renderAllItems();
   renderSummary();
+  updateSelectionBar();
 }
 
 function buildPhotoThumb(item) {
@@ -97,9 +115,11 @@ function buildPhotoThumb(item) {
   thumb.className = 'w-photo-thumb';
   thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>'
     + (item.linkedItemText ? '<span class="w-thumb-linked" title="Linked to a punch list item">🔗</span>' : '')
-    + '<button type="button" class="w-thumb-delete" aria-label="Delete photo">✕</button>';
+    + '<label class="w-thumb-check-wrap"><input type="checkbox" class="w-thumb-check"' + (selectedPhotos.has(item) ? ' checked' : '') + '></label>';
   thumb.addEventListener('click', function () { openLightbox(item.src); });
-  thumb.querySelector('.w-thumb-delete').addEventListener('click', function (e) { e.stopPropagation(); deletePhoto(item); });
+  const checkbox = thumb.querySelector('.w-thumb-check');
+  checkbox.addEventListener('click', function (e) { e.stopPropagation(); });
+  checkbox.addEventListener('change', function () { togglePhotoSelection(item, checkbox.checked); });
   return thumb;
 }
 
@@ -677,6 +697,8 @@ document.getElementById('walkBtn').addEventListener('click', function () { walkA
 function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); }
 document.getElementById('shutterBtn').addEventListener('click', takePhoto);
 document.getElementById('mainPhotoBtn').addEventListener('click', takePhoto);
+document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedPhotos);
+document.getElementById('generateSummaryBtn').addEventListener('click', function () { renderSummary(); showWalkTab('summary'); });
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, saveWalkPhoto); }; r.readAsDataURL(f); } e.target.value = ''; });
 document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
@@ -772,6 +794,7 @@ document.getElementById('printBtn').addEventListener('click', function () { wind
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, and your AI Worker setup. This can\'t be undone.')) return;
   photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = [];
+  selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   try { localStorage.removeItem('swActiveTab'); } catch (e) { }
   document.getElementById('siteName').textContent = 'Job Site';
@@ -779,6 +802,7 @@ function clearAllData() {
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('report').innerHTML = '';
   renderPhotosTab();
+  updateSelectionBar();
   renderAllNotes();
   renderAllItems();
   renderContacts();

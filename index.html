@@ -136,6 +136,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 
 .w-fallback-record { display: none; margin: 10px auto 0; background: none; border: 1.5px solid var(--w-accent); color: var(--w-accent-dark); font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; padding: 8px 18px; border-radius: 999px; width: auto; }
 .w-fallback-record.red { border-color: var(--w-recording); color: var(--w-recording); }
+.w-generate-summary-btn { display: block; width: auto; margin: 10px auto 0; background: #fff; border: 1.5px solid var(--w-primary); color: var(--w-primary); font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; padding: 10px 20px; border-radius: 999px; cursor: pointer; }
+.w-generate-summary-btn:active { background: var(--w-card); }
 
 #tradeSelect { display: none; }
 
@@ -169,8 +171,11 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .w-photo-thumb .w-thumb-trade { position: absolute; left: 5px; bottom: 5px; background: rgba(31,74,61,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
 .w-photo-thumb .w-thumb-linked { position: absolute; right: 5px; top: 5px; background: rgba(217,119,72,0.92); color: #fff; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-.w-photo-thumb .w-thumb-delete { position: absolute; left: 5px; top: 5px; background: rgba(40,26,22,0.72); color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; line-height: 1; cursor: pointer; }
-.w-photo-thumb .w-thumb-delete:active { background: rgba(193,49,29,0.92); }
+.w-thumb-check-wrap { position: absolute; left: 6px; top: 6px; width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+.w-thumb-check { width: 18px; height: 18px; accent-color: var(--w-accent-dark); cursor: pointer; margin: 0; }
+#photoSelectionBar { display: none; margin: 0 0 14px; }
+.w-btn-danger { width: auto; background: var(--w-accent-dark); color: #fff; border: none; border-radius: 999px; padding: 10px 18px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin: 0; }
+.w-btn-danger:active { opacity: 0.85; }
 
 #lightbox { display: none; position: fixed; inset: 0; background: rgba(26,24,21,0.92); z-index: 500; align-items: center; justify-content: center; padding: 24px; }
 #lightbox.open { display: flex; }
@@ -252,6 +257,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
     </div>
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
+    <button id="generateSummaryBtn" type="button" class="w-generate-summary-btn">📋 Generate Summary</button>
   </div>
 
   <select id="tradeSelect" aria-label="Current trade" aria-hidden="true">
@@ -286,6 +292,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
   <div class="w-photo-controls">
     <input type="text" id="photoSearch" placeholder="Search by trade or item...">
     <div class="w-photo-trade-filters" id="photoTradeFilters"></div>
+    <div id="photoSelectionBar">
+      <button id="deleteSelectedBtn" type="button" class="w-btn-danger">Delete Selected</button>
+    </div>
   </div>
   <div id="photosGrid"></div>
 </div>
