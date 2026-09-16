@@ -1,4 +1,4 @@
-const TABS = ['walk', 'items', 'time', 'dashboard', 'setup'];
+const TABS = ['walk', 'more'];
 function showTab(name) {
   if (TABS.indexOf(name) === -1) name = 'walk';
   TABS.forEach(function (t) {
@@ -533,6 +533,7 @@ window.startWalk = function () {
   const btn = document.getElementById('walkBtn');
   btn.classList.add('recording');
   btn.innerHTML = 'Stop<br>Walk-Around';
+  document.getElementById('walkHero').style.display = 'none';
   document.getElementById('walkStage').classList.add('active');
   setWalkStatus('ok', 'Asking for camera and mic…');
   document.getElementById('gpsLabel').textContent = navigator.geolocation ? 'Waiting for GPS…' : 'GPS off';
@@ -554,6 +555,7 @@ window.endWalk = function () {
   const btn = document.getElementById('walkBtn');
   btn.classList.remove('recording');
   btn.innerHTML = 'Start<br>Walk-Around';
+  document.getElementById('walkHero').style.display = '';
   document.getElementById('walkStage').classList.remove('active');
   setWalkStatus('info', 'Walk ended. Check Summary for what was found.');
   showWalkTab('summary');

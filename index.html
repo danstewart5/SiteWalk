@@ -56,8 +56,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .ai-result { white-space: pre-wrap; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; margin-top: 8px; }
 /* ---------- Walk tab redesign ---------- */
 .walk-redesign {
-  --w-bg: #F7F5F0;
-  --w-card: #EFECE6;
+  --w-bg: #F9F3E9;
+  --w-card: #F2E8D9;
   --w-primary: #1F4A3D;
   --w-primary-soft: #2E6350;
   --w-accent: #D97748;
@@ -65,8 +65,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
   --w-recording: #3F9142;
   --w-recording-soft: #56A85B;
   --w-text: #3A342E;
-  --w-text-soft: #7A7167;
-  --w-border: #E1DCD2;
+  --w-text-soft: #83715E;
+  --w-border: #E8D9C3;
   margin: -16px;
   padding: 20px 16px 26px;
   background: var(--w-bg);
@@ -91,6 +91,9 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-site-header [contenteditable="true"]:focus { background: var(--w-card); box-shadow: 0 0 0 2px var(--w-border); }
 .w-hint-edit { font-size: 11px; color: var(--w-text-soft); opacity: .7; margin-top: 4px; }
 
+.w-hero { height: 230px; border-radius: 22px; overflow: hidden; position: relative; background-size: cover; background-position: 30% 62%; margin-bottom: -74px; box-shadow: 0 6px 18px rgba(31,74,61,0.18); }
+.w-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(31,74,61,0.08) 0%, rgba(31,74,61,0.42) 58%, rgba(31,74,61,0.76) 100%); }
+
 #walkStage { display: none; margin: 0 0 22px; }
 #walkStage.active { display: block; }
 #walkVideoWrap { background: #1F4A3D; border-radius: 22px; overflow: hidden; position: relative; box-shadow: 0 6px 18px rgba(31,74,61,0.18); }
@@ -99,7 +102,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #shutterBtn { position: absolute; right: 14px; bottom: 14px; width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.95); color: #1F4A3D; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(0,0,0,0.25); padding: 0; margin: 0; }
 #gpsLabel { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--w-text-soft); text-align: center; margin: 8px 0 0; }
 
-.w-record-zone { display: flex; flex-direction: column; align-items: center; margin: 6px 0 20px; }
+.w-record-zone { display: flex; flex-direction: column; align-items: center; margin: 6px 0 20px; position: relative; z-index: 2; }
 #walkBtn { width: 148px; height: 148px; border-radius: 50%; border: none; background: var(--w-accent); color: #fff; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; cursor: pointer; box-shadow: 0 10px 26px rgba(217,119,72,0.35); transition: background .25s ease, box-shadow .25s ease, transform .15s ease; display: flex; align-items: center; justify-content: center; padding: 10px; margin: 0; }
 #walkBtn:active { transform: scale(0.97); }
 #walkBtn.recording { background: var(--w-recording); box-shadow: 0 10px 26px rgba(63,145,66,0.35); animation: w-pulse 1.8s ease-in-out infinite; }
@@ -118,8 +121,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-fallback-record { display: none; margin: 10px auto 0; background: none; border: 1.5px solid var(--w-accent); color: var(--w-accent-dark); font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; padding: 8px 18px; border-radius: 999px; width: auto; }
 .w-fallback-record.red { border-color: var(--w-recording); color: var(--w-recording); }
 
-.w-trade-row { display: flex; justify-content: center; margin-bottom: 4px; }
-#tradeSelect { appearance: none; border: none; background: transparent; color: var(--w-text-soft); font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 6px 22px 6px 4px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M0 0l4.5 6 4.5-6z' fill='%237A7167'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; cursor: pointer; text-align: center; width: auto; margin: 0; }
+#tradeSelect { display: none; }
 
 .w-summary-overview { display: flex; gap: 10px; margin-bottom: 20px; }
 .w-overview-stat { flex: 1; background: var(--w-card); border-radius: 12px; padding: 12px 10px; text-align: center; border: 1px solid var(--w-border); }
@@ -169,6 +171,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .dot-other      { background: #A66478; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+.container:has(#tab-walk.active) > h1,
+.container:has(#tab-walk.active) > .subtitle { display: none; }
 #bottomNav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; max-width: 640px; margin: 0 auto; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -2px 10px rgba(0,0,0,0.06); z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
 .nav-btn { flex: 1; background: none; border: none; color: #718096; padding: 8px 2px 6px; margin: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 20px; cursor: pointer; }
 .nav-btn span { font-size: 10px; font-weight: 600; }
@@ -204,6 +208,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
     <p class="w-hint-edit">Tap either line to edit</p>
   </header>
 
+  <div class="w-hero" id="walkHero" style="background-image:url('assets/photos/hero-framing.jpg')"></div>
+
   <div id="walkStage">
     <div id="walkVideoWrap">
       <video id="walkVideo" playsinline muted autoplay></video>
@@ -219,19 +225,17 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
   </div>
 
-  <div class="w-trade-row">
-    <select id="tradeSelect" aria-label="Current trade">
-    <option value="General">General</option>
-    <option value="Plumbing">Plumbing</option>
-    <option value="Electrical">Electrical</option>
-    <option value="Framing">Framing</option>
-    <option value="Drywall">Drywall</option>
-    <option value="Roofing">Roofing</option>
-    <option value="Concrete">Concrete</option>
-    <option value="Landscaping">Landscaping</option>
-    <option value="Other">Other</option>
-    </select>
-  </div>
+  <select id="tradeSelect" aria-label="Current trade" aria-hidden="true">
+  <option value="General">General</option>
+  <option value="Plumbing">Plumbing</option>
+  <option value="Electrical">Electrical</option>
+  <option value="Framing">Framing</option>
+  <option value="Drywall">Drywall</option>
+  <option value="Roofing">Roofing</option>
+  <option value="Concrete">Concrete</option>
+  <option value="Landscaping">Landscaping</option>
+  <option value="Other">Other</option>
+  </select>
 
   <div id="walkLiveTranscript" style="display:none">Listening…</div>
 </div>
@@ -261,7 +265,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 </div>
 
-<div class="tab-panel" id="tab-items">
+<div class="tab-panel" id="tab-more">
+<p class="subtitle" style="margin-top:-8px">Items, time, dashboard &amp; setup</p>
 <div class="section">
 <h2>✅ Punch List</h2>
 <input type="text" id="punchInput" placeholder="Add issue manually... e.g. Missing outlet cover in master bath">
@@ -296,9 +301,6 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addSafetyBtn" class="red">Log Incident</button>
 <div id="safetyList"></div>
 </div>
-</div>
-
-<div class="tab-panel" id="tab-time">
 <div class="section">
 <h2>⏱ Clock In/Out</h2>
 <p class="hint">Manual clock in/out. Flags a review if 16+ hours pass with no matching clock-out.</p>
@@ -323,16 +325,10 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addLogBtn" class="orange">Save Daily Log</button>
 <div id="logList"></div>
 </div>
-</div>
-
-<div class="tab-panel" id="tab-dashboard">
 <div class="section">
 <h2>📊 Open Items Dashboard</h2>
 <div id="dashboard"></div>
 </div>
-</div>
-
-<div class="tab-panel" id="tab-setup">
 <div class="section">
 <h2>👥 Trade Contacts</h2>
 <p class="hint">Save an email and/or phone per trade. Email Trade / Text Trade on an item opens your own Mail or Messages app.</p>
@@ -362,10 +358,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 <nav id="bottomNav">
 <button class="nav-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
-<button class="nav-btn" data-tab="items" type="button">✅<span>Items</span></button>
-<button class="nav-btn" data-tab="time" type="button">⏱<span>Time</span></button>
-<button class="nav-btn" data-tab="dashboard" type="button">📊<span>Board</span></button>
-<button class="nav-btn" data-tab="setup" type="button">⚙️<span>Setup</span></button>
+<button class="nav-btn" data-tab="more" type="button">⋯<span>More</span></button>
 </nav>
 <script src="./walk.js"></script>
 <script>
