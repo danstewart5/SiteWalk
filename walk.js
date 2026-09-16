@@ -15,8 +15,10 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [];
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [];
+const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
+const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -34,10 +36,94 @@ function persistSubmittals() { saveJson(LS.submittals, submittals); }
 function persistClock() { saveJson(LS.clockEvents, clockEvents); }
 function persistDailyLogs() { saveJson(LS.dailyLogs, dailyLogs); }
 function persistSafety() { saveJson(LS.safety, safetyLogs); }
+function persistNotes() { saveJson(LS.notes, notesLog); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
-function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'status ' + kind; s.textContent = text; }
+function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'w-walk-status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
-function renderPhoto(item) { const card = document.createElement('div'); card.className = 'photo-card'; card.innerHTML = '<img src="' + item.src + '"><span class="trade-tag">' + item.trade + '</span>'; document.getElementById('photos').appendChild(card); }
+function renderPhoto(item) {
+  const thumb = document.createElement('div');
+  thumb.className = 'w-photo-thumb';
+  thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>';
+  thumb.addEventListener('click', function () { openLightbox(item.src); });
+  document.getElementById('photosGrid').appendChild(thumb);
+}
+function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightbox').classList.add('open'); }
+
+/* ---------- Notes tab (spoken transcript log) ---------- */
+function renderNote(entry) {
+  const wrap = document.getElementById('notesList');
+  const card = document.createElement('div');
+  card.className = 'w-note-entry';
+  card.innerHTML = '<span class="w-note-trade ' + (TRADE_CLASS[entry.trade] || 'tag-general') + '">' + entry.trade + '</span>' + escapeHtml(entry.text) + '<span class="w-note-time">' + entry.time + '</span>';
+  wrap.appendChild(card);
+}
+function renderAllNotes() {
+  const wrap = document.getElementById('notesList');
+  wrap.innerHTML = '';
+  if (!notesLog.length) { wrap.innerHTML = '<div class="w-empty"><span class="big">📝</span>Notes you speak during the walk will show up here.</div>'; return; }
+  notesLog.forEach(renderNote);
+}
+function logNote(text, trade) {
+  const entry = { text: text, trade: trade, time: new Date().toLocaleString() };
+  notesLog.push(entry); persistNotes();
+  const wrap = document.getElementById('notesList');
+  if (wrap.querySelector('.w-empty')) wrap.innerHTML = '';
+  renderNote(entry);
+}
+
+/* ---------- Summary tab (report grouped by trade) ---------- */
+function renderSummary() {
+  const content = document.getElementById('summaryContent');
+  document.getElementById('statPhotos').textContent = photos.length;
+  const allItems = punch.concat(changes, rfis);
+  const openCount = punch.filter(function (p) { return !p.resolved; }).length
+    + changes.filter(function (c) { return c.approval === 'Pending'; }).length
+    + rfis.filter(function (r) { return r.status !== 'Answered'; }).length;
+  document.getElementById('statOpen').textContent = openCount;
+
+  const byTrade = {};
+  allItems.forEach(function (e) { (byTrade[e.trade] = byTrade[e.trade] || []).push(e); });
+  const tradesPresent = Object.keys(byTrade);
+  document.getElementById('statTrades').textContent = tradesPresent.length;
+
+  if (!allItems.length && !photos.length) {
+    content.innerHTML = '<div class="w-empty"><span class="big">📋</span>Run a walk-around and this will fill in automatically, organized by trade.</div>';
+    return;
+  }
+
+  let html = '';
+  tradesPresent.forEach(function (trade) {
+    const items = byTrade[trade];
+    html += '<div class="w-summary-card"><h3><span class="w-trade-dot ' + (TRADE_DOT[trade] || 'dot-general') + '"></span>' + trade + '</h3>';
+    items.forEach(function (e) {
+      const typeLabel = e.status !== undefined ? 'RFI' : (e.approval !== undefined ? 'Change Order' : 'Punch Item');
+      let extra;
+      if (e.status !== undefined) extra = e.status;
+      else if (e.approval !== undefined) extra = (e.costImpact != null ? ('$' + e.costImpact + ' — ') : '') + e.approval;
+      else extra = e.resolved ? 'Resolved' : 'Open';
+      html += '<div class="w-summary-item">' + escapeHtml(e.text) + '<div class="meta">' + typeLabel + ' · ' + extra + '</div></div>';
+    });
+    html += '</div>';
+  });
+  content.innerHTML = html;
+}
+
+/* ---------- Inner Walk-tab sub-navigation (Main / Summary / Notes / Photos) ---------- */
+const WALK_TABS = ['main', 'summary', 'notes', 'photos'];
+function showWalkTab(name) {
+  if (WALK_TABS.indexOf(name) === -1) name = 'main';
+  WALK_TABS.forEach(function (t) {
+    const panel = document.getElementById('walkview-' + t);
+    if (panel) panel.classList.toggle('active', t === name);
+  });
+  document.querySelectorAll('.walk-tab-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-walktab') === name);
+  });
+  if (name === 'summary') renderSummary();
+}
+document.querySelectorAll('.walk-tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () { showWalkTab(btn.getAttribute('data-walktab')); });
+});
 function smsHref(phone, body) { const clean = String(phone || '').replace(/[^\d+]/g, ''); const enc = encodeURIComponent(body); const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent); return 'sms:' + clean + (ios ? '&body=' : '?body=') + enc; }
 function sendEmail(item, typeLabel) { const c = contacts[item.trade] || {}; if (!c.email) { alert('Save an email for ' + item.trade + ' first.'); return; } location.href = 'mailto:' + c.email + '?subject=' + encodeURIComponent('SiteWalk ' + typeLabel) + '&body=' + encodeURIComponent(item.text); }
 function sendText(item, typeLabel) { const c = contacts[item.trade] || {}; if (!c.phone) { alert('Save a phone for ' + item.trade + ' first.'); return; } location.href = smsHref(c.phone, typeLabel + ': ' + item.text); }
@@ -295,7 +381,7 @@ function fileVoiceUtterance(text) {
   text = text.trim();
   if (!text) return;
   const endpoint = currentAiEndpoint();
-  if (!endpoint) { fileEntry(localClassify(text)); return; }
+  if (!endpoint) { const e = fileEntry(localClassify(text)); logNote(e.text, e.trade); return; }
   const headers = { 'Content-Type': 'application/json' };
   const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -307,11 +393,13 @@ function fileVoiceUtterance(text) {
       if (!data || data.error || !data.type) throw new Error((data && data.error) || 'bad response');
       const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
       if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
-      fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costImpact: data.costImpact, verified: true });
+      const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costImpact: data.costImpact, verified: true });
+      logNote(e.text, e.trade);
     })
     .catch(function () {
       if (timer) clearTimeout(timer);
-      fileEntry(localClassify(text));
+      const e = fileEntry(localClassify(text));
+      logNote(e.text, e.trade);
     });
 }
 
@@ -442,10 +530,9 @@ function openWalkCamera() { const video = document.getElementById('walkVideo'); 
 window.startWalk = function () {
   if (walkActive) return;
   walkActive = true;
-  document.getElementById('walkBtn').style.display = 'none';
-  document.getElementById('endWalkBtn').style.display = 'block';
-  var genBtn = document.getElementById('genAfterWalkBtn');
-  if (genBtn) genBtn.style.display = 'none';
+  const btn = document.getElementById('walkBtn');
+  btn.classList.add('recording');
+  btn.innerHTML = 'Stop<br>Walk-Around';
   document.getElementById('walkStage').classList.add('active');
   setWalkStatus('ok', 'Asking for camera and mic…');
   document.getElementById('gpsLabel').textContent = navigator.geolocation ? 'Waiting for GPS…' : 'GPS off';
@@ -464,26 +551,22 @@ window.endWalk = function () {
   walkActive = false;
   stopWalkCamera();
   stopWalkVoice();
-  document.getElementById('walkBtn').style.display = 'block';
-  document.getElementById('endWalkBtn').style.display = 'none';
+  const btn = document.getElementById('walkBtn');
+  btn.classList.remove('recording');
+  btn.innerHTML = 'Start<br>Walk-Around';
   document.getElementById('walkStage').classList.remove('active');
-  setWalkStatus('info', 'Walk ended. Photos and notes stayed on this phone.');
-  var genBtn = document.getElementById('genAfterWalkBtn');
-  if (genBtn) genBtn.style.display = 'block';
+  setWalkStatus('info', 'Walk ended. Check Summary for what was found.');
+  showWalkTab('summary');
 };
-document.getElementById('walkBtn').addEventListener('click', window.startWalk);
-document.getElementById('endWalkBtn').addEventListener('click', window.endWalk);
-var genAfterWalkBtn = document.getElementById('genAfterWalkBtn');
-if (genAfterWalkBtn) {
-  genAfterWalkBtn.addEventListener('click', function () {
-    window.generateReport();
-    genAfterWalkBtn.style.display = 'none';
-    showTab('setup');
-  });
-}
+document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? window.endWalk() : window.startWalk(); });
 document.getElementById('shutterBtn').addEventListener('click', function () { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); });
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; const trade = tradeSelect.value; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const item = { src: src, trade: trade, time: new Date().toLocaleString() }; photos.push(item); persistPhotos(); renderPhoto(item); setWalkStatus('ok', 'Photo tagged as ' + trade + ' (' + photos.length + ' total)'); }); }; r.readAsDataURL(f); } e.target.value = ''; });
+document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
+document.getElementById('lightbox').addEventListener('click', function (e) { if (e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
+function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
+document.getElementById('siteName').addEventListener('blur', persistSiteInfo);
+document.getElementById('siteAddress').addEventListener('blur', persistSiteInfo);
 document.getElementById('addPunchBtn').addEventListener('click', function () { const val = document.getElementById('punchInput').value.trim(); if (!val) return; fileEntry({ text: val, type: 'punch', trade: tradeSelect.value, verified: true, costImpact: null }); document.getElementById('punchInput').value = ''; });
 document.getElementById('saveContactsBtn').addEventListener('click', function () { document.querySelectorAll('#contactFields input').forEach(function (inp) { const trade = inp.getAttribute('data-trade'); const field = inp.getAttribute('data-field'); if (!contacts[trade]) contacts[trade] = { email: '', phone: '' }; contacts[trade][field] = inp.value.trim(); }); persistContacts(); const el = document.getElementById('contactStatus'); el.style.display = 'block'; el.className = 'status ok'; el.textContent = 'Trade contacts saved.'; });
 document.getElementById('addSubBtn').addEventListener('click', function () {
@@ -571,11 +654,18 @@ document.getElementById('genBtn').addEventListener('click', window.generateRepor
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
-  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []);
+  submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
-  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = [];
-  document.getElementById('photos').innerHTML = '';
+  if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
+  const savedSiteName = loadJson(LS.siteName, null);
+  const savedSiteAddress = loadJson(LS.siteAddress, null);
+  if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
+  if (savedSiteAddress) document.getElementById('siteAddress').textContent = savedSiteAddress;
+  document.getElementById('photosGrid').innerHTML = '';
   photos.forEach(renderPhoto);
+  renderAllNotes();
+  renderSummary();
+  showWalkTab('main');
   renderAllItems();
   renderContacts();
   renderSubmittals();

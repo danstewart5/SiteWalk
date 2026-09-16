@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SiteWalk</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./assets/icons/icon-32.png" sizes="32x32">
+<link rel="icon" href="./assets/icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1F4A3D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SiteWalk">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; padding-bottom: 84px; background: #f0f2f5; color: #1a1a1a; }
@@ -25,8 +37,6 @@ button.small { width: auto; display: inline-block; padding: 8px 12px; font-size:
 .status.err { background: #fed7d7; color: #c53030; }
 .status.info { background: #ebf8ff; color: #2b6cb0; }
 select, input[type=text], input[type=password], input[type=email], input[type=tel], textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; margin: 6px 0; }
-.photo-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin: 8px 0; }
-.photo-card img { max-width: 100%; border-radius: 6px; display: block; }
 .trade-tag { display: inline-block; background: #2b6cb0; color: white; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-top: 4px; }
 .type-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 4px; margin-top: 4px; color: white; }
 .type-tag.punch { background: #dd6b20; }
@@ -38,20 +48,125 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
 .report-section img { max-width: 100%; border-radius: 6px; margin: 6px 0; }
 .punch-item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
-.live-transcript { min-height: 40px; padding: 8px; background: #fffbea; border: 1px dashed #d69e2e; border-radius: 6px; font-size: 13px; color: #744210; margin: 6px 0; }
 .item-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
 .item-card .meta { font-size: 11px; color: #718096; margin-top: 4px; }
 .contact-row { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; }
 .contact-row strong { display: block; margin-bottom: 4px; font-size: 14px; }
 .hint { font-size: 12px; color: #666; margin: 0 0 8px 0; }
 .ai-result { white-space: pre-wrap; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; margin-top: 8px; }
-#walkStage { display: none; margin-top: 10px; }
+/* ---------- Walk tab redesign ---------- */
+.walk-redesign {
+  --w-bg: #F7F5F0;
+  --w-card: #EFECE6;
+  --w-primary: #1F4A3D;
+  --w-primary-soft: #2E6350;
+  --w-accent: #D97748;
+  --w-accent-dark: #C1652F;
+  --w-recording: #3F9142;
+  --w-recording-soft: #56A85B;
+  --w-text: #3A342E;
+  --w-text-soft: #7A7167;
+  --w-border: #E1DCD2;
+  margin: -16px;
+  padding: 20px 16px 26px;
+  background: var(--w-bg);
+  border-radius: 12px;
+  color: var(--w-text);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  line-height: 1.55;
+}
+.walk-redesign h1, .walk-redesign h2, .walk-redesign h3 { font-family: 'Nunito', system-ui, sans-serif; font-weight: 800; color: var(--w-primary); letter-spacing: -0.01em; }
+
+.walk-subnav { display: flex; gap: 6px; background: var(--w-card); border-radius: 999px; padding: 4px; margin-bottom: 20px; }
+.walk-tab-btn { flex: 1; border: none; background: none; padding: 9px 4px; border-radius: 999px; font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--w-text-soft); cursor: pointer; }
+.walk-tab-btn.active { background: #fff; color: var(--w-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+
+.walk-view { display: none; }
+.walk-view.active { display: block; }
+
+.w-site-header { margin-bottom: 22px; padding: 0 2px; }
+.w-site-name { font-size: 21px; margin: 0 0 4px 0; color: var(--w-primary); }
+.w-site-address { font-size: 14px; color: var(--w-text-soft); margin: 0; }
+.w-site-header [contenteditable="true"] { outline: none; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.w-site-header [contenteditable="true"]:focus { background: var(--w-card); box-shadow: 0 0 0 2px var(--w-border); }
+.w-hint-edit { font-size: 11px; color: var(--w-text-soft); opacity: .7; margin-top: 4px; }
+
+#walkStage { display: none; margin: 0 0 22px; }
 #walkStage.active { display: block; }
-#walkVideoWrap { background: #111; border-radius: 10px; overflow: hidden; position: relative; }
-#walkVideo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #111; }
+#walkVideoWrap { background: #1F4A3D; border-radius: 22px; overflow: hidden; position: relative; box-shadow: 0 6px 18px rgba(31,74,61,0.18); }
+#walkVideo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #1F4A3D; }
 #walkVideo.hidden-cam { display: none; }
-#shutterBtn { width: 72px; height: 72px; border-radius: 50%; margin: 12px auto; display: block; background: #fff; color: #1a365d; border: 4px solid #1a365d; font-size: 13px; font-weight: 600; padding: 0; }
-#gpsLabel { font-family: ui-monospace, monospace; font-size: 11px; color: #718096; margin: 4px 0 0 0; }
+#shutterBtn { position: absolute; right: 14px; bottom: 14px; width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.95); color: #1F4A3D; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(0,0,0,0.25); padding: 0; margin: 0; }
+#gpsLabel { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--w-text-soft); text-align: center; margin: 8px 0 0; }
+
+.w-record-zone { display: flex; flex-direction: column; align-items: center; margin: 6px 0 20px; }
+#walkBtn { width: 148px; height: 148px; border-radius: 50%; border: none; background: var(--w-accent); color: #fff; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; cursor: pointer; box-shadow: 0 10px 26px rgba(217,119,72,0.35); transition: background .25s ease, box-shadow .25s ease, transform .15s ease; display: flex; align-items: center; justify-content: center; padding: 10px; margin: 0; }
+#walkBtn:active { transform: scale(0.97); }
+#walkBtn.recording { background: var(--w-recording); box-shadow: 0 10px 26px rgba(63,145,66,0.35); animation: w-pulse 1.8s ease-in-out infinite; }
+@keyframes w-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(63,145,66,0.45), 0 10px 26px rgba(63,145,66,0.35); }
+  70%  { box-shadow: 0 0 0 18px rgba(63,145,66,0), 0 10px 26px rgba(63,145,66,0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(63,145,66,0), 0 10px 26px rgba(63,145,66,0.35); }
+}
+.w-walk-status { margin-top: 14px; font-size: 13px; color: var(--w-text-soft); text-align: center; max-width: 300px; }
+.w-walk-status.ok { color: var(--w-primary-soft); }
+.w-walk-status.err { color: var(--w-accent-dark); }
+.w-walk-status.info { color: var(--w-text-soft); }
+
+#walkLiveTranscript { display: none !important; }
+
+.w-fallback-record { display: none; margin: 10px auto 0; background: none; border: 1.5px solid var(--w-accent); color: var(--w-accent-dark); font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; padding: 8px 18px; border-radius: 999px; width: auto; }
+.w-fallback-record.red { border-color: var(--w-recording); color: var(--w-recording); }
+
+.w-trade-row { display: flex; justify-content: center; margin-bottom: 4px; }
+#tradeSelect { appearance: none; border: none; background: transparent; color: var(--w-text-soft); font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; font-weight: 500; padding: 6px 22px 6px 4px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M0 0l4.5 6 4.5-6z' fill='%237A7167'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; cursor: pointer; text-align: center; width: auto; margin: 0; }
+
+.w-summary-overview { display: flex; gap: 10px; margin-bottom: 20px; }
+.w-overview-stat { flex: 1; background: var(--w-card); border-radius: 12px; padding: 12px 10px; text-align: center; border: 1px solid var(--w-border); }
+.w-overview-stat .num { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 20px; color: var(--w-primary); display: block; }
+.w-overview-stat .label { font-size: 10px; color: var(--w-text-soft); text-transform: uppercase; letter-spacing: .04em; }
+.w-summary-card { background: var(--w-card); border-radius: 18px; padding: 16px 18px; margin-bottom: 14px; border: 1px solid var(--w-border); }
+.w-summary-card h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.w-summary-card .w-trade-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.w-summary-item { padding: 9px 0; border-bottom: 1px dashed var(--w-border); font-size: 14px; }
+.w-summary-item:last-child { border-bottom: none; }
+.w-summary-item .meta { font-size: 11px; color: var(--w-text-soft); margin-top: 2px; }
+.w-empty { text-align: center; color: var(--w-text-soft); padding: 50px 16px; font-size: 14px; }
+.w-empty .big { font-size: 30px; display: block; margin-bottom: 10px; }
+
+.w-notes-list { display: flex; flex-direction: column; gap: 10px; }
+.w-note-entry { background: var(--w-card); border-radius: 12px; padding: 13px 16px; border: 1px solid var(--w-border); font-size: 14px; }
+.w-note-entry .w-note-time { font-size: 11px; color: var(--w-text-soft); display: block; margin-top: 6px; }
+.w-note-entry .w-note-trade { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; }
+
+.w-photo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.w-photo-thumb { aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid var(--w-border); background: var(--w-card); cursor: pointer; }
+.w-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.w-photo-thumb .w-thumb-trade { position: absolute; left: 5px; bottom: 5px; background: rgba(31,74,61,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+
+#lightbox { display: none; position: fixed; inset: 0; background: rgba(26,24,21,0.92); z-index: 500; align-items: center; justify-content: center; padding: 24px; }
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 100%; max-height: 80vh; border-radius: 18px; }
+#lightboxClose { position: absolute; top: 22px; right: 22px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 18px; margin: 0; }
+
+.tag-general    { background: #E7E5DE; color: #4A463F; }
+.tag-plumbing   { background: #DCEAEF; color: #2A5A68; }
+.tag-electrical { background: #FBEAC6; color: #7A5A12; }
+.tag-framing    { background: #E9DECB; color: #6B4E24; }
+.tag-drywall    { background: #E6E1EC; color: #564A72; }
+.tag-roofing    { background: #F0DAD2; color: #8A4326; }
+.tag-concrete   { background: #E2E2DE; color: #55564F; }
+.tag-landscaping{ background: #DDEBD6; color: #3C6B2E; }
+.tag-other      { background: #EFE3E6; color: #7A4152; }
+.dot-general    { background: #A9A398; }
+.dot-plumbing   { background: #5B93A3; }
+.dot-electrical { background: #CB9C2E; }
+.dot-framing    { background: #A97F3E; }
+.dot-drywall    { background: #8B7AA8; }
+.dot-roofing    { background: #B4674A; }
+.dot-concrete   { background: #8D8E86; }
+.dot-landscaping{ background: #5F9146; }
+.dot-other      { background: #A66478; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 #bottomNav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; max-width: 640px; margin: 0 auto; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -2px 10px rgba(0,0,0,0.06); z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
@@ -73,36 +188,76 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
 
 <div class="tab-panel active" id="tab-walk">
-<div class="section">
-<h2>🎥 Start Walk-Around</h2>
-<p class="hint">One button: opens the camera, starts AI listening, and auto-tags the trade as you talk. Snap photos as you go — each one is tagged with whatever trade the AI just heard.</p>
-<button id="walkBtn" class="green">Start Walk-Around</button>
-<button id="endWalkBtn" class="red" style="display:none">End Walk</button>
-<button id="genAfterWalkBtn" class="green" style="display:none">Generate Report</button>
-<div id="walkStatus" class="status info">Ready. Tap to begin.</div>
-<div id="walkStage">
-  <div id="walkVideoWrap">
-    <video id="walkVideo" playsinline muted autoplay></video>
+<div class="walk-redesign">
+
+<nav class="walk-subnav">
+  <button class="walk-tab-btn active" data-walktab="main" type="button">Walk</button>
+  <button class="walk-tab-btn" data-walktab="summary" type="button">Summary</button>
+  <button class="walk-tab-btn" data-walktab="notes" type="button">Notes</button>
+  <button class="walk-tab-btn" data-walktab="photos" type="button">Photos</button>
+</nav>
+
+<div class="walk-view active" id="walkview-main">
+  <header class="w-site-header">
+    <h1 class="w-site-name" id="siteName" contenteditable="true" spellcheck="false">Job Site</h1>
+    <p class="w-site-address" id="siteAddress" contenteditable="true" spellcheck="false">Tap to add address</p>
+    <p class="w-hint-edit">Tap either line to edit</p>
+  </header>
+
+  <div id="walkStage">
+    <div id="walkVideoWrap">
+      <video id="walkVideo" playsinline muted autoplay></video>
+      <button id="shutterBtn" type="button" aria-label="Snap photo">📷</button>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+    <p id="gpsLabel"></p>
   </div>
-  <button id="shutterBtn" type="button">Snap</button>
-  <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
-  <p class="hint" style="margin-top:10px">Trade — updates automatically as the AI hears you talk. Tap to override.</p>
-  <select id="tradeSelect">
-  <option value="General">General</option>
-  <option value="Plumbing">Plumbing</option>
-  <option value="Electrical">Electrical</option>
-  <option value="Framing">Framing</option>
-  <option value="Drywall">Drywall</option>
-  <option value="Roofing">Roofing</option>
-  <option value="Concrete">Concrete</option>
-  <option value="Landscaping">Landscaping</option>
-  <option value="Other">Other</option>
-  </select>
-  <button id="walkRecordBtn" type="button" class="orange" style="display:none">🎤 Tap to Record a Note</button>
-  <p id="gpsLabel" class="hint"></p>
-  <div id="walkLiveTranscript" class="live-transcript" style="display:none">Listening…</div>
-  <div id="photos"></div>
+
+  <div class="w-record-zone">
+    <button id="walkBtn" type="button">Start<br>Walk-Around</button>
+    <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
+    <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
+  </div>
+
+  <div class="w-trade-row">
+    <select id="tradeSelect" aria-label="Current trade">
+    <option value="General">General</option>
+    <option value="Plumbing">Plumbing</option>
+    <option value="Electrical">Electrical</option>
+    <option value="Framing">Framing</option>
+    <option value="Drywall">Drywall</option>
+    <option value="Roofing">Roofing</option>
+    <option value="Concrete">Concrete</option>
+    <option value="Landscaping">Landscaping</option>
+    <option value="Other">Other</option>
+    </select>
+  </div>
+
+  <div id="walkLiveTranscript" style="display:none">Listening…</div>
 </div>
+
+<div class="walk-view" id="walkview-summary">
+  <div class="w-summary-overview">
+    <div class="w-overview-stat"><span class="num" id="statPhotos">0</span><span class="label">Photos</span></div>
+    <div class="w-overview-stat"><span class="num" id="statOpen">0</span><span class="label">Open Items</span></div>
+    <div class="w-overview-stat"><span class="num" id="statTrades">0</span><span class="label">Trades</span></div>
+  </div>
+  <div id="summaryContent"></div>
+</div>
+
+<div class="walk-view" id="walkview-notes">
+  <div class="w-notes-list" id="notesList"></div>
+</div>
+
+<div class="walk-view" id="walkview-photos">
+  <div class="w-photo-grid" id="photosGrid"></div>
+</div>
+
+<div id="lightbox">
+  <button id="lightboxClose" type="button" aria-label="Close">✕</button>
+  <img id="lightboxImg" src="" alt="Photo">
+</div>
+
 </div>
 </div>
 
