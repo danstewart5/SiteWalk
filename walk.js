@@ -79,11 +79,27 @@ function dateHeaderLabel(ts) {
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
 }
 
+function deletePhoto(item) {
+  const idx = photos.indexOf(item);
+  if (idx === -1) return;
+  if (!confirm('Delete this photo? This can\'t be undone.')) return;
+  photos.splice(idx, 1);
+  persistPhotos();
+  punch.concat(changes, rfis).forEach(function (e) { if (e.photo === item.src) delete e.photo; });
+  persistLists();
+  renderPhotosTab();
+  renderAllItems();
+  renderSummary();
+}
+
 function buildPhotoThumb(item) {
   const thumb = document.createElement('div');
   thumb.className = 'w-photo-thumb';
-  thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>' + (item.linkedItemText ? '<span class="w-thumb-linked" title="Linked to a punch list item">🔗</span>' : '');
+  thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>'
+    + (item.linkedItemText ? '<span class="w-thumb-linked" title="Linked to a punch list item">🔗</span>' : '')
+    + '<button type="button" class="w-thumb-delete" aria-label="Delete photo">✕</button>';
   thumb.addEventListener('click', function () { openLightbox(item.src); });
+  thumb.querySelector('.w-thumb-delete').addEventListener('click', function (e) { e.stopPropagation(); deletePhoto(item); });
   return thumb;
 }
 
@@ -753,6 +769,32 @@ window.generateReport = function () {
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
+function clearAllData() {
+  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, and your AI Worker setup. This can\'t be undone.')) return;
+  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = [];
+  Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
+  try { localStorage.removeItem('swActiveTab'); } catch (e) { }
+  document.getElementById('siteName').textContent = 'Job Site';
+  document.getElementById('siteAddress').textContent = 'Tap to add address';
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('report').innerHTML = '';
+  renderPhotosTab();
+  renderAllNotes();
+  renderAllItems();
+  renderContacts();
+  renderSubmittals();
+  checkMissedClockOuts();
+  renderClockFlagged();
+  renderClockLog();
+  renderDailyLogs();
+  renderSafetyLogs();
+  renderDashboard();
+  refreshAiStatus();
+  renderSummary();
+  setWalkStatus('info', 'Ready. Tap to begin.');
+  alert('All SiteWalk data cleared.');
+}
+document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
