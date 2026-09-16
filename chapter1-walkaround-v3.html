@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SiteWalk — Walk-Around</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F7F5F0;
+  --card: #EFECE6;
+  --primary: #1F4A3D;
+  --primary-soft: #2E6350;
+  --accent: #D97748;
+  --accent-dark: #C1652F;
+  --recording: #3F9142;
+  --recording-soft: #56A85B;
+  --text: #3A342E;
+  --text-soft: #7A7167;
+  --border: #E1DCD2;
+  --radius-lg: 26px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  line-height: 1.55;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: 92px;
+}
+h1, h2, h3, .heading {
+  font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Tabs ---------- */
+.tab-panel { display: none; padding: 20px 16px 8px; }
+.tab-panel.active { display: block; }
+.tab-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  background: #fff;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(31,74,61,0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 200;
+}
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-soft);
+  padding: 10px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 20px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+}
+.tab-btn span { font-size: 10px; font-weight: 600; }
+.tab-btn.active { color: var(--primary); }
+
+/* ---------- Header ---------- */
+.site-header { margin-bottom: 26px; padding: 4px 2px; }
+.site-name { font-size: 22px; margin: 0 0 4px 0; color: var(--primary); }
+.site-address { font-size: 14px; color: var(--text-soft); margin: 0; }
+.site-header [contenteditable="true"] { outline: none; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.site-header [contenteditable="true"]:focus { background: var(--card); box-shadow: 0 0 0 2px var(--border); }
+.site-header .hint-edit { font-size: 11px; color: var(--text-soft); opacity: .7; margin-top: 4px; }
+
+/* ---------- Camera viewfinder ---------- */
+#walkStage { display: none; margin: 0 0 24px; }
+#walkStage.active { display: block; }
+#walkVideoWrap {
+  background: var(--primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 6px 18px rgba(31,74,61,0.18);
+}
+#walkVideo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--primary); }
+#walkVideo.hidden-cam { display: none; }
+#shutterBtn {
+  position: absolute; right: 14px; bottom: 14px;
+  width: 58px; height: 58px; border-radius: 50%;
+  background: rgba(255,255,255,0.95); color: var(--primary);
+  border: none; font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+}
+#shutterBtn:active { transform: scale(0.94); }
+#gpsLabel { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--text-soft); text-align: center; margin: 8px 0 0; }
+
+/* ---------- Record button ---------- */
+.record-zone { display: flex; flex-direction: column; align-items: center; margin: 8px 0 22px; }
+#walkBtn {
+  width: 160px; height: 160px; border-radius: 50%; border: none;
+  background: var(--accent); color: #fff;
+  font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 18px; line-height: 1.25;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(217,119,72,0.35);
+  transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.15s ease;
+  display: flex; align-items: center; justify-content: center; padding: 10px;
+}
+#walkBtn:active { transform: scale(0.97); }
+#walkBtn.recording { background: var(--recording); box-shadow: 0 10px 26px rgba(63,145,66,0.35); animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(63,145,66,0.45), 0 10px 26px rgba(63,145,66,0.35); }
+  70%  { box-shadow: 0 0 0 18px rgba(63,145,66,0), 0 10px 26px rgba(63,145,66,0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(63,145,66,0), 0 10px 26px rgba(63,145,66,0.35); }
+}
+.walk-status { margin-top: 16px; font-size: 13px; color: var(--text-soft); text-align: center; max-width: 300px; }
+.walk-status.ok { color: var(--primary-soft); }
+.walk-status.err { color: var(--accent-dark); }
+
+/* ---------- Trade chip (tucked under the button, minimal) ---------- */
+.trade-row { display: flex; justify-content: center; margin-bottom: 4px; }
+#tradeSelect {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px; font-weight: 500;
+  padding: 6px 22px 6px 4px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M0 0l4.5 6 4.5-6z' fill='%237A7167'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  cursor: pointer;
+  text-align: center;
+}
+
+/* ---------- Summary tab ---------- */
+.summary-overview { display: flex; gap: 10px; margin-bottom: 20px; }
+.overview-stat { flex: 1; background: var(--card); border-radius: var(--radius-sm); padding: 12px 10px; text-align: center; border: 1px solid var(--border); }
+.overview-stat .num { font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 20px; color: var(--primary); display: block; }
+.overview-stat .label { font-size: 10px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.summary-card { background: var(--card); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 14px; border: 1px solid var(--border); }
+.summary-card h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.summary-card .trade-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.summary-item { padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+.summary-item:last-child { border-bottom: none; }
+.summary-item .meta { font-size: 11px; color: var(--text-soft); margin-top: 2px; }
+.summary-empty { text-align: center; color: var(--text-soft); padding: 60px 20px; font-size: 14px; }
+.summary-empty .big { font-size: 32px; display: block; margin-bottom: 10px; }
+
+/* ---------- Notes tab ---------- */
+.notes-list { display: flex; flex-direction: column; gap: 10px; }
+.note-entry { background: var(--card); border-radius: var(--radius-sm); padding: 13px 16px; border: 1px solid var(--border); font-size: 14px; }
+.note-entry .note-time { font-size: 11px; color: var(--text-soft); display: block; margin-top: 6px; }
+.note-entry .note-trade { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; }
+
+/* ---------- Photos tab ---------- */
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.photo-grid:empty::after { content: 'Photos you snap during the walk will show up here.'; grid-column: 1 / -1; text-align: center; color: var(--text-soft); font-size: 13px; padding: 50px 10px; }
+.photo-thumb { aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid var(--border); background: var(--card); cursor: pointer; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-thumb .thumb-trade { position: absolute; left: 5px; bottom: 5px; background: rgba(31,74,61,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+
+/* ---------- Lightbox ---------- */
+#lightbox { display: none; position: fixed; inset: 0; background: rgba(26,24,21,0.92); z-index: 500; align-items: center; justify-content: center; padding: 24px; }
+#lightbox.open { display: flex; }
+#lightbox img { max-width: 100%; max-height: 80vh; border-radius: var(--radius-md); }
+#lightboxClose { position: absolute; top: 22px; right: 22px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 18px; }
+
+/* ---------- Trade colors (shared) ---------- */
+.tag-general    { background: #E7E5DE; color: #4A463F; }
+.tag-plumbing   { background: #DCEAEF; color: #2A5A68; }
+.tag-electrical { background: #FBEAC6; color: #7A5A12; }
+.tag-framing    { background: #E9DECB; color: #6B4E24; }
+.tag-drywall    { background: #E6E1EC; color: #564A72; }
+.tag-roofing    { background: #F0DAD2; color: #8A4326; }
+.tag-concrete   { background: #E2E2DE; color: #55564F; }
+.tag-landscaping{ background: #DDEBD6; color: #3C6B2E; }
+.tag-other      { background: #EFE3E6; color: #7A4152; }
+.dot-general    { background: #A9A398; }
+.dot-plumbing   { background: #5B93A3; }
+.dot-electrical { background: #CB9C2E; }
+.dot-framing    { background: #A97F3E; }
+.dot-drywall    { background: #8B7AA8; }
+.dot-roofing    { background: #B4674A; }
+.dot-concrete   { background: #8D8E86; }
+.dot-landscaping{ background: #5F9146; }
+.dot-other      { background: #A66478; }
+
+input[type=file] { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ========== MAIN ========== -->
+<div class="tab-panel active" id="tab-main">
+  <header class="site-header">
+    <h1 class="site-name" id="siteName" contenteditable="true" spellcheck="false">Maple Ridge — Lot 14</h1>
+    <p class="site-address" id="siteAddress" contenteditable="true" spellcheck="false">128 Maple Ridge Rd, Concord, NH</p>
+    <p class="hint-edit">Tap either line to edit</p>
+  </header>
+
+  <div id="walkStage">
+    <div id="walkVideoWrap">
+      <video id="walkVideo" playsinline muted autoplay></video>
+      <button id="shutterBtn" type="button" aria-label="Snap photo">📷</button>
+    </div>
+    <p id="gpsLabel"></p>
+  </div>
+
+  <div class="record-zone">
+    <button id="walkBtn" type="button">Start<br>Walk-Around</button>
+    <div id="walkStatus" class="walk-status">Ready. Tap to begin.</div>
+  </div>
+
+  <div class="trade-row">
+    <select id="tradeSelect" aria-label="Current trade">
+      <option value="General">General</option>
+      <option value="Plumbing">Plumbing</option>
+      <option value="Electrical">Electrical</option>
+      <option value="Framing">Framing</option>
+      <option value="Drywall">Drywall</option>
+      <option value="Roofing">Roofing</option>
+      <option value="Concrete">Concrete</option>
+      <option value="Landscaping">Landscaping</option>
+      <option value="Other">Other</option>
+    </select>
+  </div>
+</div>
+
+<!-- ========== SUMMARY ========== -->
+<div class="tab-panel" id="tab-summary">
+  <h2 style="font-size:18px;margin:2px 0 16px">Summary</h2>
+  <div class="summary-overview">
+    <div class="overview-stat"><span class="num" id="statPhotos">0</span><span class="label">Photos</span></div>
+    <div class="overview-stat"><span class="num" id="statOpen">0</span><span class="label">Open Items</span></div>
+    <div class="overview-stat"><span class="num" id="statTrades">0</span><span class="label">Trades</span></div>
+  </div>
+  <div id="summaryContent"></div>
+</div>
+
+<!-- ========== NOTES ========== -->
+<div class="tab-panel" id="tab-notes">
+  <h2 style="font-size:18px;margin:2px 0 16px">Notes</h2>
+  <div class="notes-list" id="notesList"></div>
+</div>
+
+<!-- ========== PHOTOS ========== -->
+<div class="tab-panel" id="tab-photos">
+  <h2 style="font-size:18px;margin:2px 0 16px">Photos</h2>
+  <div class="photo-grid" id="photosGrid"></div>
+</div>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="main" type="button">🎥<span>Walk</span></button>
+  <button class="tab-btn" data-tab="summary" type="button">📋<span>Summary</span></button>
+  <button class="tab-btn" data-tab="notes" type="button">📝<span>Notes</span></button>
+  <button class="tab-btn" data-tab="photos" type="button">🖼️<span>Photos</span></button>
+</nav>
+
+<input type="file" id="photoInput" accept="image/*" capture="environment">
+
+<div id="lightbox">
+  <button id="lightboxClose" type="button" aria-label="Close">✕</button>
+  <img id="lightboxImg" src="" alt="Photo">
+</div>
+
+<script>
+const TAB_NAMES = ['main', 'summary', 'notes', 'photos'];
+function showTab(name) {
+  if (TAB_NAMES.indexOf(name) === -1) name = 'main';
+  TAB_NAMES.forEach(function (t) {
+    const panel = document.getElementById('tab-' + t);
+    if (panel) panel.classList.toggle('active', t === name);
+  });
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
+  });
+  if (name === 'summary') renderSummary();
+}
+document.querySelectorAll('.tab-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
+});
+
+const TRADES = ['General','Plumbing','Electrical','Framing','Drywall','Roofing','Concrete','Landscaping','Other'];
+const TRADE_CLASS = { General:'tag-general', Plumbing:'tag-plumbing', Electrical:'tag-electrical', Framing:'tag-framing', Drywall:'tag-drywall', Roofing:'tag-roofing', Concrete:'tag-concrete', Landscaping:'tag-landscaping', Other:'tag-other' };
+const TRADE_DOT = { General:'dot-general', Plumbing:'dot-plumbing', Electrical:'dot-electrical', Framing:'dot-framing', Drywall:'dot-drywall', Roofing:'dot-roofing', Concrete:'dot-concrete', Landscaping:'dot-landscaping', Other:'dot-other' };
+const LS = { photos:'swPhotos', punch:'swPunch', changes:'swChanges', rfis:'swRfis', notes:'swWalkNotes', aiEndpoint:'swAiEndpoint', aiKey:'swAiKey', siteName:'swJobSiteName', siteAddress:'swJobSiteAddress' };
+let photos = [], punch = [], changes = [], rfis = [], notesLog = [];
+const tradeSelect = document.getElementById('tradeSelect');
+let walkActive = false, walkStream = null, walkGpsWatch = null;
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null, listening = false;
+let mediaRecorder = null, mediaChunks = [], mediaStream = null, recordingNote = false;
+
+function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); if (!raw) return fallback; const p = JSON.parse(raw); return p == null ? fallback : p; } catch (e) { return fallback; } }
+function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { setWalkStatus('err', 'Storage full'); return false; } }
+function persistLists() { saveJson(LS.punch, punch); saveJson(LS.changes, changes); saveJson(LS.rfis, rfis); }
+function persistPhotos() { saveJson(LS.photos, photos); }
+function persistNotes() { saveJson(LS.notes, notesLog); }
+function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'walk-status ' + kind; s.textContent = text; }
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
+
+function compressImage(dataUrl, cb) {
+  const img = new Image();
+  img.onload = function () {
+    let w = img.width, h = img.height, max = 1280;
+    if (w > max) { h = Math.round(h * max / w); w = max; }
+    if (h > max) { w = Math.round(w * max / h); h = max; }
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h);
+    cb(c.toDataURL('image/jpeg', 0.72));
+  };
+  img.onerror = function () { cb(dataUrl); };
+  img.src = dataUrl;
+}
+
+/* ---------- Photos tab ---------- */
+function renderPhoto(item) {
+  const grid = document.getElementById('photosGrid');
+  const thumb = document.createElement('div');
+  thumb.className = 'photo-thumb';
+  thumb.innerHTML = '<img src="' + item.src + '"><span class="thumb-trade">' + item.trade + '</span>';
+  thumb.addEventListener('click', function () { openLightbox(item.src); });
+  grid.appendChild(thumb);
+}
+function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightbox').classList.add('open'); }
+document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
+document.getElementById('lightbox').addEventListener('click', function (e) { if (e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
+
+/* ---------- Notes tab ---------- */
+function renderNote(entry) {
+  const wrap = document.getElementById('notesList');
+  const card = document.createElement('div');
+  card.className = 'note-entry';
+  card.innerHTML = '<span class="note-trade ' + (TRADE_CLASS[entry.trade] || 'tag-general') + '">' + entry.trade + '</span>' + escapeHtml(entry.text) + '<span class="note-time">' + entry.time + '</span>';
+  wrap.appendChild(card);
+}
+function renderAllNotes() {
+  const wrap = document.getElementById('notesList');
+  wrap.innerHTML = '';
+  if (!notesLog.length) { wrap.innerHTML = '<div class="summary-empty"><span class="big">📝</span>Notes you speak during the walk will show up here.</div>'; return; }
+  notesLog.forEach(renderNote);
+}
+function logNote(text, trade) {
+  const entry = { text: text, trade: trade, time: new Date().toLocaleString() };
+  notesLog.push(entry); persistNotes();
+  const wrap = document.getElementById('notesList');
+  if (wrap.querySelector('.summary-empty')) wrap.innerHTML = '';
+  renderNote(entry);
+}
+
+/* ---------- Summary tab ---------- */
+function renderSummary() {
+  const content = document.getElementById('summaryContent');
+  document.getElementById('statPhotos').textContent = photos.length;
+  const allItems = punch.concat(changes, rfis);
+  const openCount = punch.filter(function (p) { return !p.resolved; }).length
+    + changes.filter(function (c) { return c.approval === 'Pending'; }).length
+    + rfis.filter(function (r) { return r.status !== 'Answered'; }).length;
+  document.getElementById('statOpen').textContent = openCount;
+
+  const byTrade = {};
+  allItems.forEach(function (e) { (byTrade[e.trade] = byTrade[e.trade] || []).push(e); });
+  const tradesPresent = Object.keys(byTrade);
+  document.getElementById('statTrades').textContent = tradesPresent.length;
+
+  if (!allItems.length && !photos.length) {
+    content.innerHTML = '<div class="summary-empty"><span class="big">📋</span>Run a walk-around and this will fill in automatically, organized by trade.</div>';
+    return;
+  }
+
+  let html = '';
+  tradesPresent.forEach(function (trade) {
+    const items = byTrade[trade];
+    html += '<div class="summary-card"><h3><span class="trade-dot ' + (TRADE_DOT[trade] || 'dot-general') + '"></span>' + trade + '</h3>';
+    items.forEach(function (e) {
+      const typeLabel = e.status !== undefined ? 'RFI' : (e.approval !== undefined ? 'Change Order' : 'Punch Item');
+      let extra = '';
+      if (e.status !== undefined) extra = e.status;
+      else if (e.approval !== undefined) extra = (e.costImpact != null ? ('$' + e.costImpact + ' — ') : '') + e.approval;
+      else extra = e.resolved ? 'Resolved' : 'Open';
+      html += '<div class="summary-item">' + escapeHtml(e.text) + '<div class="meta">' + typeLabel + ' · ' + extra + '</div></div>';
+    });
+    html += '</div>';
+  });
+  content.innerHTML = html;
+}
+
+function fileEntry(data) {
+  const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), verified: data.verified !== false };
+  if (data.photo) entry.photo = data.photo;
+  let type = data.type;
+  if (type === 'change') { entry.costImpact = typeof data.costImpact === 'number' ? data.costImpact : null; entry.approval = 'Pending'; changes.push(entry); }
+  else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
+  else { type = 'punch'; entry.resolved = false; punch.push(entry); }
+  persistLists();
+  return entry;
+}
+
+function classifyText(text) {
+  const t = text.toLowerCase();
+  if (/rfi|need clarification|waiting on|need to confirm|need info|unclear/.test(t)) return 'rfi';
+  if (/change order|additional cost|extra charge|client wants|owner requested|upcharge|out of scope|billable/.test(t)) return 'change';
+  return 'punch';
+}
+function classifyTrade(text) {
+  const t = text.toLowerCase();
+  if (/plumb|pipe|water heater|drain|faucet|toilet|sink|leak/.test(t)) return 'Plumbing';
+  if (/electric|outlet|breaker|wiring|panel|switch|circuit/.test(t)) return 'Electrical';
+  if (/frame|framing|\bstud\b|joist|truss|header\b/.test(t)) return 'Framing';
+  if (/drywall|sheetrock|\bmud\b|\btape\b/.test(t)) return 'Drywall';
+  if (/\broof\b|shingle|flashing|gutter/.test(t)) return 'Roofing';
+  if (/concrete|\bslab\b|foundation|rebar/.test(t)) return 'Concrete';
+  if (/landscap|\bsod\b|irrigation|grading/.test(t)) return 'Landscaping';
+  return null;
+}
+function localClassify(text) {
+  const guessedTrade = classifyTrade(text);
+  if (guessedTrade) tradeSelect.value = guessedTrade;
+  return { text: text, type: classifyText(text), trade: tradeSelect.value, costImpact: null, verified: false };
+}
+function currentAiEndpoint() { return (localStorage.getItem(LS.aiEndpoint) || '').trim().replace(/\/$/, ''); }
+function currentAiKey() { return (localStorage.getItem(LS.aiKey) || '').trim(); }
+
+function fileVoiceUtterance(text) {
+  text = text.trim();
+  if (!text) return;
+  const endpoint = currentAiEndpoint();
+  if (!endpoint) { const e = fileEntry(localClassify(text)); logNote(e.text, e.trade); return; }
+  const headers = { 'Content-Type': 'application/json' };
+  const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
+  fetch(endpoint + '/classify', { method: 'POST', headers: headers, body: JSON.stringify({ text: text }), signal: controller ? controller.signal : undefined })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (timer) clearTimeout(timer);
+      if (!data || data.error || !data.type) throw new Error((data && data.error) || 'bad response');
+      const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
+      if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
+      const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costImpact: data.costImpact, verified: true });
+      logNote(e.text, e.trade);
+    })
+    .catch(function () {
+      if (timer) clearTimeout(timer);
+      const e = fileEntry(localClassify(text));
+      logNote(e.text, e.trade);
+    });
+}
+
+function snapFromVideo(video) {
+  if (!video || !video.videoWidth) return null;
+  const max = 1280;
+  const scale = Math.min(1, max / Math.max(video.videoWidth, video.videoHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(video.videoWidth * scale); c.height = Math.round(video.videoHeight * scale);
+  const ctx = c.getContext('2d'); if (!ctx) return null;
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.72);
+}
+function saveWalkPhoto(src) {
+  const item = { src: src, trade: tradeSelect.value, time: new Date().toLocaleString() };
+  photos.push(item); persistPhotos(); renderPhoto(item);
+  setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)');
+}
+
+function voiceRecognitionSupported() { return !!SpeechRecognition; }
+function setupRecognition() {
+  if (!SpeechRecognition) return null;
+  const rec = new SpeechRecognition();
+  rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+  rec.onresult = function (event) {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript.trim();
+      if (event.results[i].isFinal && transcript) fileVoiceUtterance(transcript);
+    }
+  };
+  rec.onerror = function (err) { setWalkStatus('err', 'Voice error: ' + (err.error || 'unknown')); };
+  rec.onend = function () { if (listening) { try { rec.start(); } catch (e) { } } };
+  return rec;
+}
+function startListening() { if (!SpeechRecognition || listening) return; recognition = setupRecognition(); listening = true; try { recognition.start(); } catch (e) { } }
+function stopListening() { listening = false; if (recognition) { try { recognition.stop(); } catch (e) { } } }
+
+function recordingSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+function blobToBase64(blob, cb) { const r = new FileReader(); r.onload = function () { const res = r.result; const comma = res.indexOf(','); cb(comma >= 0 ? res.slice(comma + 1) : res); }; r.readAsDataURL(blob); }
+function transcribeAndFile(blob) {
+  const endpoint = currentAiEndpoint();
+  if (!endpoint) { setWalkStatus('err', 'Voice notes need an AI Worker URL configured in Setup.'); return; }
+  setWalkStatus('ok', 'Transcribing…');
+  blobToBase64(blob, function (b64) {
+    const headers = { 'Content-Type': 'application/json' };
+    const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
+    fetch(endpoint + '/transcribe', { method: 'POST', headers: headers, body: JSON.stringify({ audio: b64 }) })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data || data.error) throw new Error((data && data.error) || 'transcribe failed');
+        const text = (data.text || '').trim();
+        if (!text) { setWalkStatus('ok', 'Heard nothing usable. Try again closer to the mic.'); return; }
+        fileVoiceUtterance(text);
+      })
+      .catch(function (err) { setWalkStatus('err', 'Transcribe failed: ' + (err && err.message ? err.message : 'unknown')); });
+  });
+}
+function startRecordingNote() {
+  if (recordingNote || !recordingSupported()) return;
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    mediaStream = stream; mediaChunks = [];
+    const mimeType = (window.MediaRecorder.isTypeSupported && window.MediaRecorder.isTypeSupported('audio/mp4')) ? 'audio/mp4'
+      : (window.MediaRecorder.isTypeSupported && window.MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : '';
+    mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) mediaChunks.push(e.data); };
+    mediaRecorder.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      const blob = new Blob(mediaChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      mediaChunks = [];
+      transcribeAndFile(blob);
+    };
+    mediaRecorder.start(); recordingNote = true;
+  }).catch(function () { setWalkStatus('err', 'Mic permission denied or unavailable.'); });
+}
+function stopRecordingNote() { if (!recordingNote) return; recordingNote = false; try { mediaRecorder.stop(); } catch (e) { } }
+
+function startWalkVoice() {
+  if (voiceRecognitionSupported()) startListening();
+  else startRecordingNote();
+}
+function stopWalkVoice() {
+  if (voiceRecognitionSupported()) stopListening();
+  else if (recordingNote) stopRecordingNote();
+}
+function stopWalkCamera() {
+  if (walkStream) { walkStream.getTracks().forEach(function (t) { t.stop(); }); walkStream = null; }
+  const video = document.getElementById('walkVideo');
+  video.srcObject = null; video.classList.add('hidden-cam');
+  if (walkGpsWatch != null && navigator.geolocation) { navigator.geolocation.clearWatch(walkGpsWatch); walkGpsWatch = null; }
+}
+function getWalkStream() {
+  const dims = { width: { ideal: 1280 }, height: { ideal: 720 } };
+  return navigator.mediaDevices.getUserMedia({ video: Object.assign({ facingMode: { exact: 'environment' } }, dims), audio: false })
+    .catch(function () { return navigator.mediaDevices.getUserMedia({ video: Object.assign({ facingMode: 'environment' }, dims), audio: false }); })
+    .catch(function () { return navigator.mediaDevices.getUserMedia({ video: true, audio: false }); });
+}
+function openWalkCamera() {
+  const video = document.getElementById('walkVideo');
+  video.classList.remove('hidden-cam');
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    video.classList.add('hidden-cam');
+    setWalkStatus('ok', 'Live camera needs HTTPS. Tap the camera icon to add a photo.');
+    return Promise.resolve(false);
+  }
+  return getWalkStream().then(function (stream) {
+    walkStream = stream;
+    video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true');
+    video.muted = true; video.playsInline = true; video.srcObject = stream;
+    return video.play().then(function () { return true; }).catch(function () { return true; });
+  }).catch(function () {
+    video.classList.add('hidden-cam');
+    setWalkStatus('ok', 'Live camera unavailable. Tap the camera icon to add a photo.');
+    return false;
+  });
+}
+
+window.startWalk = function () {
+  if (walkActive) return;
+  walkActive = true;
+  const btn = document.getElementById('walkBtn');
+  btn.classList.add('recording');
+  btn.innerHTML = 'Stop<br>Walk-Around';
+  document.getElementById('walkStage').classList.add('active');
+  setWalkStatus('ok', 'Asking for camera and mic…');
+  document.getElementById('gpsLabel').textContent = navigator.geolocation ? 'Waiting for GPS…' : '';
+  if (navigator.geolocation) {
+    walkGpsWatch = navigator.geolocation.watchPosition(function (pos) {
+      document.getElementById('gpsLabel').textContent = pos.coords.latitude.toFixed(5) + ', ' + pos.coords.longitude.toFixed(5);
+    }, function (err) { document.getElementById('gpsLabel').textContent = err.message || 'GPS unavailable'; }, { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 });
+  }
+  openWalkCamera().then(function (live) {
+    startWalkVoice();
+    if (live) setWalkStatus('ok', 'Walk live — camera + AI listening. Snap photos as you go.');
+    else if (walkActive) setWalkStatus('ok', 'Walk live. Tap the camera icon for photos.');
+  });
+};
+window.endWalk = function () {
+  walkActive = false;
+  stopWalkCamera(); stopWalkVoice();
+  const btn = document.getElementById('walkBtn');
+  btn.classList.remove('recording');
+  btn.innerHTML = 'Start<br>Walk-Around';
+  document.getElementById('walkStage').classList.remove('active');
+  setWalkStatus('ok', 'Walk ended. Check Summary for what was found.');
+  renderSummary();
+};
+document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? window.endWalk() : window.startWalk(); });
+document.getElementById('shutterBtn').addEventListener('click', function () {
+  const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null;
+  if (fromLive) { saveWalkPhoto(fromLive); return; }
+  document.getElementById('photoInput').click();
+});
+document.getElementById('photoInput').addEventListener('change', function (e) {
+  const files = e.target.files; if (!files || !files.length) return;
+  for (let f of files) {
+    const r = new FileReader();
+    r.onload = function (ev) { compressImage(ev.target.result, function (src) { saveWalkPhoto(src); }); };
+    r.readAsDataURL(f);
+  }
+  e.target.value = '';
+});
+
+function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
+document.getElementById('siteName').addEventListener('blur', persistSiteInfo);
+document.getElementById('siteAddress').addEventListener('blur', persistSiteInfo);
+
+window.addEventListener('load', function () {
+  photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); notesLog = loadJson(LS.notes, []);
+  if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = []; if (!Array.isArray(notesLog)) notesLog = [];
+  const savedName = loadJson(LS.siteName, null); const savedAddr = loadJson(LS.siteAddress, null);
+  if (savedName) document.getElementById('siteName').textContent = savedName;
+  if (savedAddr) document.getElementById('siteAddress').textContent = savedAddr;
+  document.getElementById('photosGrid').innerHTML = '';
+  photos.forEach(renderPhoto);
+  renderAllNotes();
+  renderSummary();
+  showTab('main');
+});
+</script>
+</body>
+</html>
