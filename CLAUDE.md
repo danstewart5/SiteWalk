@@ -13,7 +13,7 @@ Do not use Grok sandbox preview URLs.
 
 ## What the live app actually does (as of 2026-09-14)
 
-Tapping **Start Walk-Around** is the one entry point: opens the rear camera live, starts AI voice listening, and auto-tags the current trade from what it hears (Cloudflare Worker `/classify` when a Worker URL is configured, a local keyword heuristic offline). Tap **Snap** to take a photo — it inherits whatever trade the AI just heard. Tap **End Walk** and it asks "Generate the report now?" (yes/no).
+Tapping **Start Walk-Around** is the one entry point: opens the rear camera live, starts AI voice listening, and auto-tags the current trade from what it hears (Cloudflare Worker `/classify` when a Worker URL is configured, a local keyword heuristic offline). Tap **Snap** to take a photo — it inherits whatever trade the AI just heard. Tap **End Walk** and a **Generate Report** button appears in its place — tap it whenever you're ready and it jumps to the Setup tab where the report is displayed.
 
 UI is five tabs behind a fixed bottom nav (phone-app style, not one long scrolling page):
 
