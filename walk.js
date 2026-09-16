@@ -40,12 +40,106 @@ function persistNotes() { saveJson(LS.notes, notesLog); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'w-walk-status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
-function renderPhoto(item) {
+const PHOTO_LINK_WINDOW_MS = 60000;
+function photoTs(item) { return item.ts || Date.parse(item.time) || 0; }
+
+// Auto-links a snapped photo to whatever trade issue was just filed by voice
+// (or vice versa), within a short time window, so tapping a punch list item
+// shows its related photo instead of keeping the two lists disconnected.
+function tryLinkPhotoToRecentItem(photo) {
+  const candidates = punch.concat(changes, rfis).filter(function (e) {
+    const dt = photo.ts - (e.ts || 0);
+    return !e.photo && dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS;
+  }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  if (!candidates.length) return false;
+  candidates[0].photo = photo.src;
+  photo.linkedItemText = candidates[0].text;
+  persistLists(); persistPhotos(); renderAllItems();
+  return true;
+}
+function tryLinkItemToRecentPhoto(entry) {
+  const candidates = photos.filter(function (p) {
+    const dt = entry.ts - (p.ts || 0);
+    return !p.linkedItemText && dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS;
+  }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  if (!candidates.length) return false;
+  entry.photo = candidates[0].src;
+  candidates[0].linkedItemText = entry.text;
+  persistLists(); persistPhotos();
+  return true;
+}
+
+function dateHeaderLabel(ts) {
+  const d = new Date(ts);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const that = new Date(d); that.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today - that) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+}
+
+function buildPhotoThumb(item) {
   const thumb = document.createElement('div');
   thumb.className = 'w-photo-thumb';
-  thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>';
+  thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>' + (item.linkedItemText ? '<span class="w-thumb-linked" title="Linked to a punch list item">🔗</span>' : '');
   thumb.addEventListener('click', function () { openLightbox(item.src); });
-  document.getElementById('photosGrid').appendChild(thumb);
+  return thumb;
+}
+
+let photoFilterTrade = 'All';
+function renderPhotoTradeFilters() {
+  const wrap = document.getElementById('photoTradeFilters');
+  if (!wrap) return;
+  const present = [];
+  photos.forEach(function (p) { if (present.indexOf(p.trade) === -1) present.push(p.trade); });
+  let html = '<button type="button" class="w-filter-pill' + (photoFilterTrade === 'All' ? ' active' : '') + '" data-trade="All">All</button>';
+  present.forEach(function (t) {
+    html += '<button type="button" class="w-filter-pill' + (photoFilterTrade === t ? ' active' : '') + '" data-trade="' + t + '">' + t + '</button>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.w-filter-pill').forEach(function (btn) {
+    btn.addEventListener('click', function () { photoFilterTrade = btn.getAttribute('data-trade'); renderPhotosTab(); });
+  });
+}
+
+// Full rebuild (not incremental append) so photos regroup into date sections
+// and re-filter correctly whenever the search box, trade pill, or the photo
+// list itself changes.
+function renderPhotosTab() {
+  renderPhotoTradeFilters();
+  const grid = document.getElementById('photosGrid');
+  const searchInput = document.getElementById('photoSearch');
+  const search = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  let list = photos.slice().sort(function (a, b) { return photoTs(a) - photoTs(b); });
+  if (photoFilterTrade !== 'All') list = list.filter(function (p) { return p.trade === photoFilterTrade; });
+  if (search) list = list.filter(function (p) {
+    return p.trade.toLowerCase().indexOf(search) !== -1 || (p.linkedItemText && p.linkedItemText.toLowerCase().indexOf(search) !== -1);
+  });
+
+  grid.innerHTML = '';
+  if (!list.length) {
+    grid.innerHTML = '<div class="w-empty"><span class="big">🖼️</span>' + (photos.length ? 'No photos match.' : 'Photos you snap during the walk will show up here.') + '</div>';
+    return;
+  }
+
+  const groups = [];
+  list.slice().reverse().forEach(function (item) {
+    const label = dateHeaderLabel(photoTs(item));
+    let g = groups[groups.length - 1];
+    if (!g || g.label !== label) { g = { label: label, items: [] }; groups.push(g); }
+    g.items.push(item);
+  });
+  groups.forEach(function (g) {
+    const header = document.createElement('div');
+    header.className = 'w-timeline-date';
+    header.textContent = g.label;
+    grid.appendChild(header);
+    const row = document.createElement('div');
+    row.className = 'w-photo-grid';
+    g.items.slice().reverse().forEach(function (item) { row.appendChild(buildPhotoThumb(item)); });
+    grid.appendChild(row);
+  });
 }
 function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightbox').classList.add('open'); }
 
@@ -120,6 +214,7 @@ function showWalkTab(name) {
     btn.classList.toggle('active', btn.getAttribute('data-walktab') === name);
   });
   if (name === 'summary') renderSummary();
+  if (name === 'photos') renderPhotosTab();
 }
 document.querySelectorAll('.walk-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showWalkTab(btn.getAttribute('data-walktab')); });
@@ -138,7 +233,8 @@ function renderItemCard(entry, type) {
   if (entry.photo) {
     const img = document.createElement('img');
     img.src = entry.photo;
-    img.style.cssText = 'max-width:140px;display:block;margin-top:6px;border-radius:6px';
+    img.style.cssText = 'max-width:140px;display:block;margin-top:6px;border-radius:6px;cursor:pointer';
+    img.addEventListener('click', function () { openLightbox(entry.photo); });
     card.appendChild(img);
   }
   const meta = document.createElement('div');
@@ -333,12 +429,13 @@ function renderDashboard() {
 
 // type: 'punch' | 'change' | 'rfi'
 function fileEntry(data) {
-  const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), verified: data.verified !== false };
+  const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), verified: data.verified !== false };
   if (data.photo) entry.photo = data.photo;
   let type = data.type;
   if (type === 'change') { entry.costImpact = typeof data.costImpact === 'number' ? data.costImpact : null; entry.approval = 'Pending'; changes.push(entry); }
   else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
   else { type = 'punch'; entry.resolved = false; punch.push(entry); }
+  if (!entry.photo) tryLinkItemToRecentPhoto(entry);
   persistLists();
   renderItemCard(entry, type);
   renderDashboard();
@@ -404,7 +501,7 @@ function fileVoiceUtterance(text) {
 }
 
 function snapFromVideo(video) { if (!video || !video.videoWidth) return null; const max = 1280; const scale = Math.min(1, max / Math.max(video.videoWidth, video.videoHeight)); const c = document.createElement('canvas'); c.width = Math.round(video.videoWidth * scale); c.height = Math.round(video.videoHeight * scale); const ctx = c.getContext('2d'); if (!ctx) return null; ctx.drawImage(video, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.72); }
-function saveWalkPhoto(src) { const item = { src: src, trade: tradeSelect.value, time: new Date().toLocaleString() }; photos.push(item); persistPhotos(); renderPhoto(item); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); }
+function saveWalkPhoto(src) { const item = { src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now() }; photos.push(item); tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); }
 
 // --- Voice: continuous SpeechRecognition where available ---
 function voiceRecognitionSupported() { return !!SpeechRecognition; }
@@ -561,9 +658,11 @@ window.endWalk = function () {
   showWalkTab('summary');
 };
 document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? window.endWalk() : window.startWalk(); });
-document.getElementById('shutterBtn').addEventListener('click', function () { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); });
+function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); }
+document.getElementById('shutterBtn').addEventListener('click', takePhoto);
+document.getElementById('mainPhotoBtn').addEventListener('click', takePhoto);
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
-document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; const trade = tradeSelect.value; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const item = { src: src, trade: trade, time: new Date().toLocaleString() }; photos.push(item); persistPhotos(); renderPhoto(item); setWalkStatus('ok', 'Photo tagged as ' + trade + ' (' + photos.length + ' total)'); }); }; r.readAsDataURL(f); } e.target.value = ''; });
+document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, saveWalkPhoto); }; r.readAsDataURL(f); } e.target.value = ''; });
 document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
 document.getElementById('lightbox').addEventListener('click', function (e) { if (e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
 function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
@@ -663,8 +762,9 @@ window.addEventListener('load', function () {
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
   if (savedSiteAddress) document.getElementById('siteAddress').textContent = savedSiteAddress;
-  document.getElementById('photosGrid').innerHTML = '';
-  photos.forEach(renderPhoto);
+  renderPhotosTab();
+  const photoSearchEl = document.getElementById('photoSearch');
+  if (photoSearchEl) photoSearchEl.addEventListener('input', renderPhotosTab);
   renderAllNotes();
   renderSummary();
   showWalkTab('main');

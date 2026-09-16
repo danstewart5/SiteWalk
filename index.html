@@ -13,6 +13,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="SiteWalk">
+<meta name="description" content="One button opens the camera and starts listening. Walk the site, talk naturally — SiteWalk auto-tags photos and punch list items by trade as you go.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://danstewart5.github.io/SiteWalk/">
+<meta property="og:title" content="SiteWalk">
+<meta property="og:description" content="One button opens the camera and starts listening. Walk the site, talk naturally — SiteWalk auto-tags photos and punch list items by trade as you go.">
+<meta property="og:image" content="https://danstewart5.github.io/SiteWalk/assets/photos/og-preview.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SiteWalk">
+<meta name="twitter:description" content="One button opens the camera and starts listening. Walk the site, talk naturally — SiteWalk auto-tags photos and punch list items by trade as you go.">
+<meta name="twitter:image" content="https://danstewart5.github.io/SiteWalk/assets/photos/og-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -103,6 +115,10 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #gpsLabel { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--w-text-soft); text-align: center; margin: 8px 0 0; }
 
 .w-record-zone { display: flex; flex-direction: column; align-items: center; margin: 6px 0 20px; position: relative; z-index: 2; }
+.w-record-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
+.w-photo-btn { width: 84px; height: 84px; border-radius: 50%; border: 2px solid var(--w-primary); background: #fff; color: var(--w-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 26px; padding: 0; margin: 0; cursor: pointer; box-shadow: 0 6px 16px rgba(31,74,61,0.16); }
+.w-photo-btn span { font-size: 10px; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif; text-transform: uppercase; letter-spacing: .03em; }
+.w-photo-btn:active { transform: scale(0.95); }
 #walkBtn { width: 148px; height: 148px; border-radius: 50%; border: none; background: var(--w-accent); color: #fff; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; cursor: pointer; box-shadow: 0 10px 26px rgba(217,119,72,0.35); transition: background .25s ease, box-shadow .25s ease, transform .15s ease; display: flex; align-items: center; justify-content: center; padding: 10px; margin: 0; }
 #walkBtn:active { transform: scale(0.97); }
 #walkBtn.recording { background: var(--w-recording); box-shadow: 0 10px 26px rgba(63,145,66,0.35); animation: w-pulse 1.8s ease-in-out infinite; }
@@ -141,10 +157,18 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-note-entry .w-note-time { font-size: 11px; color: var(--w-text-soft); display: block; margin-top: 6px; }
 .w-note-entry .w-note-trade { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; }
 
+.w-photo-controls { margin-bottom: 6px; }
+#photoSearch { width: 100%; border: 1.5px solid var(--w-border); border-radius: 999px; background: #fff; color: var(--w-text); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; padding: 10px 16px; margin: 0 0 10px; }
+.w-photo-trade-filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; }
+.w-filter-pill { flex: 0 0 auto; border: 1.5px solid var(--w-border); background: #fff; color: var(--w-text-soft); font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; width: auto; margin: 0; cursor: pointer; }
+.w-filter-pill.active { background: var(--w-primary); border-color: var(--w-primary); color: #fff; }
+.w-timeline-date { font-size: 12px; font-weight: 700; color: var(--w-text-soft); text-transform: uppercase; letter-spacing: .06em; margin: 18px 2px 10px; }
+.w-timeline-date:first-child { margin-top: 0; }
 .w-photo-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
 .w-photo-thumb { aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid var(--w-border); background: var(--w-card); cursor: pointer; }
 .w-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .w-photo-thumb .w-thumb-trade { position: absolute; left: 5px; bottom: 5px; background: rgba(31,74,61,0.85); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px; }
+.w-photo-thumb .w-thumb-linked { position: absolute; right: 5px; top: 5px; background: rgba(217,119,72,0.92); color: #fff; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 #lightbox { display: none; position: fixed; inset: 0; background: rgba(26,24,21,0.92); z-index: 500; align-items: center; justify-content: center; padding: 24px; }
 #lightbox.open { display: flex; }
@@ -220,7 +244,10 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
   </div>
 
   <div class="w-record-zone">
-    <button id="walkBtn" type="button">Start<br>Walk-Around</button>
+    <div class="w-record-row">
+      <button id="walkBtn" type="button">Start<br>Walk-Around</button>
+      <button id="mainPhotoBtn" type="button" class="w-photo-btn" aria-label="Take a photo">📷<span>Photo</span></button>
+    </div>
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
   </div>
@@ -254,12 +281,11 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 
 <div class="walk-view" id="walkview-photos">
-  <div class="w-photo-grid" id="photosGrid"></div>
-</div>
-
-<div id="lightbox">
-  <button id="lightboxClose" type="button" aria-label="Close">✕</button>
-  <img id="lightboxImg" src="" alt="Photo">
+  <div class="w-photo-controls">
+    <input type="text" id="photoSearch" placeholder="Search by trade or item...">
+    <div class="w-photo-trade-filters" id="photoTradeFilters"></div>
+  </div>
+  <div id="photosGrid"></div>
 </div>
 
 </div>
@@ -360,6 +386,10 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button class="nav-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
 <button class="nav-btn" data-tab="more" type="button">⋯<span>More</span></button>
 </nav>
+<div id="lightbox">
+  <button id="lightboxClose" type="button" aria-label="Close">✕</button>
+  <img id="lightboxImg" src="" alt="Photo">
+</div>
 <script src="./walk.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
