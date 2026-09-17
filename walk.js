@@ -1004,7 +1004,14 @@ window.generateReport = function () {
   const trades = {};
   photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + new Date().toLocaleString() + '</div>';
-  Object.keys(trades).forEach(function (t) { html += '<div class="report-section"><h3>' + t + '</h3>'; trades[t].forEach(function (p) { html += '<img src="' + p.src + '">'; }); html += '</div>'; });
+  Object.keys(trades).forEach(function (t) {
+    html += '<div class="report-section"><h3>' + t + '</h3>';
+    trades[t].forEach(function (p) {
+      html += '<img src="' + p.src + '">';
+      html += '<div class="punch-item"><span class="trade-tag">' + escapeHtml(p.trade) + '</span> ' + escapeHtml(p.linkedItemText || '(no description)') + '</div>';
+    });
+    html += '</div>';
+  });
   function sect(title, arr, extra) {
     if (!arr.length) return '';
     let h = '<div class="report-section"><h3>' + title + '</h3>';
