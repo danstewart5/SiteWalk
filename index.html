@@ -30,7 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; padding-bottom: 84px; background: #f0f2f5; color: #1a1a1a; }
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
 .container { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 h1 { color: #1a365d; margin: 0 0 4px 0; font-size: 22px; }
 .subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
@@ -209,14 +209,15 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .tab-panel.active { display: block; }
 .container:has(#tab-walk.active) > h1,
 .container:has(#tab-walk.active) > .subtitle { display: none; }
-#bottomNav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; max-width: 640px; margin: 0 auto; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -2px 10px rgba(0,0,0,0.06); z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
-.nav-btn { flex: 1; background: none; border: none; color: #718096; padding: 8px 2px 6px; margin: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 20px; cursor: pointer; }
-.nav-btn span { font-size: 10px; font-weight: 600; }
-.nav-btn.active { color: #2b6cb0; }
+#topNav { display: flex; gap: 2px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px 2px 10px; margin: 0 0 10px; border-bottom: 1px solid #e2e8f0; }
+#topNav::-webkit-scrollbar { display: none; }
+.top-tab-btn { flex: 0 0 auto; background: none; border: none; color: #718096; padding: 8px 10px 6px; margin: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 18px; cursor: pointer; border-radius: 8px; }
+.top-tab-btn span { font-size: 9px; font-weight: 600; white-space: nowrap; }
+.top-tab-btn.active { color: #1F4A3D; background: #e7f0ec; }
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -226,6 +227,24 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <div class="container">
 <h1>📍 SiteWalk</h1>
 <p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
+
+<nav id="topNav">
+<button class="top-tab-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
+<button class="top-tab-btn" data-tab="punch" type="button">✅<span>Punch List</span></button>
+<button class="top-tab-btn" data-tab="changes" type="button">📝<span>Change Orders</span></button>
+<button class="top-tab-btn" data-tab="rfis" type="button">❓<span>RFIs</span></button>
+<button class="top-tab-btn" data-tab="submittals" type="button">📄<span>Submittals</span></button>
+<button class="top-tab-btn" data-tab="safety" type="button">⚠️<span>Safety Log</span></button>
+<button class="top-tab-btn" data-tab="clock" type="button">⏱<span>Clock In/Out</span></button>
+<button class="top-tab-btn" data-tab="dailylog" type="button">📆<span>Daily Log</span></button>
+<button class="top-tab-btn" data-tab="jobcost" type="button">💰<span>Job Cost</span></button>
+<button class="top-tab-btn" data-tab="drawingrefs" type="button">📐<span>Drawing Refs</span></button>
+<button class="top-tab-btn" data-tab="drawings" type="button">🗂️<span>Drawings</span></button>
+<button class="top-tab-btn" data-tab="dashboard" type="button">📊<span>Dashboard</span></button>
+<button class="top-tab-btn" data-tab="contacts" type="button">👥<span>Contacts</span></button>
+<button class="top-tab-btn" data-tab="setup" type="button">⚙️<span>Setup</span></button>
+<button class="top-tab-btn" data-tab="report" type="button">📋<span>Report</span></button>
+</nav>
 
 <div class="tab-panel active" id="tab-walk">
 <div class="walk-redesign">
@@ -307,8 +326,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 </div>
 
-<div class="tab-panel" id="tab-more">
-<p class="subtitle" style="margin-top:-8px">Items, time, dashboard &amp; setup</p>
+<div class="tab-panel" id="tab-punch">
 <div class="section">
 <h2>✅ Punch List</h2>
 <input type="text" id="punchInput" placeholder="Add issue manually... e.g. Missing outlet cover in master bath">
@@ -317,11 +335,17 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addPunchBtn" class="orange">Add to Punch List</button>
 <div id="punchList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-drawingrefs">
 <div class="section">
 <h2>📐 Drawing References</h2>
 <p class="hint">Mention a sheet or drawing number while talking during a walk (e.g. "see sheet A-101") and it's tagged here automatically.</p>
 <div id="drawingRefList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-drawings">
 <div class="section">
 <h2>🗂️ Drawings &amp; Plans</h2>
 <p class="hint">Upload a photo of a drawing or plan sheet so drawing references above can point at something real. No analysis yet — just storage and viewing.</p>
@@ -330,14 +354,23 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="uploadDrawingBtn" class="orange">Upload Drawing</button>
 <div id="drawingsList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-changes">
 <div class="section">
 <h2>📝 Change Orders</h2>
 <div id="changeList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-rfis">
 <div class="section">
 <h2>❓ RFIs</h2>
 <div id="rfiList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-submittals">
 <div class="section">
 <h2>📄 Submittals</h2>
 <input type="text" id="subItem" placeholder="e.g. Kitchen cabinet shop drawings">
@@ -345,6 +378,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addSubBtn" class="orange">Add Submittal</button>
 <div id="subList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-safety">
 <div class="section">
 <h2>⚠️ Safety Log</h2>
 <select id="safetyType">
@@ -358,6 +394,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addSafetyBtn" class="red">Log Incident</button>
 <div id="safetyList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-clock">
 <div class="section">
 <h2>⏱ Clock In/Out</h2>
 <p class="hint">Manual clock in/out. Flags a review if 16+ hours pass with no matching clock-out.</p>
@@ -368,6 +407,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <div id="clockFlagged"></div>
 <div id="clockLog"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-dailylog">
 <div class="section">
 <h2>📆 Daily Log</h2>
 <input type="date" id="logDate">
@@ -382,6 +424,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="addLogBtn" class="orange">Save Daily Log</button>
 <div id="logList"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-jobcost">
 <div class="section">
 <h2>💰 Job Cost Dashboard</h2>
 <p class="hint">Real-time running cost for this job site — labor (from Clock In/Out) plus supplies/materials, tracked against budget.</p>
@@ -399,10 +444,16 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="saveBudgetBtn" class="gray">Save Budget</button>
 <div id="budgetSummary"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-dashboard">
 <div class="section">
 <h2>📊 Open Items Dashboard</h2>
 <div id="dashboard"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-contacts">
 <div class="section">
 <h2>👥 Trade Contacts</h2>
 <p class="hint">Save an email and/or phone per trade. Email Trade / Text Trade on an item opens your own Mail or Messages app.</p>
@@ -410,6 +461,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <button id="saveContactsBtn" class="green">Save Trade Contacts</button>
 <div id="contactStatus" class="status info" style="display:none"></div>
 </div>
+</div>
+
+<div class="tab-panel" id="tab-setup">
 <div class="section">
 <h2>🔍 AI Worker Setup</h2>
 <p class="hint">This one Worker URL powers three things: voice classification (Punch/Change Order/RFI + trade), voice transcription on phones without built-in speech recognition, and this AI Code-Check Photo button. Shared key stays on this phone only.</p>
@@ -421,12 +475,6 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
 <div id="aiResult" class="ai-result" style="display:none"></div>
 </div>
-<div class="section" id="reportSection">
-<h2>📋 Report</h2>
-<button id="genBtn" class="green">Generate Report</button>
-<button id="printBtn" class="gray">Print Report</button>
-<div id="report"></div>
-</div>
 <div class="section">
 <h2>🗑️ Reset App</h2>
 <p class="hint">Permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup from this phone. This can't be undone.</p>
@@ -434,11 +482,16 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 </div>
 
+<div class="tab-panel" id="tab-report">
+<div class="section" id="reportSection">
+<h2>📋 Report</h2>
+<button id="genBtn" class="green">Generate Report</button>
+<button id="printBtn" class="gray">Print Report</button>
+<div id="report"></div>
 </div>
-<nav id="bottomNav">
-<button class="nav-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
-<button class="nav-btn" data-tab="more" type="button">⋯<span>More</span></button>
-</nav>
+</div>
+
+</div>
 <div id="lightbox">
   <button id="lightboxClose" type="button" aria-label="Close">✕</button>
   <img id="lightboxImg" src="" alt="Photo">
