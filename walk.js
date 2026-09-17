@@ -15,8 +15,8 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [];
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 };
 const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
@@ -37,6 +37,9 @@ function persistClock() { saveJson(LS.clockEvents, clockEvents); }
 function persistDailyLogs() { saveJson(LS.dailyLogs, dailyLogs); }
 function persistSafety() { saveJson(LS.safety, safetyLogs); }
 function persistNotes() { saveJson(LS.notes, notesLog); }
+function persistWages() { saveJson(LS.wages, wages); }
+function persistMaterials() { saveJson(LS.materials, materials); }
+function persistBudget() { saveJson(LS.budget, budget); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'w-walk-status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
@@ -394,6 +397,7 @@ function renderClockFlagged() {
       clockEvents.push({ employee: e.employee, site: e.site, type: 'out', time: correction || new Date().toLocaleString(), flagged: false });
       e.flagged = false;
       persistClock(); checkMissedClockOuts(); renderClockFlagged(); renderClockLog(); renderDashboard();
+      renderLaborCost(); renderBudgetSummary();
     };
     card.appendChild(btn);
     wrap.appendChild(card);
@@ -461,6 +465,92 @@ function renderDashboard() {
   wrap.innerHTML = '<table style="width:100%;border-collapse:collapse">' + rows.map(function (r) {
     return '<tr><td style="padding:6px">' + r[0] + '</td><td style="padding:6px;text-align:right;font-weight:bold">' + r[1] + '</td></tr>';
   }).join('') + '</table>';
+}
+
+/* ---------- Job Cost Dashboard: labor, materials, budget vs actual ---------- */
+// Pairs each employee's in/out clock events chronologically into worked
+// hours; an unmatched trailing "in" counts as hours worked so far (the
+// "real-time" part of the running cost), not just completed shifts.
+function laborCostByEmployee() {
+  const byEmployee = {};
+  clockEvents.forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
+  return Object.keys(byEmployee).sort().map(function (name) {
+    const events = byEmployee[name].slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+    let hours = 0, active = false, lastIn = null;
+    events.forEach(function (e) {
+      if (e.type === 'in') { lastIn = new Date(e.time).getTime(); }
+      else if (e.type === 'out' && lastIn != null) { hours += (new Date(e.time).getTime() - lastIn) / 3600000; lastIn = null; }
+    });
+    if (lastIn != null) { active = true; hours += (Date.now() - lastIn) / 3600000; }
+    const rate = wages[name] || 0;
+    return { name: name, hours: hours, active: active, rate: rate, cost: hours * rate };
+  });
+}
+function totalLaborCost() { return laborCostByEmployee().reduce(function (sum, r) { return sum + r.cost; }, 0); }
+function totalMaterialsCost() { return materials.reduce(function (sum, m) { return sum + (m.cost || 0); }, 0); }
+
+function renderLaborCost() {
+  const wrap = document.getElementById('laborCostList');
+  if (!wrap) return;
+  const rows = laborCostByEmployee();
+  if (!rows.length) { wrap.innerHTML = '<p class="hint">Clock-in data will populate labor cost per employee here.</p>'; return; }
+  let html = '';
+  rows.forEach(function (r) {
+    html += '<div class="item-card"><strong>' + escapeHtml(r.name) + '</strong>' + (r.active ? ' <span class="type-tag change">On the clock</span>' : '')
+      + '<div class="meta">' + r.hours.toFixed(2) + ' hrs · $<input type="number" step="0.01" min="0" class="wage-rate-input" data-employee="' + escapeHtml(r.name) + '" value="' + r.rate + '">/hr = $' + r.cost.toFixed(2) + '</div></div>';
+  });
+  html += '<div class="item-card"><strong>Total Labor Cost: $' + totalLaborCost().toFixed(2) + '</strong></div>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.wage-rate-input').forEach(function (inp) {
+    inp.addEventListener('change', function () {
+      wages[inp.getAttribute('data-employee')] = parseFloat(inp.value) || 0;
+      persistWages(); renderLaborCost(); renderBudgetSummary();
+    });
+  });
+}
+
+function renderMaterials() {
+  const wrap = document.getElementById('materialsList');
+  if (!wrap) return;
+  if (!materials.length) { wrap.innerHTML = '<p class="hint">Supplies and materials expenses you add will show up here.</p>'; return; }
+  let html = '';
+  materials.slice().reverse().forEach(function (m) {
+    html += '<div class="item-card" data-material-id="' + m.id + '"><strong>' + escapeHtml(m.item) + '</strong> — $' + m.cost.toFixed(2)
+      + '<div class="meta">' + (m.vendor ? escapeHtml(m.vendor) + ' · ' : '') + m.time + '</div>'
+      + '<button type="button" class="small gray remove-material-btn">Remove</button></div>';
+  });
+  html += '<div class="item-card"><strong>Materials Total: $' + totalMaterialsCost().toFixed(2) + '</strong></div>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.remove-material-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = btn.closest('[data-material-id]').getAttribute('data-material-id');
+      materials = materials.filter(function (m) { return String(m.id) !== id; });
+      persistMaterials(); renderMaterials(); renderBudgetSummary();
+    });
+  });
+}
+
+function budgetRowHtml(label, budgetVal, actualVal) {
+  const pct = budgetVal > 0 ? Math.round((actualVal / budgetVal) * 100) : null;
+  let statusClass = 'info', statusText = 'No budget set';
+  if (budgetVal > 0) {
+    const diff = budgetVal - actualVal;
+    statusClass = diff >= 0 ? 'under' : 'over';
+    statusText = diff >= 0 ? ('$' + diff.toFixed(2) + ' under budget') : ('$' + Math.abs(diff).toFixed(2) + ' over budget');
+  }
+  return '<div class="item-card"><strong>' + label + '</strong><div class="meta">Budget: $' + budgetVal.toFixed(2) + ' · Actual: $' + actualVal.toFixed(2) + (pct != null ? ' (' + pct + '%)' : '') + '</div><div class="status ' + statusClass + '" style="margin-top:6px">' + statusText + '</div></div>';
+}
+function renderBudgetSummary() {
+  const laborInput = document.getElementById('budgetLabor');
+  const materialsInput = document.getElementById('budgetMaterials');
+  if (laborInput) laborInput.value = budget.labor || '';
+  if (materialsInput) materialsInput.value = budget.materials || '';
+  const wrap = document.getElementById('budgetSummary');
+  if (!wrap) return;
+  const laborActual = totalLaborCost(), materialsActual = totalMaterialsCost();
+  wrap.innerHTML = budgetRowHtml('Labor', budget.labor || 0, laborActual)
+    + budgetRowHtml('Materials', budget.materials || 0, materialsActual)
+    + budgetRowHtml('Combined', (budget.labor || 0) + (budget.materials || 0), laborActual + materialsActual);
 }
 
 // type: 'punch' | 'change' | 'rfi'
@@ -722,9 +812,24 @@ function logClockEvent(type) {
   if (!employee || !site) { alert('Enter your name and job site first.'); return; }
   clockEvents.push({ employee: employee, site: site, type: type, time: new Date().toLocaleString(), flagged: false });
   persistClock(); checkMissedClockOuts(); renderClockLog(); renderClockFlagged(); renderDashboard();
+  renderLaborCost(); renderBudgetSummary();
 }
 document.getElementById('clockInBtn').addEventListener('click', function () { logClockEvent('in'); });
 document.getElementById('clockOutBtn').addEventListener('click', function () { logClockEvent('out'); });
+document.getElementById('addMaterialBtn').addEventListener('click', function () {
+  const item = document.getElementById('materialItem').value.trim();
+  const cost = parseFloat(document.getElementById('materialCost').value);
+  const vendor = document.getElementById('materialVendor').value.trim();
+  if (!item || isNaN(cost)) { alert('Enter an item and a cost first.'); return; }
+  materials.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2), item: item, cost: cost, vendor: vendor, time: new Date().toLocaleString() });
+  persistMaterials(); renderMaterials(); renderBudgetSummary();
+  document.getElementById('materialItem').value = ''; document.getElementById('materialCost').value = ''; document.getElementById('materialVendor').value = '';
+});
+document.getElementById('saveBudgetBtn').addEventListener('click', function () {
+  budget.labor = parseFloat(document.getElementById('budgetLabor').value) || 0;
+  budget.materials = parseFloat(document.getElementById('budgetMaterials').value) || 0;
+  persistBudget(); renderBudgetSummary();
+});
 document.getElementById('addLogBtn').addEventListener('click', function () {
   const date = document.getElementById('logDate').value || new Date().toISOString().split('T')[0];
   const weather = document.getElementById('logWeather').value;
@@ -787,13 +892,33 @@ window.generateReport = function () {
   if (safetyLogs.length) { html += '<div class="report-section"><h3>Safety Log</h3>'; safetyLogs.forEach(function (s) { html += '<div class="punch-item">[' + s.type + '] ' + s.desc + (s.action ? ' — Action: ' + s.action : '') + '</div>'; }); html += '</div>'; }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
+  const laborRows = laborCostByEmployee();
+  if (laborRows.length || materials.length) {
+    html += '<div class="report-section"><h3>Job Cost Summary</h3>';
+    if (laborRows.length) {
+      html += '<div class="punch-item"><strong>Labor</strong></div>';
+      laborRows.forEach(function (r) { html += '<div class="punch-item">' + escapeHtml(r.name) + ' — ' + r.hours.toFixed(2) + ' hrs @ $' + r.rate.toFixed(2) + '/hr = $' + r.cost.toFixed(2) + '</div>'; });
+      html += '<div class="punch-item">Labor Total: $' + totalLaborCost().toFixed(2) + '</div>';
+    }
+    if (materials.length) {
+      html += '<div class="punch-item"><strong>Supplies &amp; Materials</strong></div>';
+      materials.forEach(function (m) { html += '<div class="punch-item">' + escapeHtml(m.item) + (m.vendor ? ' (' + escapeHtml(m.vendor) + ')' : '') + ' — $' + m.cost.toFixed(2) + '</div>'; });
+      html += '<div class="punch-item">Materials Total: $' + totalMaterialsCost().toFixed(2) + '</div>';
+    }
+    const combinedBudget = (budget.labor || 0) + (budget.materials || 0), combinedActual = totalLaborCost() + totalMaterialsCost();
+    if (combinedBudget > 0) {
+      const diff = combinedBudget - combinedActual;
+      html += '<div class="punch-item">Budget: $' + combinedBudget.toFixed(2) + ' · Actual: $' + combinedActual.toFixed(2) + ' · ' + (diff >= 0 ? ('$' + diff.toFixed(2) + ' under budget') : ('$' + Math.abs(diff).toFixed(2) + ' over budget')) + '</div>';
+    }
+    html += '</div>';
+  }
   document.getElementById('report').innerHTML = html;
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
-  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, and your AI Worker setup. This can\'t be undone.')) return;
-  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = [];
+  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, and your AI Worker setup. This can\'t be undone.')) return;
+  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 };
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   try { localStorage.removeItem('swActiveTab'); } catch (e) { }
@@ -813,6 +938,9 @@ function clearAllData() {
   renderDailyLogs();
   renderSafetyLogs();
   renderDashboard();
+  renderLaborCost();
+  renderMaterials();
+  renderBudgetSummary();
   refreshAiStatus();
   renderSummary();
   setWalkStatus('info', 'Ready. Tap to begin.');
@@ -822,8 +950,10 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
+  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 });
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
+  if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 };
   const savedSiteName = loadJson(LS.siteName, null);
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
@@ -844,6 +974,10 @@ window.addEventListener('load', function () {
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
   renderSafetyLogs();
   renderDashboard();
+  renderLaborCost();
+  renderMaterials();
+  renderBudgetSummary();
+  setInterval(function () { renderLaborCost(); renderBudgetSummary(); }, 60000);
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {
     document.getElementById('walkRecordBtn').style.display = 'block';
