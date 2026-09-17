@@ -15,8 +15,8 @@ document.querySelectorAll('.nav-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [];
 const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
@@ -40,6 +40,7 @@ function persistNotes() { saveJson(LS.notes, notesLog); }
 function persistWages() { saveJson(LS.wages, wages); }
 function persistMaterials() { saveJson(LS.materials, materials); }
 function persistBudget() { saveJson(LS.budget, budget); }
+function persistDrawings() { saveJson(LS.drawings, drawings); }
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'w-walk-status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
@@ -232,7 +233,7 @@ function renderSummary() {
       const typeLabel = e.status !== undefined ? 'RFI' : (e.approval !== undefined ? 'Change Order' : 'Punch Item');
       let extra;
       if (e.status !== undefined) extra = e.status;
-      else if (e.approval !== undefined) extra = (e.costImpact != null ? ('$' + e.costImpact + ' — ') : '') + e.approval;
+      else if (e.approval !== undefined) extra = (e.costEstimate != null ? ('$' + e.costEstimate + ' — ') : '') + e.approval;
       else extra = e.resolved ? 'Resolved' : 'Open';
       html += '<div class="w-summary-item">' + escapeHtml(e.text) + '<div class="meta">' + typeLabel + ' · ' + extra + '</div></div>';
     });
@@ -282,7 +283,10 @@ function renderItemCard(entry, type) {
   if (entry.verified === false) metaHtml += '<span class="type-tag unverified">Unverified</span>';
   if (type === 'punch' && entry.resolved) metaHtml += '<span class="type-tag change">Resolved</span>';
   metaHtml += ' ' + entry.time;
-  if (type === 'change') metaHtml += '<br>Cost impact: ' + (entry.costImpact != null ? ('$' + entry.costImpact) : '—') + ' · Client approval: ' + (entry.approval || 'Pending');
+  if (type === 'change') metaHtml += '<br>Est. cost: ' + (entry.costEstimate != null ? ('$' + entry.costEstimate) : '—') + ' · Client approval: ' + (entry.approval || 'Pending');
+  if (type === 'punch') metaHtml += '<br>Est. cost: ' + (entry.costEstimate != null ? ('$' + entry.costEstimate) : '—');
+  if (entry.location) metaHtml += ' · Location: ' + escapeHtml(entry.location);
+  if (entry.drawingRef) metaHtml += ' · <span class="trade-tag">Sheet ' + escapeHtml(entry.drawingRef) + '</span>';
   if (type === 'rfi') metaHtml += '<br>Status: ' + (entry.status || 'Open');
   meta.innerHTML = metaHtml;
   card.appendChild(meta);
@@ -301,6 +305,21 @@ function renderItemCard(entry, type) {
     attachBtn.className = 'small gray'; attachBtn.type = 'button'; attachBtn.textContent = 'Attach Last Photo';
     attachBtn.onclick = function () { entry.photo = photos[photos.length - 1].src; persistLists(); renderAllItems(); };
     card.appendChild(attachBtn);
+  }
+  if (type === 'punch' || type === 'change') {
+    const tagBtn = document.createElement('button');
+    tagBtn.className = 'small gray'; tagBtn.type = 'button'; tagBtn.textContent = 'Edit Location/Cost';
+    tagBtn.onclick = function () {
+      const location = prompt('Location (e.g. Master Bath)?', entry.location || '');
+      if (location === null) return;
+      const costRaw = prompt('Rough cost estimate ($, blank for none)?', entry.costEstimate != null ? String(entry.costEstimate) : '');
+      if (costRaw === null) return;
+      entry.location = location.trim();
+      const cost = parseFloat(costRaw);
+      entry.costEstimate = isNaN(cost) ? null : cost;
+      persistLists(); renderAllItems();
+    };
+    card.appendChild(tagBtn);
   }
   if (type === 'change') {
     const approveBtn = document.createElement('button');
@@ -460,7 +479,8 @@ function renderDashboard() {
     ['Answered RFIs', rfis.filter(function (r) { return r.status === 'Answered'; }).length],
     ['Pending Submittals', submittals.filter(function (s) { return s.status === 'Pending'; }).length],
     ['Approved Submittals', submittals.filter(function (s) { return s.status === 'Approved'; }).length],
-    ['Missed Clock-Outs', clockEvents.filter(function (e) { return e.flagged; }).length]
+    ['Missed Clock-Outs', clockEvents.filter(function (e) { return e.flagged; }).length],
+    ['Safety Log Entries', safetyLogs.length]
   ];
   wrap.innerHTML = '<table style="width:100%;border-collapse:collapse">' + rows.map(function (r) {
     return '<tr><td style="padding:6px">' + r[0] + '</td><td style="padding:6px;text-align:right;font-weight:bold">' + r[1] + '</td></tr>';
@@ -553,18 +573,25 @@ function renderBudgetSummary() {
     + budgetRowHtml('Combined', (budget.labor || 0) + (budget.materials || 0), laborActual + materialsActual);
 }
 
-// type: 'punch' | 'change' | 'rfi'
+// type: 'punch' | 'change' | 'rfi'. Every punch/change-order item shares one
+// data shape (trade, location, rough cost estimate, plus the punch-vs-change
+// flag implicit in which array it lands in) so later chapters — trade
+// routing, estimating, invoicing — can reuse a captured item without asking
+// the crew to re-enter it.
 function fileEntry(data) {
   const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), verified: data.verified !== false };
   if (data.photo) entry.photo = data.photo;
+  const drawingRef = extractDrawingRef(entry.text);
+  if (drawingRef) entry.drawingRef = drawingRef;
   let type = data.type;
-  if (type === 'change') { entry.costImpact = typeof data.costImpact === 'number' ? data.costImpact : null; entry.approval = 'Pending'; changes.push(entry); }
+  if (type === 'change') { entry.costEstimate = typeof data.costEstimate === 'number' ? data.costEstimate : null; entry.location = data.location || ''; entry.approval = data.approval || 'Pending'; changes.push(entry); }
   else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
-  else { type = 'punch'; entry.resolved = false; punch.push(entry); }
+  else { type = 'punch'; entry.resolved = false; entry.costEstimate = typeof data.costEstimate === 'number' ? data.costEstimate : null; entry.location = data.location || ''; punch.push(entry); }
   if (!entry.photo) tryLinkItemToRecentPhoto(entry);
   persistLists();
   renderItemCard(entry, type);
   renderDashboard();
+  renderDrawingRefs();
   return entry;
 }
 
@@ -573,6 +600,74 @@ function classifyText(text) {
   if (/rfi|need clarification|waiting on|need to confirm|need info|unclear/.test(t)) return 'rfi';
   if (/change order|additional cost|extra charge|client wants|owner requested|upcharge|out of scope|billable/.test(t)) return 'change';
   return 'punch';
+}
+
+// Same keyword-tagging approach as classifyTrade()/classifyText() below,
+// applied to two more streams: safety hazards get pulled out of trade
+// routing entirely (their own list, own follow-up), and a mentioned sheet
+// or drawing number gets tagged as a drawing reference.
+function classifySafetyText(text) {
+  return /\bhazard|unsafe|safety violation|no hard hat|not wearing (a )?(hard hat|ppe|harness|goggles)|missing (guard|rail|railing)|exposed wire|fall risk|trip hazard|\bosha\b|ppe violation|blocked (exit|fire exit)|gas leak|no eye protection|unguarded/i.test(text);
+}
+function extractDrawingRef(text) {
+  const m = text.match(/\b(?:sheet|drawing|dwg|plan sheet|detail)\s*#?\s*([a-z]{0,3}-?\d+(?:\.\d+)?[a-z]?)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+function detectVoiceApproval(text) {
+  return /client (approved|okay'?d|ok'?d|said yes|signed off)|approved (it )?on site|client (says|gives) (the )?go[- ]ahead/i.test(text);
+}
+function detectVoiceDecline(text) {
+  return /client (declined|said no|rejected)|not approved by (the )?client/i.test(text);
+}
+// Routes a spoken hazard/violation straight into the existing Safety Log
+// instead of trade punch routing — it needs its own follow-up, not a trade.
+function logSafetyFromVoice(text) {
+  const entry = { type: 'Hazard Observed', desc: text, person: '', action: '', photo: null, time: new Date().toLocaleString(), ts: Date.now() };
+  tryLinkItemToRecentPhoto(entry);
+  safetyLogs.push(entry);
+  persistSafety();
+  renderSafetyLogs();
+  renderDashboard();
+  logNote(text, 'Safety');
+  setWalkStatus('ok', 'Safety issue logged separately from the punch list.');
+}
+
+function renderDrawingRefs() {
+  const wrap = document.getElementById('drawingRefList');
+  if (!wrap) return;
+  const items = punch.concat(changes, rfis).filter(function (e) { return e.drawingRef; }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  if (!items.length) { wrap.innerHTML = '<p class="hint">No drawing references yet.</p>'; return; }
+  let html = '';
+  items.forEach(function (e) {
+    const match = drawings.find(function (d) { return d.sheetNumber && d.sheetNumber.toUpperCase() === e.drawingRef; });
+    html += '<div class="item-card"><span class="trade-tag">Sheet ' + escapeHtml(e.drawingRef) + '</span> ' + escapeHtml(e.text) + '<div class="meta">' + escapeHtml(e.trade) + ' · ' + e.time + '</div>';
+    html += match ? '<button type="button" class="small gray view-drawing-btn" data-src="' + match.src + '">View Sheet ' + escapeHtml(match.sheetNumber) + '</button>' : '<div class="meta">Sheet not uploaded yet</div>';
+    html += '</div>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.view-drawing-btn').forEach(function (btn) { btn.addEventListener('click', function () { openLightbox(btn.getAttribute('data-src')); }); });
+}
+
+function renderDrawings() {
+  const wrap = document.getElementById('drawingsList');
+  if (!wrap) return;
+  if (!drawings.length) { wrap.innerHTML = '<p class="hint">No drawings uploaded yet.</p>'; return; }
+  let html = '';
+  drawings.slice().reverse().forEach(function (d) {
+    html += '<div class="item-card" data-drawing-id="' + d.id + '"><strong>Sheet ' + escapeHtml(d.sheetNumber) + '</strong><div class="meta">' + d.time + '</div>'
+      + '<img src="' + d.src + '" class="drawing-thumb" style="max-width:140px;display:block;margin-top:6px;border-radius:6px;cursor:pointer">'
+      + '<button type="button" class="small gray remove-drawing-btn">Remove</button></div>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-drawing-id]').forEach(function (card) {
+    const id = card.getAttribute('data-drawing-id');
+    const d = drawings.find(function (d) { return String(d.id) === id; });
+    card.querySelector('.drawing-thumb').addEventListener('click', function () { openLightbox(d.src); });
+    card.querySelector('.remove-drawing-btn').addEventListener('click', function () {
+      drawings = drawings.filter(function (x) { return String(x.id) !== id; });
+      persistDrawings(); renderDrawings(); renderDrawingRefs();
+    });
+  });
 }
 
 // Local (offline) keyword guess at trade, used when the AI Worker isn't set up
@@ -590,21 +685,29 @@ function classifyTrade(text) {
   return null;
 }
 
-function localClassify(text) {
+function localClassify(text, approval) {
   const guessedTrade = classifyTrade(text);
   if (guessedTrade) tradeSelect.value = guessedTrade;
-  return { text: text, type: classifyText(text), trade: tradeSelect.value, costImpact: null, verified: false };
+  const data = { text: text, type: classifyText(text), trade: tradeSelect.value, costEstimate: null, verified: false };
+  if (approval) data.approval = approval;
+  return data;
 }
 
 // Sends one finalized spoken sentence through the Worker's /classify route
 // (type + trade + cost impact from an LLM). Falls back to the local keyword
 // heuristic + manually-selected trade if there's no endpoint, the request
 // fails, or it times out — so voice capture never silently drops an item.
+// A hazard/violation is pulled out before any of that (its own list, not
+// trade routing), and a spoken client approval/decline is applied at
+// capture so a change order approved on site doesn't need a second tap
+// after the walk.
 function fileVoiceUtterance(text) {
   text = text.trim();
   if (!text) return;
+  if (classifySafetyText(text)) { logSafetyFromVoice(text); return; }
+  const voiceApproval = detectVoiceApproval(text) ? 'Approved' : (detectVoiceDecline(text) ? 'Declined' : null);
   const endpoint = currentAiEndpoint();
-  if (!endpoint) { const e = fileEntry(localClassify(text)); logNote(e.text, e.trade); return; }
+  if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); logNote(e.text, e.trade); return; }
   const headers = { 'Content-Type': 'application/json' };
   const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -616,12 +719,12 @@ function fileVoiceUtterance(text) {
       if (!data || data.error || !data.type) throw new Error((data && data.error) || 'bad response');
       const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
       if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
-      const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costImpact: data.costImpact, verified: true });
+      const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costEstimate: data.costImpact, verified: true, approval: type === 'change' ? (voiceApproval || 'Pending') : undefined });
       logNote(e.text, e.trade);
     })
     .catch(function () {
       if (timer) clearTimeout(timer);
-      const e = fileEntry(localClassify(text));
+      const e = fileEntry(localClassify(text, voiceApproval));
       logNote(e.text, e.trade);
     });
 }
@@ -796,7 +899,31 @@ document.getElementById('lightbox').addEventListener('click', function (e) { if 
 function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
 document.getElementById('siteName').addEventListener('blur', persistSiteInfo);
 document.getElementById('siteAddress').addEventListener('blur', persistSiteInfo);
-document.getElementById('addPunchBtn').addEventListener('click', function () { const val = document.getElementById('punchInput').value.trim(); if (!val) return; fileEntry({ text: val, type: 'punch', trade: tradeSelect.value, verified: true, costImpact: null }); document.getElementById('punchInput').value = ''; });
+document.getElementById('addPunchBtn').addEventListener('click', function () {
+  const val = document.getElementById('punchInput').value.trim();
+  if (!val) return;
+  const location = document.getElementById('punchLocation').value.trim();
+  const costRaw = parseFloat(document.getElementById('punchCost').value);
+  fileEntry({ text: val, type: 'punch', trade: tradeSelect.value, verified: true, costEstimate: isNaN(costRaw) ? null : costRaw, location: location });
+  document.getElementById('punchInput').value = '';
+  document.getElementById('punchLocation').value = '';
+  document.getElementById('punchCost').value = '';
+});
+document.getElementById('uploadDrawingBtn').addEventListener('click', function () {
+  const sheetNumber = document.getElementById('drawingSheetNumber').value.trim();
+  const fileInput = document.getElementById('drawingFileInput');
+  const file = fileInput.files && fileInput.files[0];
+  if (!sheetNumber || !file) { alert('Enter a sheet number and choose an image first.'); return; }
+  const r = new FileReader();
+  r.onload = function (ev) {
+    compressImage(ev.target.result, function (src) {
+      drawings.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2), sheetNumber: sheetNumber, src: src, time: new Date().toLocaleString() });
+      persistDrawings(); renderDrawings(); renderDrawingRefs();
+      document.getElementById('drawingSheetNumber').value = ''; fileInput.value = '';
+    });
+  };
+  r.readAsDataURL(file);
+});
 document.getElementById('saveContactsBtn').addEventListener('click', function () { document.querySelectorAll('#contactFields input').forEach(function (inp) { const trade = inp.getAttribute('data-trade'); const field = inp.getAttribute('data-field'); if (!contacts[trade]) contacts[trade] = { email: '', phone: '' }; contacts[trade][field] = inp.value.trim(); }); persistContacts(); const el = document.getElementById('contactStatus'); el.style.display = 'block'; el.className = 'status ok'; el.textContent = 'Trade contacts saved.'; });
 document.getElementById('addSubBtn').addEventListener('click', function () {
   const item = document.getElementById('subItem').value.trim();
@@ -872,7 +999,7 @@ function setAiStatus(kind, text) { const el = document.getElementById('aiStatus'
 function refreshAiStatus() { const url = currentAiEndpoint(); const key = currentAiKey(); document.getElementById('aiEndpointInput').value = url; document.getElementById('aiKeyInput').value = key; if (url && key) setAiStatus('ok', 'Worker URL and key saved.'); else if (url) setAiStatus('ok', 'Worker URL saved.'); else setAiStatus('info', 'Worker URL not set.'); }
 document.getElementById('saveEndpointBtn').addEventListener('click', function () { const url = document.getElementById('aiEndpointInput').value.trim().replace(/\/$/, ''); const key = document.getElementById('aiKeyInput').value.trim(); if (url) localStorage.setItem(LS.aiEndpoint, url); else localStorage.removeItem(LS.aiEndpoint); if (key) localStorage.setItem(LS.aiKey, key); else localStorage.removeItem(LS.aiKey); refreshAiStatus(); });
 document.getElementById('aiPhotoBtn').addEventListener('click', function () { if (!currentAiEndpoint()) { setAiStatus('err', 'No worker URL yet.'); return; } document.getElementById('aiPhotoInput').click(); });
-document.getElementById('aiPhotoInput').addEventListener('change', function (e) { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (!file) return; const endpoint = currentAiEndpoint(); if (!endpoint) return; setAiStatus('info', 'Checking photo…'); const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const headers = { 'Content-Type': 'application/json' }; const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key; fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify({ image: src, trade: tradeSelect.value }) }).then(function (res) { return res.text().then(function (t) { let data; try { data = JSON.parse(t); } catch (err) { data = { error: t || res.statusText }; } if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status)); return data; }); }).then(function (data) { const text = (data.result || data.text || JSON.stringify(data)).trim(); document.getElementById('aiResult').style.display = 'block'; document.getElementById('aiResult').textContent = text; setAiStatus('ok', 'Check complete.'); if (text) fileEntry({ text: 'AI code-check: ' + text, type: 'punch', trade: tradeSelect.value, verified: true, costImpact: null, photo: src }); }).catch(function (err) { setAiStatus('err', 'AI check failed: ' + (err && err.message ? err.message : 'unknown')); }); }); }; r.readAsDataURL(file); });
+document.getElementById('aiPhotoInput').addEventListener('change', function (e) { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (!file) return; const endpoint = currentAiEndpoint(); if (!endpoint) return; setAiStatus('info', 'Checking photo…'); const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const headers = { 'Content-Type': 'application/json' }; const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key; fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify({ image: src, trade: tradeSelect.value }) }).then(function (res) { return res.text().then(function (t) { let data; try { data = JSON.parse(t); } catch (err) { data = { error: t || res.statusText }; } if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status)); return data; }); }).then(function (data) { const text = (data.result || data.text || JSON.stringify(data)).trim(); document.getElementById('aiResult').style.display = 'block'; document.getElementById('aiResult').textContent = text; setAiStatus('ok', 'Check complete.'); if (text) fileEntry({ text: 'AI code-check: ' + text, type: 'punch', trade: tradeSelect.value, verified: true, costEstimate: null, photo: src });}).catch(function (err) { setAiStatus('err', 'AI check failed: ' + (err && err.message ? err.message : 'unknown')); }); }); }; r.readAsDataURL(file); });
 window.generateReport = function () {
   const trades = {};
   photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
@@ -885,7 +1012,7 @@ window.generateReport = function () {
     return h + '</div>';
   }
   html += sect('Punch List', punch, function (i) { return i.resolved ? ' — Resolved' : ''; });
-  html += sect('Change Orders', changes, function (i) { return ' — $' + (i.costImpact != null ? i.costImpact : '?') + ' (' + (i.approval || 'Pending') + ')'; });
+  html += sect('Change Orders', changes, function (i) { return ' — $' + (i.costEstimate != null ? i.costEstimate : '?') + ' (' + (i.approval || 'Pending') + ')'; });
   html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
   if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
@@ -917,8 +1044,8 @@ window.generateReport = function () {
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
-  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, and your AI Worker setup. This can\'t be undone.')) return;
-  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 };
+  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
+  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = [];
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   try { localStorage.removeItem('swActiveTab'); } catch (e) { }
@@ -941,6 +1068,8 @@ function clearAllData() {
   renderLaborCost();
   renderMaterials();
   renderBudgetSummary();
+  renderDrawings();
+  renderDrawingRefs();
   refreshAiStatus();
   renderSummary();
   setWalkStatus('info', 'Ready. Tap to begin.');
@@ -950,10 +1079,10 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
-  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 });
+  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
-  if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 };
+  if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
   const savedSiteName = loadJson(LS.siteName, null);
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
@@ -977,6 +1106,8 @@ window.addEventListener('load', function () {
   renderLaborCost();
   renderMaterials();
   renderBudgetSummary();
+  renderDrawings();
+  renderDrawingRefs();
   setInterval(function () { renderLaborCost(); renderBudgetSummary(); }, 60000);
   refreshAiStatus();
   if (!voiceRecognitionSupported()) {

@@ -312,8 +312,23 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 <div class="section">
 <h2>✅ Punch List</h2>
 <input type="text" id="punchInput" placeholder="Add issue manually... e.g. Missing outlet cover in master bath">
+<input type="text" id="punchLocation" placeholder="Location (optional), e.g. Master Bath">
+<input type="number" id="punchCost" step="0.01" min="0" placeholder="Est. cost (optional, $)">
 <button id="addPunchBtn" class="orange">Add to Punch List</button>
 <div id="punchList"></div>
+</div>
+<div class="section">
+<h2>📐 Drawing References</h2>
+<p class="hint">Mention a sheet or drawing number while talking during a walk (e.g. "see sheet A-101") and it's tagged here automatically.</p>
+<div id="drawingRefList"></div>
+</div>
+<div class="section">
+<h2>🗂️ Drawings &amp; Plans</h2>
+<p class="hint">Upload a photo of a drawing or plan sheet so drawing references above can point at something real. No analysis yet — just storage and viewing.</p>
+<input type="text" id="drawingSheetNumber" placeholder="Sheet number, e.g. A-101">
+<input type="file" id="drawingFileInput" accept="image/*">
+<button id="uploadDrawingBtn" class="orange">Upload Drawing</button>
+<div id="drawingsList"></div>
 </div>
 <div class="section">
 <h2>📝 Change Orders</h2>
@@ -414,7 +429,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #bottomNav { displ
 </div>
 <div class="section">
 <h2>🗑️ Reset App</h2>
-<p class="hint">Permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, and your AI Worker setup from this phone. This can't be undone.</p>
+<p class="hint">Permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup from this phone. This can't be undone.</p>
 <button id="clearAllBtn" class="red">Clear All Data</button>
 </div>
 </div>
