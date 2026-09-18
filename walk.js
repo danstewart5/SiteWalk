@@ -8,7 +8,6 @@ function showTab(name) {
   document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
   });
-  try { localStorage.setItem('swActiveTab', name); } catch (e) { }
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
@@ -707,7 +706,7 @@ function fileVoiceUtterance(text) {
   if (classifySafetyText(text)) { logSafetyFromVoice(text); return; }
   const voiceApproval = detectVoiceApproval(text) ? 'Approved' : (detectVoiceDecline(text) ? 'Declined' : null);
   const endpoint = currentAiEndpoint();
-  if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); logNote(e.text, e.trade); return; }
+  if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); const cleaned = summarizeNote(e.text); if (cleaned) logNote(cleaned, e.trade); return; }
   const headers = { 'Content-Type': 'application/json' };
   const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -720,12 +719,14 @@ function fileVoiceUtterance(text) {
       const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
       if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
       const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costEstimate: data.costImpact, verified: true, approval: type === 'change' ? (voiceApproval || 'Pending') : undefined });
-      logNote(e.text, e.trade);
+      const cleaned = summarizeNote(e.text);
+      if (cleaned) logNote(cleaned, e.trade);
     })
     .catch(function () {
       if (timer) clearTimeout(timer);
       const e = fileEntry(localClassify(text, voiceApproval));
-      logNote(e.text, e.trade);
+      const cleaned = summarizeNote(e.text);
+      if (cleaned) logNote(cleaned, e.trade);
     });
 }
 
@@ -1055,7 +1056,6 @@ function clearAllData() {
   photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = [];
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
-  try { localStorage.removeItem('swActiveTab'); } catch (e) { }
   document.getElementById('siteName').textContent = 'Job Site';
   document.getElementById('siteAddress').textContent = 'Tap to add address';
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
@@ -1121,7 +1121,5 @@ window.addEventListener('load', function () {
     document.getElementById('walkRecordBtn').style.display = 'block';
   }
   document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to open the camera and AI listening.';
-  let savedTab = 'walk';
-  try { savedTab = localStorage.getItem('swActiveTab') || 'walk'; } catch (e) { }
-  showTab(savedTab);
+  showTab('walk');
 });

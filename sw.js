@@ -1,5 +1,5 @@
-const CACHE = 'sitewalk-v37';
-const ASSETS = ['./', './index.html', './walk.js', './manifest.json'];
+const CACHE = 'sitewalk-v39';
+const ASSETS = ['./', './index.html', './walk.js', './clean-speech.js', './manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
