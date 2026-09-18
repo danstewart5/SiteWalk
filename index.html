@@ -73,8 +73,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .ai-result { white-space: pre-wrap; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 13px; margin-top: 8px; }
 /* ---------- Walk tab redesign ---------- */
 .walk-redesign {
-  --w-bg: #F9F3E9;
-  --w-card: #F2E8D9;
+  --w-bg: #E3EFFB;
+  --w-card: #CFE3F6;
   --w-primary: #1F4A3D;
   --w-primary-soft: #2E6350;
   --w-accent: #D97748;
@@ -82,8 +82,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
   --w-recording: #3F9142;
   --w-recording-soft: #56A85B;
   --w-text: #3A342E;
-  --w-text-soft: #83715E;
-  --w-border: #E8D9C3;
+  --w-text-soft: #5C7691;
+  --w-border: #B7D4EC;
   margin: -16px;
   padding: 20px 16px 26px;
   background: var(--w-bg);
@@ -124,6 +124,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-photo-btn { width: 84px; height: 84px; border-radius: 50%; border: 2px solid var(--w-primary); background: #fff; color: var(--w-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 26px; padding: 0; margin: 0; cursor: pointer; box-shadow: 0 6px 16px rgba(31,74,61,0.16); }
 .w-photo-btn span { font-size: 10px; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif; text-transform: uppercase; letter-spacing: .03em; }
 .w-photo-btn:active { transform: scale(0.95); }
+.w-photo-btn.stop-btn { display: none; border-color: var(--w-accent-dark); color: var(--w-accent-dark); }
+.w-photo-btn.stop-btn.visible { display: flex; }
 #walkBtn { width: 148px; height: 148px; border-radius: 50%; border: none; background: var(--w-recording); color: #fff; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; cursor: pointer; box-shadow: 0 10px 26px rgba(63,145,66,0.35); transition: background .25s ease, box-shadow .25s ease, transform .15s ease; display: flex; align-items: center; justify-content: center; padding: 10px; margin: 0; }
 #walkBtn:active { transform: scale(0.97); }
 #walkBtn.recording { background: var(--w-accent); box-shadow: 0 10px 26px rgba(217,119,72,0.35); animation: w-pulse 1.8s ease-in-out infinite; }
@@ -277,7 +279,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display:
   <div class="w-record-zone">
     <div class="w-record-row">
       <button id="walkBtn" type="button">Start<br>Walk-Around</button>
-      <button id="mainPhotoBtn" type="button" class="w-photo-btn" aria-label="Take a photo">📷<span>Photo</span></button>
+      <button id="stopWalkBtn" type="button" class="w-photo-btn stop-btn" aria-label="Stop walk-around">⏹<span>Stop</span></button>
     </div>
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
