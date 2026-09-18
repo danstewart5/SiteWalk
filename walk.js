@@ -859,7 +859,8 @@ window.startWalk = function () {
   walkActive = true;
   const btn = document.getElementById('walkBtn');
   btn.classList.add('recording');
-  btn.innerHTML = 'Stop<br>Walk-Around';
+  btn.innerHTML = '📷<br>Take Photo';
+  document.getElementById('stopWalkBtn').classList.add('visible');
   document.getElementById('walkHero').style.display = 'none';
   document.getElementById('walkStage').classList.add('active');
   setWalkStatus('ok', 'Asking for camera and mic…');
@@ -882,15 +883,16 @@ window.endWalk = function () {
   const btn = document.getElementById('walkBtn');
   btn.classList.remove('recording');
   btn.innerHTML = 'Start<br>Walk-Around';
+  document.getElementById('stopWalkBtn').classList.remove('visible');
   document.getElementById('walkHero').style.display = '';
   document.getElementById('walkStage').classList.remove('active');
   setWalkStatus('info', 'Walk ended. Check Summary for what was found.');
   showWalkTab('summary');
 };
-document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? window.endWalk() : window.startWalk(); });
+document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? takePhoto() : window.startWalk(); });
+document.getElementById('stopWalkBtn').addEventListener('click', function () { window.endWalk(); });
 function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); }
 document.getElementById('shutterBtn').addEventListener('click', takePhoto);
-document.getElementById('mainPhotoBtn').addEventListener('click', takePhoto);
 document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedPhotos);
 document.getElementById('generateSummaryBtn').addEventListener('click', function () { renderSummary(); showWalkTab('summary'); });
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
