@@ -707,7 +707,7 @@ function fileVoiceUtterance(text) {
   if (classifySafetyText(text)) { logSafetyFromVoice(text); return; }
   const voiceApproval = detectVoiceApproval(text) ? 'Approved' : (detectVoiceDecline(text) ? 'Declined' : null);
   const endpoint = currentAiEndpoint();
-  if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); logNote(e.text, e.trade); return; }
+  if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); const cleaned = summarizeNote(e.text); if (cleaned) logNote(cleaned, e.trade); return; }
   const headers = { 'Content-Type': 'application/json' };
   const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -720,12 +720,14 @@ function fileVoiceUtterance(text) {
       const type = data.type === 'change_order' ? 'change' : (data.type === 'rfi' ? 'rfi' : 'punch');
       if (data.trade && TRADES.indexOf(data.trade) !== -1) tradeSelect.value = data.trade;
       const e = fileEntry({ text: data.text || text, type: type, trade: data.trade || tradeSelect.value, costEstimate: data.costImpact, verified: true, approval: type === 'change' ? (voiceApproval || 'Pending') : undefined });
-      logNote(e.text, e.trade);
+      const cleaned = summarizeNote(e.text);
+      if (cleaned) logNote(cleaned, e.trade);
     })
     .catch(function () {
       if (timer) clearTimeout(timer);
       const e = fileEntry(localClassify(text, voiceApproval));
-      logNote(e.text, e.trade);
+      const cleaned = summarizeNote(e.text);
+      if (cleaned) logNote(cleaned, e.trade);
     });
 }
 
