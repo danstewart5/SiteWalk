@@ -926,53 +926,78 @@ function setVideoStatus(text) { const el = document.getElementById('videoStatusL
 // Web Speech API manages internally and never exposes as a MediaStream), so
 // recording audio can start/stop/fail independently of continuous listening.
 function startVideoRecording(camStream) {
-  if (!camStream || !window.MediaRecorder) { setVideoStatus('Video save unsupported on this browser.'); return; }
+  console.log('[SiteWalk] video-save requested, camStream tracks:', camStream && camStream.getVideoTracks().length);
+  if (!camStream || !window.MediaRecorder) { console.warn('[SiteWalk] video-save unsupported: MediaRecorder=', !!window.MediaRecorder); setVideoStatus('Video save unsupported on this browser.'); return; }
   const mimeType = pickVideoMimeType();
-  navigator.mediaDevices.getUserMedia({ audio: true }).catch(function () { return null; }).then(function (audioStream) {
-    if (!walkActive || !videoRecordingRequested()) { if (audioStream) audioStream.getTracks().forEach(function (t) { t.stop(); }); return; }
-    videoAudioStream = audioStream;
-    const tracks = camStream.getVideoTracks().concat(audioStream ? audioStream.getAudioTracks() : []);
-    const combined = new MediaStream(tracks);
-    try { videoRecorder = mimeType ? new MediaRecorder(combined, { mimeType: mimeType }) : new MediaRecorder(combined); }
-    catch (e) { setVideoStatus('Video save failed to start.'); return; }
-    videoChunks = [];
-    videoRecorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) videoChunks.push(e.data); };
-    videoRecorder.onstop = function () {
-      if (videoAudioStream) { videoAudioStream.getTracks().forEach(function (t) { t.stop(); }); videoAudioStream = null; }
-      const blob = new Blob(videoChunks, { type: videoRecorder.mimeType || mimeType || 'video/webm' });
+  console.log('[SiteWalk] video-save mimeType picked:', mimeType || '(browser default)');
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .catch(function (e) { console.warn('[SiteWalk] video-save: separate mic getUserMedia failed, recording video-only:', e && e.name); return null; })
+    .then(function (audioStream) {
+      if (!walkActive || !videoRecordingRequested()) { console.log('[SiteWalk] video-save aborted before start (walk ended or box unchecked)'); if (audioStream) audioStream.getTracks().forEach(function (t) { t.stop(); }); return; }
+      videoAudioStream = audioStream;
+      const tracks = camStream.getVideoTracks().concat(audioStream ? audioStream.getAudioTracks() : []);
+      const combined = new MediaStream(tracks);
+      try { videoRecorder = mimeType ? new MediaRecorder(combined, { mimeType: mimeType }) : new MediaRecorder(combined); }
+      catch (e) { console.error('[SiteWalk] video-save: MediaRecorder constructor failed:', e); setVideoStatus('Video save failed to start: ' + (e && e.message ? e.message : 'unknown')); return; }
       videoChunks = [];
-      videoRecordingActive = false;
-      if (blob.size > 0) saveVideoFile(blob); else setVideoStatus('');
-    };
-    videoRecorder.start(1000);
-    videoRecordingActive = true;
-    setVideoStatus('🔴 Saving video…');
-  });
+      videoRecorder.onerror = function (e) { console.error('[SiteWalk] video-save: MediaRecorder error:', e && e.error); };
+      videoRecorder.ondataavailable = function (e) { console.log('[SiteWalk] video-save chunk:', e.data && e.data.size, 'bytes'); if (e.data && e.data.size > 0) videoChunks.push(e.data); };
+      videoRecorder.onstop = function () {
+        console.log('[SiteWalk] video-save recorder stopped, chunks:', videoChunks.length);
+        if (videoAudioStream) { videoAudioStream.getTracks().forEach(function (t) { t.stop(); }); videoAudioStream = null; }
+        const blob = new Blob(videoChunks, { type: videoRecorder.mimeType || mimeType || 'video/webm' });
+        console.log('[SiteWalk] video-save blob size:', blob.size, 'type:', blob.type);
+        videoChunks = [];
+        videoRecordingActive = false;
+        // A zero-byte blob (no ondataavailable data ever arrived) previously
+        // cleared the status silently, which looked identical to "nothing
+        // was recorded because the box was off" — now it says so explicitly.
+        if (blob.size > 0) saveVideoFile(blob); else { console.warn('[SiteWalk] video-save produced an empty blob'); setVideoStatus('Video recording produced no data — try a longer walk.'); }
+      };
+      videoRecorder.start(1000);
+      videoRecordingActive = true;
+      console.log('[SiteWalk] video-save recorder started');
+      setVideoStatus('🔴 Saving video…');
+    });
 }
 function stopVideoRecording() {
-  if (videoRecordingActive && videoRecorder) { try { videoRecorder.stop(); } catch (e) { } }
+  if (videoRecordingActive && videoRecorder) { console.log('[SiteWalk] video-save: stopping recorder, state=', videoRecorder.state); try { videoRecorder.stop(); } catch (e) { console.error('[SiteWalk] video-save: recorder.stop() failed:', e); } }
   videoRecorder = null;
 }
 // Browsers give no direct "write to disk" API from a Blob; a real save is
 // the OS share sheet (works well on iOS/Android) falling back to a download
-// link (desktop browsers write straight to Downloads).
+// link (desktop browsers write straight to Downloads). Both `navigator.share`
+// and a synthetic anchor click need "user activation" in some browsers —
+// this fires from MediaRecorder's onstop, asynchronously after the Stop
+// button's click, so a browser that's strict about that can silently drop
+// it. Logging here is so that failure mode is visible instead of invisible.
 function saveVideoFile(blob) {
   const ext = (blob.type.indexOf('mp4') !== -1) ? 'mp4' : 'webm';
   const filename = 'sitewalk-video-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + ext;
   const file = (typeof File !== 'undefined') ? new File([blob], filename, { type: blob.type }) : null;
-  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
-    navigator.share({ files: [file], title: filename }).then(function () { setVideoStatus('Video saved.'); }).catch(function () { downloadVideoBlob(blob, filename); });
+  const canShareFiles = !!(file && navigator.canShare && navigator.share && (function () { try { return navigator.canShare({ files: [file] }); } catch (e) { console.warn('[SiteWalk] video-save: canShare threw:', e); return false; } })());
+  console.log('[SiteWalk] video-save: attempting', canShareFiles ? 'navigator.share' : 'download link', 'for', filename);
+  if (canShareFiles) {
+    navigator.share({ files: [file], title: filename })
+      .then(function () { console.log('[SiteWalk] video-save: share succeeded'); setVideoStatus('Video saved.'); })
+      .catch(function (e) { console.warn('[SiteWalk] video-save: share failed, falling back to download:', e && e.name, e && e.message); downloadVideoBlob(blob, filename); });
     return;
   }
   downloadVideoBlob(blob, filename);
 }
 function downloadVideoBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.style.display = 'none';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
-  setVideoStatus('Video saved to Downloads.');
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    console.log('[SiteWalk] video-save: download link clicked for', filename);
+    setVideoStatus('Video saved to Downloads.');
+  } catch (e) {
+    console.error('[SiteWalk] video-save: download fallback failed:', e);
+    setVideoStatus('Video save failed — check the browser console.');
+  }
 }
 function openWalkCamera() { const video = document.getElementById('walkVideo'); video.classList.remove('hidden-cam'); if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { video.classList.add('hidden-cam'); setWalkStatus('info', 'Live camera needs HTTPS. Tap Snap.'); return Promise.resolve(false); } return getWalkStream().then(function (stream) { walkStream = stream; video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true'); video.muted = true; video.playsInline = true; video.srcObject = stream; return video.play().then(function () { return true; }).catch(function () { return true; }); }).catch(function () { video.classList.add('hidden-cam'); setWalkStatus('info', 'Live camera unavailable. Tap Snap to take a photo.'); return false; }); }
 window.startWalk = function () {
