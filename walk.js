@@ -774,6 +774,12 @@ function extractSnapTriggerRemainder(text) {
 
 // --- Voice: continuous SpeechRecognition where available ---
 function voiceRecognitionSupported() { return !!SpeechRecognition; }
+// Web Speech sometimes finalizes a stray breath/mic-noise as its own tiny
+// result ("a", "uh", "the"...). This only filters what gets logged/shown as
+// heard speech — it never touches the transcript handed to trigger
+// detection or item filing below, which must keep seeing the raw text.
+const TRANSCRIPT_NOISE_RE = /^(a|an|the|uh|um|er|ah|oh|hm+|mm+|mhm|huh)$/i;
+function isNoiseTranscript(text) { return TRANSCRIPT_NOISE_RE.test(text.trim()); }
 // Console logging here is deliberate and permanent, not left-over debug
 // noise: the live transcript UI is force-hidden (#walkLiveTranscript has a
 // display:none !important rule from the tab redesign), so devtools console
@@ -793,13 +799,13 @@ function setupRecognition() {
       const transcript = event.results[i][0].transcript.trim();
       if (event.results[i].isFinal) {
         if (transcript) {
-          console.log('[SiteWalk] heard:', transcript);
+          if (!isNoiseTranscript(transcript)) console.log('[SiteWalk] heard:', transcript);
           const remainder = extractSnapTriggerRemainder(transcript);
           if (remainder !== null) { voiceTriggeredSnap(transcript); if (remainder) fileVoiceUtterance(remainder); }
           else fileVoiceUtterance(transcript);
         }
       }
-      else interim += transcript;
+      else if (!isNoiseTranscript(transcript)) interim += transcript;
     }
     const walkLive = document.getElementById('walkLiveTranscript');
     if (walkLive) walkLive.textContent = interim ? ('AI hearing: "' + interim + '"') : 'AI listening.';
