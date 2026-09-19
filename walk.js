@@ -749,12 +749,18 @@ let lastSnapTriggerAt = 0;
 const SNAP_TRIGGER_COOLDOWN_MS = 1500;
 function voiceTriggeredSnap(transcriptText) {
   const now = Date.now();
-  if (now - lastSnapTriggerAt < SNAP_TRIGGER_COOLDOWN_MS) return; // guards duplicate onresult firings for one utterance
+  if (now - lastSnapTriggerAt < SNAP_TRIGGER_COOLDOWN_MS) { console.log('[SiteWalk] snap trigger ignored (cooldown)'); return; }
   lastSnapTriggerAt = now;
-  if (!walkStream) { setWalkStatus('info', 'Heard "take a photo" but the camera isn\'t live — tap Snap instead.'); return; }
-  const src = snapFromVideo(document.getElementById('walkVideo'));
-  if (!src) return;
-  saveWalkPhoto(src, { source: 'voice', transcriptText: transcriptText });
+  console.log('[SiteWalk] snap trigger matched:', transcriptText);
+  if (!walkStream) { console.warn('[SiteWalk] snap trigger fired but camera stream is not live'); setWalkStatus('info', 'Heard "take a photo" but the camera isn\'t live — tap Snap instead.'); return; }
+  const video = document.getElementById('walkVideo');
+  const src = snapFromVideo(video);
+  // A failed grab (video not yet reporting real dimensions) must never look
+  // like a successful one — silently returning here previously meant a
+  // flashing/pulsing button was the only feedback either way.
+  if (!src) { console.warn('[SiteWalk] snap trigger fired but frame grab failed, videoWidth=', video.videoWidth); setWalkStatus('err', 'Heard the photo command, but the camera frame wasn\'t ready — try again.'); return; }
+  const item = saveWalkPhoto(src, { source: 'voice', transcriptText: transcriptText });
+  console.log('[SiteWalk] voice-triggered photo saved:', item);
   setWalkStatus('ok', 'Photo captured — heard "' + transcriptText + '"');
 }
 // Strips the trigger phrase out of a finalized utterance. Returns null when
@@ -768,18 +774,26 @@ function extractSnapTriggerRemainder(text) {
 
 // --- Voice: continuous SpeechRecognition where available ---
 function voiceRecognitionSupported() { return !!SpeechRecognition; }
+// Console logging here is deliberate and permanent, not left-over debug
+// noise: the live transcript UI is force-hidden (#walkLiveTranscript has a
+// display:none !important rule from the tab redesign), so devtools console
+// is the only way to confirm recognition actually started and is hearing
+// anything — a fully silent transcript looks identical whether recognition
+// never started or the mic just heard nothing.
 function setupRecognition() {
   if (!SpeechRecognition) return null;
   const rec = new SpeechRecognition();
   rec.continuous = true;
   rec.interimResults = true;
   rec.lang = 'en-US';
+  rec.onstart = function () { console.log('[SiteWalk] speech recognition started'); };
   rec.onresult = function (event) {
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript.trim();
       if (event.results[i].isFinal) {
         if (transcript) {
+          console.log('[SiteWalk] heard:', transcript);
           const remainder = extractSnapTriggerRemainder(transcript);
           if (remainder !== null) { voiceTriggeredSnap(transcript); if (remainder) fileVoiceUtterance(remainder); }
           else fileVoiceUtterance(transcript);
@@ -790,15 +804,17 @@ function setupRecognition() {
     const walkLive = document.getElementById('walkLiveTranscript');
     if (walkLive) walkLive.textContent = interim ? ('AI hearing: "' + interim + '"') : 'AI listening.';
   };
-  rec.onerror = function (err) { setWalkStatus('err', 'Voice error: ' + (err.error || 'unknown')); };
-  rec.onend = function () { if (listening) { try { rec.start(); } catch (e) { } } };
+  rec.onerror = function (err) { console.error('[SiteWalk] speech recognition error:', err.error); setWalkStatus('err', 'Voice error: ' + (err.error || 'unknown')); };
+  rec.onend = function () { console.log('[SiteWalk] speech recognition ended' + (listening ? ' — restarting' : '')); if (listening) { try { rec.start(); } catch (e) { console.error('[SiteWalk] recognition restart failed:', e); } } };
   return rec;
 }
 function startListening() {
-  if (!SpeechRecognition || listening) return;
+  if (!SpeechRecognition) { setWalkStatus('info', 'This browser has no continuous voice recognition — use the mic button instead.'); return; }
+  if (listening) return;
   recognition = setupRecognition();
   listening = true;
-  try { recognition.start(); } catch (e) { }
+  try { recognition.start(); }
+  catch (e) { console.error('[SiteWalk] recognition.start() failed:', e); listening = false; setWalkStatus('err', 'Voice recognition failed to start: ' + (e && e.message ? e.message : 'unknown')); }
 }
 function stopListening() {
   listening = false;
