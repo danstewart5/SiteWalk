@@ -13,18 +13,17 @@ Do not use Grok sandbox preview URLs.
 
 ## What the live app actually does (as of 2026-09-19)
 
-Before **Start Walk-Around**, pick a session mode (last choice is remembered in `swWalkMode`):
+**Start Walk-Around is the only entry point — there is no mode picker.** An earlier note in this file (below, now corrected) described a video-walk/photo-only mode split as "landed in live app" at cache `sitewalk-v42`; that was wrong — no mode-picker code (`swWalkMode`, `captureWalkStill()`, etc.) was ever actually written to `index.html`/`walk.js`, only this file described it. The actual product decision, made the same day, superseded that split anyway: one always-on walk engine, no picker. Camera preview, mic, live speech-to-text, voice-triggered snap, and punch-list tagging all start together on **Start Walk-Around** and stay on together until **Stop**, every time.
 
-- **Video walk** — rear camera + live Web Speech. Say **sitewalk snap** (also: site walk snap, mark shot, grab still, snap picture/photo, take still) to grab a still from the live feed. Snap button stays on screen.
-- **Photo only** — rear camera, no always-on mic/ASR. Snap is manual. Optional tap-to-record notes still work.
+The one real optional control is **"Also save a video of this walk"** (checkbox above the Start button, persisted in `swSaveVideoEnabled`) — when on, a continuous video (camera + a separate mic track) records for the whole session and is handed to the user via the OS share sheet (`navigator.share`) or a browser download as `sitewalk-video-<timestamp>.webm`/`.mp4` when the walk ends. This is a real, working save, not a placeholder.
+
+Saying a trigger phrase ("take a photo", "snap a photo", "get a picture of this", "photo this/that" — see `SNAP_TRIGGER_RE` in `walk.js`) grabs a still from the live `<video>` frame via `voiceTriggeredSnap()`. That function only reads canvas pixels from the existing feed — it never calls `stop()` on any track, never re-calls `getUserMedia`, and never touches `recognition`, so a snap cannot interrupt or restart continuous listening. A 1.5s cooldown (`lastSnapTriggerAt`) guards against a browser firing one `onresult` final result twice for the same utterance. If the trigger phrase is embedded in a longer sentence, the remainder (with the phrase stripped) still goes through normal punch/change/RFI classification via `fileVoiceUtterance`. Every photo (voice-triggered, Snap-button, or uploaded) carries `ts`, `trade`, `source` (`voice`/`manual`), and — for voice snaps — `transcriptText`, so a still can be matched back to what was being said; the existing 60s photo↔item linking window (`tryLinkPhotoToRecentItem`/`tryLinkItemToRecentPhoto`) still does the punch-list matching.
 
 Tap **End Walk** / Stop to finish. **Generate Summary** jumps to the Walk Summary sub-tab.
 
-Voice snap and the Snap button share `captureWalkStill()`. That writer only reads the current `<video>` frame (or a short preview ring aimed at phrase-start). It must not stop tracks, re-call `getUserMedia`, or touch `recognition` / `MediaRecorder`. Isolated trigger phrases are not filed as punch items.
-
 UI is five tabs behind a fixed bottom nav (phone-app style, not one long scrolling page):
 
-- **🎥 Walk** — mode picker, Start Walk-Around (camera, voice in video mode, Snap / voice snap, photo gallery)
+- **🎥 Walk** — Start Walk-Around (camera, voice, live trade tag, voice-triggered + manual Snap, optional video-save, photo gallery)
 - **✅ Items** — Punch List (now with a Resolved toggle), Change Orders (client approve/decline), RFIs (Open/Answered), Submittals (Pending/Approved), Safety Incident/Near-Miss Log (type, description, person involved, corrective action, optional photo)
 - **⏱ Time** — manual Clock In/Out (flags anyone clocked in 16+ hours with no clock-out) + Daily Log (date, weather, crew count, trades on site, delays, notes)
 - **📊 Board** — Open Items Dashboard, live-computed from the actual in-app arrays (not a separate page, not stale)
@@ -34,39 +33,24 @@ Every item type persists to `localStorage` under real, live keys (see `LS` objec
 
 All eight of the original "File N of 7/8 — INSTRUCTIONS FOR GROK" standalone module snippets (RFI, Daily Log, Submittals, Safety, Dashboard, Trade Directory, GPS Clock-In, Firebase Backend) are now resolved one way or another: RFI/Daily Log/Submittals/Safety/Dashboard are merged into the live app above; GPS geofencing and Firebase sync are explicitly parked (see below), not abandoned by accident. `trade-directory-module.html` was deleted — it never contained real content (the file body was just the placeholder string `content1`), and the practical need is already covered live by Setup's manual Trade Contacts email/SMS.
 
-## Decision — walk session modes + voice snap (2026-09-19)
+## Decision — single always-on walk engine, no mode split (2026-09-19, supersedes an earlier same-day mode-split note)
 
-**Status: landed in live app 2026-09-19** (`index.html` + `walk.js`, cache `sitewalk-v42`). Mode picker + voice snap are on the phone path. Isolation rule still stands: a photo must never stop or restart listening.
+Earlier the same day, a note here proposed a video-walk-vs-photo-only mode picker with two audio policies. **That decision was reversed before any of it was built** — the actual requirement is one walk engine for every session: camera, mic, live speech-to-text, voice-triggered snap, and punch-list tagging are all always on together, no picker. Do not reintroduce a mode split without being asked again.
 
-Reviewed by Grok 2026-09-19. Chapter 1 of the larger platform.
+**Status: built and pushed 2026-09-19** (`index.html` + `walk.js` + `sw.js`, cache `sitewalk-v43`) — needs a real phone test (Android Chrome + iOS Safari) to confirm voice snap doesn't interrupt listening and that video-save actually produces a usable file, per the isolation/testing notes below (not yet phone-tested by an agent session).
 
-### Mode selection (start of every walk)
+What shipped:
 
-User picks a mode before the walk starts. Persist last-used mode on the device.
+- **Trigger-phrase snap** — `SNAP_TRIGGER_RE` in `walk.js` matches phrases like "take a photo" / "snap a photo" / "get a picture of this" inside a finalized (not interim) Web Speech transcript. A 1.5s cooldown (`lastSnapTriggerAt`) absorbs duplicate `onresult` firings for one utterance. If real content remains after stripping the trigger phrase, it's still filed normally through `fileVoiceUtterance`.
+- **Isolation** — `voiceTriggeredSnap()` only does a `canvas.drawImage` grab off the existing `<video>` element (via `snapFromVideo`); it never calls `stop()` on a track, never re-calls `getUserMedia` for the camera, and never touches `recognition`. Continuous listening's own `onend` restart loop is untouched by a snap.
+- **Structured photo metadata** — `saveWalkPhoto(src, meta)` now takes an optional metadata object; every photo gets `source` (`'manual'` or `'voice'`) and voice snaps additionally get `transcriptText` (the full utterance that triggered them), on top of the pre-existing `ts`/`trade`/`time`. The existing 60-second bidirectional photo↔punch-item linking (`tryLinkPhotoToRecentItem`/`tryLinkItemToRecentPhoto`) is unchanged and still does the item-matching.
+- **Real video-save** — a checkbox ("Also save a video of this walk", `#saveVideoToggle`, persisted in `swSaveVideoEnabled`) opts into `MediaRecorder` on the walk's existing camera track plus a *separate* `getUserMedia({audio:true})` track (kept independent from whatever SpeechRecognition is doing internally, since the Web Speech API never exposes its own mic as a `MediaStream`). On Stop, the recorder finalizes to a `Blob` and `saveVideoFile()` hands it to the user via `navigator.share` (files) when available, falling back to a plain `<a download>` blob-URL click. Filename: `sitewalk-video-<ISO timestamp>.<mp4|webm>`.
 
-1. **Video walk-around** — camera + microphone stay live for the whole session; live speech-to-text runs throughout; one Start / End control for the session. Snap stays on screen as a backup shutter. "Record continuously" in v1 means keep the preview + mic + transcript live, **not** persist a full walk video file. Full walk-video persistence is a later storage/privacy/offline problem, not part of this decision.
-2. **Photo-only walk-around** — camera on, no always-on ASR. User snaps stills manually. Optional tap-to-talk notes may reuse the existing iOS MediaRecorder fallback. This is the mode for loud areas, PPE, or anyone who does not want the phone listening the whole walk.
+Not done / worth knowing:
 
-These are two session types with two audio policies. Do not hide Snap in video mode.
-
-### Voice-triggered photo (video mode only)
-
-Instead of requiring a thumb press, the user can say a trigger phrase while walking and talking. On detect, grab a still from the live video feed at that moment, save it as a session photo, and keep recording + transcribing with **no stop/restart** of the speech path.
-
-Constraints agreed in review:
-
-- **Detection.** Do not treat the live Web Speech transcript as a wake-word engine. Construction noise + common English (`snap picture`, snap line, snapshot) will false-fire. v1 may scan final transcripts with a conservative matcher, cooldown (1.5–2.5s), isolated-phrase rule, haptic/beep/flash ack, and a small variant list. Prefer a 3–4 syllable uncommon command over "snap picture" (`sitewalk snap` / `mark shot` class). Strip or tag the command so classify / punch extraction does not file it as an item. Plan a dedicated on-device keyword spotter if video mode becomes the default field path.
-- **Frame grab.** Same live `<video>` element → `canvas.drawImage` → existing `compressImage` path. Do not open a second camera session or reconfigure capture mid-walk. Detection lag (often 300–1500ms on Web Speech) dominates; canvas grab is cheap. Prefer a short preview-frame ring buffer and grab at phrase *start*, not phrase end. User copy: point, say the phrase, hold a beat.
-- **Isolation (release blocker).** Photo path must never `stop()` tracks, re-call `getUserMedia`, toggle `track.enabled`, replace `srcObject`, or touch `recognition` / `MediaRecorder`. One media stream for the whole video session. Speech owns its own `onend` restart loop. Voice and Snap button call the same writer. Test: snap must not kill listening on Android Chrome or collapse the iOS audio session.
-- **Photo identity.** Filenames are for humans (`{siteSlug}_{YYYY-MM-DD}_{HHmmss}_{seq}.jpg`). Join keys are structured: `photoId`, `sessionId`, `capturedAt` (ISO + epoch ms), `sessionOffsetMs`, `source` (`voice` | `button`), `trigger`, `transcriptUtteranceId` (or char offsets), `trade`, `linkedItemId`. Keep the existing 60s photo↔punch window as fallback only. Do not encode punch text in the filename. Do not persist a full walk video as part of this feature.
-
-### Shipping order
-
-1. Done — mode picker + last-used default; photo-only starts with zero ASR.
-2. Done — shared `captureWalkStill()`; **still needs a phone test** that snap does not kill listening on Android Chrome / iOS Safari.
-3. Done — phrases + 2s cooldown + vibrate/flash; Snap remains visible.
-4. Partial — `photoId`, `sessionId`, `sessionOffsetMs`, `source`, `trigger`, `fileName` are stored. Utterance-id linking not yet; 60s window remains the fallback.
-5. Not started — on-device keyword spotter or persisted walk video.
+- No haptic/beep/flash acknowledgment on a voice snap yet (status-line text only, via `setWalkStatus`).
+- No dedicated on-device keyword spotter — still riding the browser's own continuous Web Speech transcript, which is inherently the noisier/higher-latency option the earlier review note warned about. If false-triggers turn out to be a real field problem, that's the next lever to pull.
+- iOS Safari's `navigator.share`/download-blob support for video files specifically hasn't been phone-verified in this session (browser automation wasn't available) — confirm on an actual iPhone before relying on it.
 
 ## Known issues
 
@@ -87,7 +71,6 @@ Constraints agreed in review:
 - Chapter 2 GPS geofencing (100m radius, 5-minute out buffer, auto clock in/out) — reference implementation is still in the repo at `gps-clock-in-module.html` (not deleted, never merged); needs a paid Google Maps/Mapbox geocoding key and a native wrapper (Capacitor) for background tracking, since plain mobile browser tabs suspend GPS watchers when backgrounded. Manual Clock In/Out (no geofencing) is what's live instead. (An earlier, redundant standalone GPS prototype called `gps` also existed in the repo root — deleted 2026-09-16 as dead weight; `gps-clock-in-module.html` is the real reference doc.)
 - Firebase Firestore persistence — cross-device sync of any of the above; reference migration doc is `firebase-backend-module.html` (still in the repo, never merged). Everything today is `localStorage`-only, one phone = one copy of the data. Needs a real Firebase project.
 - `current/` React tree (see top of this file)
-- Full walk-video file persistence (see mode-selection decision above — preview + transcript only in v1)
 
 ## Deploy notes
 

@@ -118,6 +118,9 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #walkVideo.hidden-cam { display: none; }
 #shutterBtn { position: absolute; right: 14px; bottom: 14px; width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.95); color: #1F4A3D; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(0,0,0,0.25); padding: 0; margin: 0; }
 #gpsLabel { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--w-text-soft); text-align: center; margin: 8px 0 0; }
+.w-video-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--w-text-soft); margin: 10px 0 0; }
+.w-video-toggle input { margin: 0; }
+#videoStatusLabel { font-size: 11px; color: var(--w-text-soft); opacity: .8; text-align: center; margin: 4px 0 0; }
 
 .w-record-zone { display: flex; flex-direction: column; align-items: center; margin: 6px 0 20px; position: relative; z-index: 2; }
 .w-record-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
@@ -281,6 +284,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display:
       <button id="walkBtn" type="button">Start<br>Walk-Around</button>
       <button id="stopWalkBtn" type="button" class="w-photo-btn stop-btn" aria-label="Stop walk-around">⏹<span>Stop</span></button>
     </div>
+    <label class="w-video-toggle"><input type="checkbox" id="saveVideoToggle"> Also save a video of this walk</label>
+    <p id="videoStatusLabel"></p>
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
     <button id="generateSummaryBtn" type="button" class="w-generate-summary-btn">📋 Generate Summary</button>

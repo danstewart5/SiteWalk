@@ -14,7 +14,7 @@ document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [];
 const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
@@ -22,6 +22,12 @@ const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, listening = false;
+
+// Continuous video-save is fully optional and independent of the always-on
+// camera-preview/mic/listening/snap engine above — it just also records the
+// live feed to a file when the crew opts in via the checkbox.
+let videoRecorder = null, videoChunks = [], videoAudioStream = null, videoRecordingActive = false;
+const SNAP_TRIGGER_RE = /\b(take (?:a |another )?(?:photo|picture|pic|shot)(?:s)?|snap (?:a |another )?(?:photo|picture|pic)|get a (?:photo|picture|shot) of (?:this|that)|photo (?:this|that))\b/i;
 
 // Push-to-talk fallback for phones without SpeechRecognition (notably iOS Safari).
 let mediaRecorder = null, mediaChunks = [], mediaStream = null, recordingNote = false;
@@ -731,7 +737,34 @@ function fileVoiceUtterance(text) {
 }
 
 function snapFromVideo(video) { if (!video || !video.videoWidth) return null; const max = 1280; const scale = Math.min(1, max / Math.max(video.videoWidth, video.videoHeight)); const c = document.createElement('canvas'); c.width = Math.round(video.videoWidth * scale); c.height = Math.round(video.videoHeight * scale); const ctx = c.getContext('2d'); if (!ctx) return null; ctx.drawImage(video, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.72); }
-function saveWalkPhoto(src) { const item = { src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now() }; photos.push(item); tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); }
+// meta carries structured, timestamped provenance (how the shot was taken and
+// the transcript that triggered it, if any) so a still can be matched back
+// to both the spoken record and whatever punch/change/RFI item it links to.
+function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); return item; }
+
+// Voice-triggered snap runs entirely off the live <video> element and never
+// touches `recognition` (no stop/start) — a "take a photo" trigger must not
+// interrupt or restart continuous listening.
+let lastSnapTriggerAt = 0;
+const SNAP_TRIGGER_COOLDOWN_MS = 1500;
+function voiceTriggeredSnap(transcriptText) {
+  const now = Date.now();
+  if (now - lastSnapTriggerAt < SNAP_TRIGGER_COOLDOWN_MS) return; // guards duplicate onresult firings for one utterance
+  lastSnapTriggerAt = now;
+  if (!walkStream) { setWalkStatus('info', 'Heard "take a photo" but the camera isn\'t live — tap Snap instead.'); return; }
+  const src = snapFromVideo(document.getElementById('walkVideo'));
+  if (!src) return;
+  saveWalkPhoto(src, { source: 'voice', transcriptText: transcriptText });
+  setWalkStatus('ok', 'Photo captured — heard "' + transcriptText + '"');
+}
+// Strips the trigger phrase out of a finalized utterance. Returns null when
+// no trigger is present; otherwise returns whatever text remains (may be
+// empty, e.g. the utterance was only "take a photo").
+function extractSnapTriggerRemainder(text) {
+  const m = text.match(SNAP_TRIGGER_RE);
+  if (!m) return null;
+  return (text.slice(0, m.index) + text.slice(m.index + m[0].length)).replace(/\s{2,}/g, ' ').trim();
+}
 
 // --- Voice: continuous SpeechRecognition where available ---
 function voiceRecognitionSupported() { return !!SpeechRecognition; }
@@ -745,7 +778,13 @@ function setupRecognition() {
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript.trim();
-      if (event.results[i].isFinal) { if (transcript) fileVoiceUtterance(transcript); }
+      if (event.results[i].isFinal) {
+        if (transcript) {
+          const remainder = extractSnapTriggerRemainder(transcript);
+          if (remainder !== null) { voiceTriggeredSnap(transcript); if (remainder) fileVoiceUtterance(remainder); }
+          else fileVoiceUtterance(transcript);
+        }
+      }
       else interim += transcript;
     }
     const walkLive = document.getElementById('walkLiveTranscript');
@@ -853,6 +892,66 @@ function getWalkStream() {
     .catch(function () { return navigator.mediaDevices.getUserMedia({ video: Object.assign({ facingMode: 'environment' }, dims), audio: false }); })
     .catch(function () { return navigator.mediaDevices.getUserMedia({ video: true, audio: false }); });
 }
+// --- Optional continuous video-save (independent of camera preview / voice / snap) ---
+function videoRecordingRequested() { const el = document.getElementById('saveVideoToggle'); return !!(el && el.checked); }
+function pickVideoMimeType() {
+  const candidates = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  return candidates.find(function (t) { return MediaRecorder.isTypeSupported(t); }) || '';
+}
+function setVideoStatus(text) { const el = document.getElementById('videoStatusLabel'); if (el) el.textContent = text || ''; }
+// Grabs its own mic track rather than reusing SpeechRecognition's (which the
+// Web Speech API manages internally and never exposes as a MediaStream), so
+// recording audio can start/stop/fail independently of continuous listening.
+function startVideoRecording(camStream) {
+  if (!camStream || !window.MediaRecorder) { setVideoStatus('Video save unsupported on this browser.'); return; }
+  const mimeType = pickVideoMimeType();
+  navigator.mediaDevices.getUserMedia({ audio: true }).catch(function () { return null; }).then(function (audioStream) {
+    if (!walkActive || !videoRecordingRequested()) { if (audioStream) audioStream.getTracks().forEach(function (t) { t.stop(); }); return; }
+    videoAudioStream = audioStream;
+    const tracks = camStream.getVideoTracks().concat(audioStream ? audioStream.getAudioTracks() : []);
+    const combined = new MediaStream(tracks);
+    try { videoRecorder = mimeType ? new MediaRecorder(combined, { mimeType: mimeType }) : new MediaRecorder(combined); }
+    catch (e) { setVideoStatus('Video save failed to start.'); return; }
+    videoChunks = [];
+    videoRecorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) videoChunks.push(e.data); };
+    videoRecorder.onstop = function () {
+      if (videoAudioStream) { videoAudioStream.getTracks().forEach(function (t) { t.stop(); }); videoAudioStream = null; }
+      const blob = new Blob(videoChunks, { type: videoRecorder.mimeType || mimeType || 'video/webm' });
+      videoChunks = [];
+      videoRecordingActive = false;
+      if (blob.size > 0) saveVideoFile(blob); else setVideoStatus('');
+    };
+    videoRecorder.start(1000);
+    videoRecordingActive = true;
+    setVideoStatus('🔴 Saving video…');
+  });
+}
+function stopVideoRecording() {
+  if (videoRecordingActive && videoRecorder) { try { videoRecorder.stop(); } catch (e) { } }
+  videoRecorder = null;
+}
+// Browsers give no direct "write to disk" API from a Blob; a real save is
+// the OS share sheet (works well on iOS/Android) falling back to a download
+// link (desktop browsers write straight to Downloads).
+function saveVideoFile(blob) {
+  const ext = (blob.type.indexOf('mp4') !== -1) ? 'mp4' : 'webm';
+  const filename = 'sitewalk-video-' + new Date().toISOString().replace(/[:.]/g, '-') + '.' + ext;
+  const file = (typeof File !== 'undefined') ? new File([blob], filename, { type: blob.type }) : null;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+    navigator.share({ files: [file], title: filename }).then(function () { setVideoStatus('Video saved.'); }).catch(function () { downloadVideoBlob(blob, filename); });
+    return;
+  }
+  downloadVideoBlob(blob, filename);
+}
+function downloadVideoBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  setVideoStatus('Video saved to Downloads.');
+}
 function openWalkCamera() { const video = document.getElementById('walkVideo'); video.classList.remove('hidden-cam'); if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { video.classList.add('hidden-cam'); setWalkStatus('info', 'Live camera needs HTTPS. Tap Snap.'); return Promise.resolve(false); } return getWalkStream().then(function (stream) { walkStream = stream; video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true'); video.muted = true; video.playsInline = true; video.srcObject = stream; return video.play().then(function () { return true; }).catch(function () { return true; }); }).catch(function () { video.classList.add('hidden-cam'); setWalkStatus('info', 'Live camera unavailable. Tap Snap to take a photo.'); return false; }); }
 window.startWalk = function () {
   if (walkActive) return;
@@ -872,12 +971,14 @@ window.startWalk = function () {
   }
   openWalkCamera().then(function (live) {
     startWalkVoice();
-    if (live) setWalkStatus('ok', 'Walk live — camera + AI listening. Snap photos as you go.');
+    if (live && videoRecordingRequested()) startVideoRecording(walkStream);
+    if (live) setWalkStatus('ok', 'Walk live — camera + AI listening. Snap photos, or say "take a photo."');
     else if (walkActive) setWalkStatus('ok', 'Walk live. Tap Snap for photos.');
   });
 };
 window.endWalk = function () {
   walkActive = false;
+  stopVideoRecording();
   stopWalkCamera();
   stopWalkVoice();
   const btn = document.getElementById('walkBtn');
@@ -897,6 +998,7 @@ document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSel
 document.getElementById('generateSummaryBtn').addEventListener('click', function () { renderSummary(); showWalkTab('summary'); });
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, saveWalkPhoto); }; r.readAsDataURL(f); } e.target.value = ''; });
+document.getElementById('saveVideoToggle').addEventListener('change', function (e) { saveJson(LS.saveVideo, !!e.target.checked); });
 document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
 document.getElementById('lightbox').addEventListener('click', function (e) { if (e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
 function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
@@ -1060,6 +1162,7 @@ function clearAllData() {
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   document.getElementById('siteName').textContent = 'Job Site';
   document.getElementById('siteAddress').textContent = 'Tap to add address';
+  document.getElementById('saveVideoToggle').checked = false;
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('report').innerHTML = '';
   renderPhotosTab();
@@ -1096,6 +1199,7 @@ window.addEventListener('load', function () {
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
   if (savedSiteAddress) document.getElementById('siteAddress').textContent = savedSiteAddress;
+  document.getElementById('saveVideoToggle').checked = !!loadJson(LS.saveVideo, false);
   renderPhotosTab();
   const photoSearchEl = document.getElementById('photoSearch');
   if (photoSearchEl) photoSearchEl.addEventListener('input', renderPhotosTab);
