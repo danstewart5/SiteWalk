@@ -11,15 +11,20 @@ Two public links (no login):
 
 Do not use Grok sandbox preview URLs.
 
-## What the live app actually does (as of 2026-09-14)
+## What the live app actually does (as of 2026-09-19)
 
-Tapping **Start Walk-Around** is the one entry point *today*: opens the rear camera live, starts AI voice listening, and auto-tags the current trade from what it hears (Cloudflare Worker `/classify` when a Worker URL is configured, a local keyword heuristic offline). Tap **Snap** to take a photo — it inherits whatever trade the AI just heard. Tap **End Walk** and a **Generate Report** button appears in its place — tap it whenever you're ready and it jumps to the Setup tab where the report is displayed.
+Before **Start Walk-Around**, pick a session mode (last choice is remembered in `swWalkMode`):
 
-That single-entry flow is superseded by the mode-selection decision below. Do not keep collapsing both session types back into one Start button when that work lands.
+- **Video walk** — rear camera + live Web Speech. Say **sitewalk snap** (also: site walk snap, mark shot, grab still, snap picture/photo, take still) to grab a still from the live feed. Snap button stays on screen.
+- **Photo only** — rear camera, no always-on mic/ASR. Snap is manual. Optional tap-to-record notes still work.
+
+Tap **End Walk** / Stop to finish. **Generate Summary** jumps to the Walk Summary sub-tab.
+
+Voice snap and the Snap button share `captureWalkStill()`. That writer only reads the current `<video>` frame (or a short preview ring aimed at phrase-start). It must not stop tracks, re-call `getUserMedia`, or touch `recognition` / `MediaRecorder`. Isolated trigger phrases are not filed as punch items.
 
 UI is five tabs behind a fixed bottom nav (phone-app style, not one long scrolling page):
 
-- **🎥 Walk** — Start Walk-Around (camera, voice, live trade tag, Snap, photo gallery for the current walk)
+- **🎥 Walk** — mode picker, Start Walk-Around (camera, voice in video mode, Snap / voice snap, photo gallery)
 - **✅ Items** — Punch List (now with a Resolved toggle), Change Orders (client approve/decline), RFIs (Open/Answered), Submittals (Pending/Approved), Safety Incident/Near-Miss Log (type, description, person involved, corrective action, optional photo)
 - **⏱ Time** — manual Clock In/Out (flags anyone clocked in 16+ hours with no clock-out) + Daily Log (date, weather, crew count, trades on site, delays, notes)
 - **📊 Board** — Open Items Dashboard, live-computed from the actual in-app arrays (not a separate page, not stale)
@@ -31,7 +36,7 @@ All eight of the original "File N of 7/8 — INSTRUCTIONS FOR GROK" standalone m
 
 ## Decision — walk session modes + voice snap (2026-09-19)
 
-**Status: decided, not built.** Live app is still one Start Walk-Around button. Do not implement from this note unless asked; this is the product contract so the next pass does not merge the two modes again.
+**Status: landed in live app 2026-09-19** (`index.html` + `walk.js`, cache `sitewalk-v42`). Mode picker + voice snap are on the phone path. Isolation rule still stands: a photo must never stop or restart listening.
 
 Reviewed by Grok 2026-09-19. Chapter 1 of the larger platform.
 
@@ -55,13 +60,13 @@ Constraints agreed in review:
 - **Isolation (release blocker).** Photo path must never `stop()` tracks, re-call `getUserMedia`, toggle `track.enabled`, replace `srcObject`, or touch `recognition` / `MediaRecorder`. One media stream for the whole video session. Speech owns its own `onend` restart loop. Voice and Snap button call the same writer. Test: snap must not kill listening on Android Chrome or collapse the iOS audio session.
 - **Photo identity.** Filenames are for humans (`{siteSlug}_{YYYY-MM-DD}_{HHmmss}_{seq}.jpg`). Join keys are structured: `photoId`, `sessionId`, `capturedAt` (ISO + epoch ms), `sessionOffsetMs`, `source` (`voice` | `button`), `trigger`, `transcriptUtteranceId` (or char offsets), `trade`, `linkedItemId`. Keep the existing 60s photo↔punch window as fallback only. Do not encode punch text in the filename. Do not persist a full walk video as part of this feature.
 
-### Shipping order (when this is built)
+### Shipping order
 
-1. Mode picker + last-used default; photo-only must work with zero ASR.
-2. Shared capture function; isolation tests on Android Chrome and iOS Safari.
-3. Conservative phrase + cooldown + haptic; Snap remains visible.
-4. Structured photo metadata + utterance-id linking; 60s window stays as backup.
-5. Only then a real on-device spotter or persisted walk video.
+1. Done — mode picker + last-used default; photo-only starts with zero ASR.
+2. Done — shared `captureWalkStill()`; **still needs a phone test** that snap does not kill listening on Android Chrome / iOS Safari.
+3. Done — phrases + 2s cooldown + vibrate/flash; Snap remains visible.
+4. Partial — `photoId`, `sessionId`, `sessionOffsetMs`, `source`, `trigger`, `fileName` are stored. Utterance-id linking not yet; 60s window remains the fallback.
+5. Not started — on-device keyword spotter or persisted walk video.
 
 ## Known issues
 
