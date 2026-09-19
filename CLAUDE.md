@@ -13,7 +13,9 @@ Do not use Grok sandbox preview URLs.
 
 ## What the live app actually does (as of 2026-09-14)
 
-Tapping **Start Walk-Around** is the one entry point: opens the rear camera live, starts AI voice listening, and auto-tags the current trade from what it hears (Cloudflare Worker `/classify` when a Worker URL is configured, a local keyword heuristic offline). Tap **Snap** to take a photo — it inherits whatever trade the AI just heard. Tap **End Walk** and a **Generate Report** button appears in its place — tap it whenever you're ready and it jumps to the Setup tab where the report is displayed.
+Tapping **Start Walk-Around** is the one entry point *today*: opens the rear camera live, starts AI voice listening, and auto-tags the current trade from what it hears (Cloudflare Worker `/classify` when a Worker URL is configured, a local keyword heuristic offline). Tap **Snap** to take a photo — it inherits whatever trade the AI just heard. Tap **End Walk** and a **Generate Report** button appears in its place — tap it whenever you're ready and it jumps to the Setup tab where the report is displayed.
+
+That single-entry flow is superseded by the mode-selection decision below. Do not keep collapsing both session types back into one Start button when that work lands.
 
 UI is five tabs behind a fixed bottom nav (phone-app style, not one long scrolling page):
 
@@ -26,6 +28,40 @@ UI is five tabs behind a fixed bottom nav (phone-app style, not one long scrolli
 Every item type persists to `localStorage` under real, live keys (see `LS` object at the top of `walk.js`): `swPunch`, `swChanges`, `swRfis`, `swSubmittals`, `swClockEvents`, `swDailyLogs`, `swSafety`, `swPhotos`, `swTradeContacts`.
 
 All eight of the original "File N of 7/8 — INSTRUCTIONS FOR GROK" standalone module snippets (RFI, Daily Log, Submittals, Safety, Dashboard, Trade Directory, GPS Clock-In, Firebase Backend) are now resolved one way or another: RFI/Daily Log/Submittals/Safety/Dashboard are merged into the live app above; GPS geofencing and Firebase sync are explicitly parked (see below), not abandoned by accident. `trade-directory-module.html` was deleted — it never contained real content (the file body was just the placeholder string `content1`), and the practical need is already covered live by Setup's manual Trade Contacts email/SMS.
+
+## Decision — walk session modes + voice snap (2026-09-19)
+
+**Status: decided, not built.** Live app is still one Start Walk-Around button. Do not implement from this note unless asked; this is the product contract so the next pass does not merge the two modes again.
+
+Reviewed by Grok 2026-09-19. Chapter 1 of the larger platform.
+
+### Mode selection (start of every walk)
+
+User picks a mode before the walk starts. Persist last-used mode on the device.
+
+1. **Video walk-around** — camera + microphone stay live for the whole session; live speech-to-text runs throughout; one Start / End control for the session. Snap stays on screen as a backup shutter. "Record continuously" in v1 means keep the preview + mic + transcript live, **not** persist a full walk video file. Full walk-video persistence is a later storage/privacy/offline problem, not part of this decision.
+2. **Photo-only walk-around** — camera on, no always-on ASR. User snaps stills manually. Optional tap-to-talk notes may reuse the existing iOS MediaRecorder fallback. This is the mode for loud areas, PPE, or anyone who does not want the phone listening the whole walk.
+
+These are two session types with two audio policies. Do not hide Snap in video mode.
+
+### Voice-triggered photo (video mode only)
+
+Instead of requiring a thumb press, the user can say a trigger phrase while walking and talking. On detect, grab a still from the live video feed at that moment, save it as a session photo, and keep recording + transcribing with **no stop/restart** of the speech path.
+
+Constraints agreed in review:
+
+- **Detection.** Do not treat the live Web Speech transcript as a wake-word engine. Construction noise + common English (`snap picture`, snap line, snapshot) will false-fire. v1 may scan final transcripts with a conservative matcher, cooldown (1.5–2.5s), isolated-phrase rule, haptic/beep/flash ack, and a small variant list. Prefer a 3–4 syllable uncommon command over "snap picture" (`sitewalk snap` / `mark shot` class). Strip or tag the command so classify / punch extraction does not file it as an item. Plan a dedicated on-device keyword spotter if video mode becomes the default field path.
+- **Frame grab.** Same live `<video>` element → `canvas.drawImage` → existing `compressImage` path. Do not open a second camera session or reconfigure capture mid-walk. Detection lag (often 300–1500ms on Web Speech) dominates; canvas grab is cheap. Prefer a short preview-frame ring buffer and grab at phrase *start*, not phrase end. User copy: point, say the phrase, hold a beat.
+- **Isolation (release blocker).** Photo path must never `stop()` tracks, re-call `getUserMedia`, toggle `track.enabled`, replace `srcObject`, or touch `recognition` / `MediaRecorder`. One media stream for the whole video session. Speech owns its own `onend` restart loop. Voice and Snap button call the same writer. Test: snap must not kill listening on Android Chrome or collapse the iOS audio session.
+- **Photo identity.** Filenames are for humans (`{siteSlug}_{YYYY-MM-DD}_{HHmmss}_{seq}.jpg`). Join keys are structured: `photoId`, `sessionId`, `capturedAt` (ISO + epoch ms), `sessionOffsetMs`, `source` (`voice` | `button`), `trigger`, `transcriptUtteranceId` (or char offsets), `trade`, `linkedItemId`. Keep the existing 60s photo↔punch window as fallback only. Do not encode punch text in the filename. Do not persist a full walk video as part of this feature.
+
+### Shipping order (when this is built)
+
+1. Mode picker + last-used default; photo-only must work with zero ASR.
+2. Shared capture function; isolation tests on Android Chrome and iOS Safari.
+3. Conservative phrase + cooldown + haptic; Snap remains visible.
+4. Structured photo metadata + utterance-id linking; 60s window stays as backup.
+5. Only then a real on-device spotter or persisted walk video.
 
 ## Known issues
 
@@ -46,6 +82,7 @@ All eight of the original "File N of 7/8 — INSTRUCTIONS FOR GROK" standalone m
 - Chapter 2 GPS geofencing (100m radius, 5-minute out buffer, auto clock in/out) — reference implementation is still in the repo at `gps-clock-in-module.html` (not deleted, never merged); needs a paid Google Maps/Mapbox geocoding key and a native wrapper (Capacitor) for background tracking, since plain mobile browser tabs suspend GPS watchers when backgrounded. Manual Clock In/Out (no geofencing) is what's live instead. (An earlier, redundant standalone GPS prototype called `gps` also existed in the repo root — deleted 2026-09-16 as dead weight; `gps-clock-in-module.html` is the real reference doc.)
 - Firebase Firestore persistence — cross-device sync of any of the above; reference migration doc is `firebase-backend-module.html` (still in the repo, never merged). Everything today is `localStorage`-only, one phone = one copy of the data. Needs a real Firebase project.
 - `current/` React tree (see top of this file)
+- Full walk-video file persistence (see mode-selection decision above — preview + transcript only in v1)
 
 ## Deploy notes
 
