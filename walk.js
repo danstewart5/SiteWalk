@@ -1,6 +1,6 @@
-const TABS = ['walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'setup', 'report'];
+const TABS = ['home', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'setup', 'report'];
 function showTab(name) {
-  if (TABS.indexOf(name) === -1) name = 'walk';
+  if (TABS.indexOf(name) === -1) name = 'home';
   TABS.forEach(function (t) {
     const panel = document.getElementById('tab-' + t);
     if (panel) panel.classList.toggle('active', t === name);
@@ -11,6 +11,26 @@ function showTab(name) {
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
+});
+
+document.querySelectorAll('.home-block-header').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    btn.closest('.home-block').classList.toggle('expanded');
+  });
+});
+document.querySelectorAll('.home-chapter-btn[data-tab], .home-admin-btn[data-tab]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    const tab = btn.getAttribute('data-tab');
+    if (tab) showTab(tab);
+  });
+});
+document.getElementById('homeStartWalkBtn').addEventListener('click', function () {
+  showTab('walk');
+  if (!walkActive) window.startWalk();
+});
+document.getElementById('homeGenerateReportBtn').addEventListener('click', function () {
+  showTab('report');
+  window.generateReport();
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
@@ -1274,5 +1294,5 @@ window.addEventListener('load', function () {
     document.getElementById('walkRecordBtn').style.display = 'block';
   }
   document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to open the camera and AI listening.';
-  showTab('walk');
+  showTab('home');
 });

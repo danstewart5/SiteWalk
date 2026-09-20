@@ -219,6 +219,33 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .top-tab-btn { flex: 0 0 auto; background: none; border: none; color: rgba(255,255,255,0.72); padding: 8px 10px 6px; margin: 0; width: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 18px; cursor: pointer; border-radius: 8px; }
 .top-tab-btn span { font-size: 9px; font-weight: 600; white-space: nowrap; }
 .top-tab-btn.active { color: #14395E; background: #EAF3FB; }
+
+.home-quick-actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.home-quick-btn { padding: 16px; border-radius: 10px; font-size: 16px; font-weight: 700; }
+.home-quick-start { background: #38a169; }
+.home-quick-report { background: #2b6cb0; }
+.home-blocks { display: flex; flex-direction: column; gap: 10px; }
+.home-block { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #fff; }
+.home-block-header { display: flex; align-items: center; gap: 10px; width: 100%; background: #f7fafc; color: #1a365d; border: none; border-radius: 0; padding: 14px 16px; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
+.home-block-icon { font-size: 20px; }
+.home-block-title { flex: 1; }
+.home-block-chevron { font-size: 20px; color: #a0aec0; transition: transform 0.15s ease; }
+.home-block.expanded .home-block-chevron { transform: rotate(90deg); }
+.home-block[data-block="preconstruction"] .home-block-header { border-left: 5px solid #805ad5; }
+.home-block[data-block="pm"] .home-block-header { border-left: 5px solid #2b6cb0; }
+.home-block[data-block="rm"] .home-block-header { border-left: 5px solid #38a169; }
+.home-block[data-block="fm"] .home-block-header { border-left: 5px solid #d69e2e; }
+.home-block-chapters { display: none; flex-direction: column; gap: 6px; padding: 4px 12px 14px; }
+.home-block.expanded .home-block-chapters { display: flex; }
+.home-chapter-btn { width: 100%; text-align: left; background: #fafafa; border: 1px solid #edf2f7; color: #2d3748; font-weight: 600; font-size: 13px; padding: 10px 12px; border-radius: 8px; }
+.home-chapter-btn:disabled { color: #a0aec0; cursor: default; }
+.home-chapter-btn em { display: block; font-style: normal; font-weight: 500; font-size: 11px; color: #a0aec0; margin-top: 2px; }
+.home-admin { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #e2e8f0; }
+.home-admin-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #a0aec0; margin-bottom: 8px; }
+.home-admin-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.home-admin-btn { width: auto; flex: 0 0 auto; background: #edf2f7; color: #4a5568; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
+.home-admin-btn:disabled { color: #cbd5e0; cursor: default; }
+
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
@@ -234,24 +261,72 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display:
 <p class="subtitle">Walk • Talk • Snap • Report by Trade</p>
 
 <nav id="topNav">
-<button class="top-tab-btn active" data-tab="walk" type="button">🎥<span>Walk</span></button>
-<button class="top-tab-btn" data-tab="punch" type="button">✅<span>Punch List</span></button>
-<button class="top-tab-btn" data-tab="changes" type="button">📝<span>Change Orders</span></button>
-<button class="top-tab-btn" data-tab="rfis" type="button">❓<span>RFIs</span></button>
-<button class="top-tab-btn" data-tab="submittals" type="button">📄<span>Submittals</span></button>
-<button class="top-tab-btn" data-tab="safety" type="button">⚠️<span>Safety Log</span></button>
-<button class="top-tab-btn" data-tab="clock" type="button">⏱<span>Clock In/Out</span></button>
-<button class="top-tab-btn" data-tab="dailylog" type="button">📆<span>Daily Log</span></button>
-<button class="top-tab-btn" data-tab="jobcost" type="button">💰<span>Job Cost</span></button>
-<button class="top-tab-btn" data-tab="drawingrefs" type="button">📐<span>Drawing Refs</span></button>
-<button class="top-tab-btn" data-tab="drawings" type="button">🗂️<span>Drawings</span></button>
-<button class="top-tab-btn" data-tab="dashboard" type="button">📊<span>Dashboard</span></button>
-<button class="top-tab-btn" data-tab="contacts" type="button">👥<span>Contacts</span></button>
-<button class="top-tab-btn" data-tab="setup" type="button">⚙️<span>Setup</span></button>
-<button class="top-tab-btn" data-tab="report" type="button">📋<span>Report</span></button>
+<button class="top-tab-btn active" data-tab="home" type="button">🏠<span>Home</span></button>
 </nav>
 
-<div class="tab-panel active" id="tab-walk">
+<div class="tab-panel active" id="tab-home">
+<div class="home-quick-actions">
+<button id="homeStartWalkBtn" type="button" class="home-quick-btn home-quick-start">🎥 Start Walk-Around</button>
+<button id="homeGenerateReportBtn" type="button" class="home-quick-btn home-quick-report">📋 Generate Report</button>
+</div>
+
+<div class="home-blocks">
+
+<div class="home-block" data-block="preconstruction">
+<button class="home-block-header" type="button"><span class="home-block-icon">🏗️</span><span class="home-block-title">Preconstruction</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" disabled>Land Acquisition <em>Coming soon</em></button>
+<button class="home-chapter-btn" disabled>Ch. 6 · Land-to-Contract Pipeline (Victoria Land) <em>Coming soon</em></button>
+<button class="home-chapter-btn" disabled>Ch. 9 · Price-the-House <em>Coming soon</em></button>
+</div>
+</div>
+
+<div class="home-block" data-block="pm">
+<button class="home-block-header" type="button"><span class="home-block-icon">🧱</span><span class="home-block-title">Project Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="walk" type="button">Ch. 1 · Walk-Around</button>
+<button class="home-chapter-btn" data-tab="punch" type="button">Ch. 3 · Punch List &amp; Estimating</button>
+<button class="home-chapter-btn" data-tab="changes" type="button">Change Orders</button>
+<button class="home-chapter-btn" data-tab="rfis" type="button">RFIs</button>
+<button class="home-chapter-btn" data-tab="submittals" type="button">Submittals</button>
+<button class="home-chapter-btn" data-tab="safety" type="button">Safety Log</button>
+<button class="home-chapter-btn" data-tab="drawingrefs" type="button">Drawing References</button>
+<button class="home-chapter-btn" data-tab="drawings" type="button">Drawings &amp; Plans</button>
+</div>
+</div>
+
+<div class="home-block" data-block="rm">
+<button class="home-block-header" type="button"><span class="home-block-icon">👷</span><span class="home-block-title">Resource Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="clock" type="button">Ch. 2 · GPS Clock-In</button>
+<button class="home-chapter-btn" data-tab="contacts" type="button">Ch. 4 · Trade Routing (Contacts)</button>
+<button class="home-chapter-btn" data-tab="dailylog" type="button">Daily Log</button>
+</div>
+</div>
+
+<div class="home-block" data-block="fm">
+<button class="home-block-header" type="button"><span class="home-block-icon">💵</span><span class="home-block-title">Financial Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" disabled>Ch. 5 · Invoicing <em>Coming soon</em></button>
+<button class="home-chapter-btn" data-tab="jobcost" type="button">Job Cost Dashboard</button>
+</div>
+</div>
+
+</div>
+
+<div class="home-admin">
+<span class="home-admin-label">Admin &amp; Overview</span>
+<div class="home-admin-links">
+<button class="home-admin-btn" disabled>Ch. 7 · Consulting Business Rollout</button>
+<button class="home-admin-btn" disabled>Ch. 8 · Developer Dashboard</button>
+<button class="home-admin-btn" data-tab="dashboard" type="button">Open Items Dashboard</button>
+<button class="home-admin-btn" data-tab="report" type="button">Report</button>
+<button class="home-admin-btn" data-tab="setup" type="button">Setup</button>
+</div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-walk">
 <div class="walk-redesign">
 
 <nav class="walk-subnav">
