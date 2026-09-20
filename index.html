@@ -225,16 +225,26 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-quick-start { background: #38a169; }
 .home-quick-report { background: #2b6cb0; }
 .home-blocks { display: flex; flex-direction: column; gap: 10px; }
-.home-block { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #fff; }
-.home-block-header { display: flex; align-items: center; gap: 10px; width: 100%; background: #f7fafc; color: #1a365d; border: none; border-radius: 0; padding: 14px 16px; font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; }
-.home-block-icon { font-size: 20px; }
-.home-block-title { flex: 1; }
+.home-block { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.home-block-header { display: flex; align-items: center; gap: 12px; width: 100%; background: #fff; color: #1a365d; border: none; border-radius: 0; padding: 14px 16px; font-size: 15px; font-weight: 800; text-align: left; cursor: pointer; }
+.home-block-icon { font-size: 19px; width: 38px; height: 38px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+.home-block-title { flex: 1; line-height: 1.25; }
 .home-block-chevron { font-size: 20px; color: #a0aec0; transition: transform 0.15s ease; }
 .home-block.expanded .home-block-chevron { transform: rotate(90deg); }
-.home-block[data-block="preconstruction"] .home-block-header { border-left: 5px solid #805ad5; }
-.home-block[data-block="pm"] .home-block-header { border-left: 5px solid #2b6cb0; }
-.home-block[data-block="rm"] .home-block-header { border-left: 5px solid #38a169; }
-.home-block[data-block="fm"] .home-block-header { border-left: 5px solid #d69e2e; }
+.home-block[data-block="land"] { border-top: 4px solid #2c7a7b; }
+.home-block[data-block="land"] .home-block-icon { background: #e6fffa; }
+.home-block[data-block="preconstruction"] { border-top: 4px solid #805ad5; }
+.home-block[data-block="preconstruction"] .home-block-icon { background: #f3e8ff; }
+.home-block[data-block="design"] { border-top: 4px solid #3182ce; }
+.home-block[data-block="design"] .home-block-icon { background: #ebf8ff; }
+.home-block[data-block="field"] { border-top: 4px solid #2b6cb0; }
+.home-block[data-block="field"] .home-block-icon { background: #e6f0fa; }
+.home-block[data-block="scheduling"] { border-top: 4px solid #38a169; }
+.home-block[data-block="scheduling"] .home-block-icon { background: #e6fff2; }
+.home-block[data-block="safety"] { border-top: 4px solid #c53030; }
+.home-block[data-block="safety"] .home-block-icon { background: #fff0f0; }
+.home-block[data-block="financial"] { border-top: 4px solid #d69e2e; }
+.home-block[data-block="financial"] .home-block-icon { background: #fffaeb; }
 .home-block-chapters { display: none; flex-direction: column; gap: 6px; padding: 4px 12px 14px; }
 .home-block.expanded .home-block-chapters { display: flex; }
 .home-chapter-btn { width: 100%; text-align: left; background: #fafafa; border: 1px solid #edf2f7; color: #2d3748; font-weight: 600; font-size: 13px; padding: 10px 12px; border-radius: 8px; }
@@ -272,31 +282,41 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display:
 
 <div class="home-blocks">
 
-<div class="home-block" data-block="preconstruction">
-<button class="home-block-header" type="button"><span class="home-block-icon">🏗️</span><span class="home-block-title">Preconstruction</span><span class="home-block-chevron">›</span></button>
+<div class="home-block" data-block="land">
+<button class="home-block-header" type="button"><span class="home-block-icon">🗺️</span><span class="home-block-title">Land &amp; Acquisition</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" disabled>Land Acquisition <em>Coming soon</em></button>
 <button class="home-chapter-btn" disabled>Ch. 6 · Land-to-Contract Pipeline (Victoria Land) <em>Coming soon</em></button>
+</div>
+</div>
+
+<div class="home-block" data-block="preconstruction">
+<button class="home-block-header" type="button"><span class="home-block-icon">📐</span><span class="home-block-title">Preconstruction &amp; Estimating</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="punch" type="button">Ch. 3 · Punch List &amp; Estimating</button>
 <button class="home-chapter-btn" disabled>Ch. 9 · Price-the-House <em>Coming soon</em></button>
 </div>
 </div>
 
-<div class="home-block" data-block="pm">
-<button class="home-block-header" type="button"><span class="home-block-icon">🧱</span><span class="home-block-title">Project Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block" data-block="design">
+<button class="home-block-header" type="button"><span class="home-block-icon">🗂️</span><span class="home-block-title">Design &amp; Drawings</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="walk" type="button">Ch. 1 · Walk-Around</button>
-<button class="home-chapter-btn" data-tab="punch" type="button">Ch. 3 · Punch List &amp; Estimating</button>
-<button class="home-chapter-btn" data-tab="changes" type="button">Change Orders</button>
-<button class="home-chapter-btn" data-tab="rfis" type="button">RFIs</button>
-<button class="home-chapter-btn" data-tab="submittals" type="button">Submittals</button>
-<button class="home-chapter-btn" data-tab="safety" type="button">Safety Log</button>
 <button class="home-chapter-btn" data-tab="drawingrefs" type="button">Drawing References</button>
 <button class="home-chapter-btn" data-tab="drawings" type="button">Drawings &amp; Plans</button>
+<button class="home-chapter-btn" data-tab="submittals" type="button">Submittals</button>
 </div>
 </div>
 
-<div class="home-block" data-block="rm">
-<button class="home-block-header" type="button"><span class="home-block-icon">👷</span><span class="home-block-title">Resource Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block" data-block="field">
+<button class="home-block-header" type="button"><span class="home-block-icon">🎥</span><span class="home-block-title">Field Operations &amp; Walk-Around</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="walk" type="button">Ch. 1 · Walk-Around</button>
+<button class="home-chapter-btn" data-tab="rfis" type="button">RFIs</button>
+</div>
+</div>
+
+<div class="home-block" data-block="scheduling">
+<button class="home-block-header" type="button"><span class="home-block-icon">👷</span><span class="home-block-title">Scheduling &amp; Resources</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="clock" type="button">Ch. 2 · GPS Clock-In</button>
 <button class="home-chapter-btn" data-tab="contacts" type="button">Ch. 4 · Trade Routing (Contacts)</button>
@@ -304,11 +324,19 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav { display:
 </div>
 </div>
 
-<div class="home-block" data-block="fm">
-<button class="home-block-header" type="button"><span class="home-block-icon">💵</span><span class="home-block-title">Financial Management</span><span class="home-block-chevron">›</span></button>
+<div class="home-block" data-block="safety">
+<button class="home-block-header" type="button"><span class="home-block-icon">⚠️</span><span class="home-block-title">Safety &amp; Quality</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="safety" type="button">Safety Log</button>
+</div>
+</div>
+
+<div class="home-block" data-block="financial">
+<button class="home-block-header" type="button"><span class="home-block-icon">💵</span><span class="home-block-title">Financial Management &amp; Invoicing</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" disabled>Ch. 5 · Invoicing <em>Coming soon</em></button>
 <button class="home-chapter-btn" data-tab="jobcost" type="button">Job Cost Dashboard</button>
+<button class="home-chapter-btn" data-tab="changes" type="button">Change Orders</button>
 </div>
 </div>
 
