@@ -53,7 +53,7 @@ Paste the key when prompted.
 
 ## 3. Hook it to the phone
 
-1. Open https://danstewart5.github.io/SiteWalk/ (live Pages — not a Netlify preview)
+1. Open https://sitewalk-app.netlify.app (live front door) or https://danstewart5.github.io/SiteWalk/ (still allowed, not the primary anymore)
 2. In **AI Code-Check Photo**, paste the Worker URL
 3. Leave **Shared key** blank until `SITEWALK_KEY` is set on the Worker
 4. Tap **Save Worker URL & key**
@@ -78,7 +78,7 @@ Phone-oriented version of this list: `PHONE_SETUP.md`.
 
 - The Anthropic key lives only in the Cloudflare secret store.
 - `index.html` never contains the Anthropic key. The optional shared key lives only in this phone’s `localStorage` (`swAiKey`).
-- CORS is locked to `https://danstewart5.github.io`. Path `/SiteWalk/` is not part of the origin. Localhost, `file://`, and Netlify previews will fail CORS and look like a dead network. To reopen for local/dev, set `ALLOWED_ORIGIN` back to `*` in `worker.js`.
+- CORS is locked to the origins listed in `ALLOWED_ORIGINS` in `worker.js` — currently `https://sitewalk-app.netlify.app` and `https://danstewart5.github.io`. Anything else (localhost, `file://`, a different Netlify preview/branch subdomain) will fail CORS and look like a dead network. To reopen for local/dev, set `ALLOWED_ORIGINS` to `['*']` in `worker.js`.
 - Anyone who has the Worker URL can spend Anthropic credits until `SITEWALK_KEY` is set on both sides.
 
 ## Files

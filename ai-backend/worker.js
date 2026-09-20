@@ -20,28 +20,32 @@
 const MODEL = 'claude-sonnet-4-5';
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
 
-// Tightened to the live GitHub Pages origin (host only; /SiteWalk/ is not part of origin).
-// If you add a custom domain later, change ALLOWED_ORIGIN or the phone will get a silent CORS failure.
-// To revert to open CORS for local/dev testing, change ALLOWED_ORIGIN back to '*'.
-const ALLOWED_ORIGIN = 'https://danstewart5.github.io';
+// Netlify is the live front door; the GitHub Pages origin is kept alongside it
+// while that repo/site decision is still in flux. Add/remove entries here as
+// origins change — an origin not in this list gets a silent CORS failure.
+// To revert to open CORS for local/dev testing, add '*' as the sole entry.
+const ALLOWED_ORIGINS = ['https://sitewalk-app.netlify.app', 'https://danstewart5.github.io'];
 
-const CORS = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-SiteWalk-Key',
-};
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
-  });
+function corsHeadersFor(request) {
+  const origin = request.headers.get('Origin') || '';
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-SiteWalk-Key',
+  };
 }
 
 export default {
   async fetch(request, env) {
+    const cors = corsHeadersFor(request);
+    const json = (body, status = 200) => new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json', ...cors },
+    });
+
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS });
+      return new Response(null, { status: 204, headers: cors });
     }
     if (request.method !== 'POST') {
       return json({ error: 'POST a JSON body. See /AI_BACKEND_SETUP.md for routes.' }, 405);
@@ -59,13 +63,13 @@ export default {
     }
 
     const path = new URL(request.url).pathname;
-    if (path === '/classify') return handleClassify(request, env);
-    if (path === '/transcribe') return handleTranscribe(request, env);
-    return handlePhotoCheck(request, env);
+    if (path === '/classify') return handleClassify(request, env, json);
+    if (path === '/transcribe') return handleTranscribe(request, env, json);
+    return handlePhotoCheck(request, env, json);
   },
 };
 
-async function handlePhotoCheck(request, env) {
+async function handlePhotoCheck(request, env, json) {
     if (!env.ANTHROPIC_API_KEY) {
       return json({
         error: 'ANTHROPIC_API_KEY secret is not set on this Worker. Run: wrangler secret put ANTHROPIC_API_KEY',
@@ -205,7 +209,7 @@ async function callAnthropic(env, { maxTokens, content, prefill }) {
 // Voice-to-punch-list: classify one spoken sentence into a structured item.
 // Body: { text: string, trade?: string }
 // Reply: { type: 'punch'|'change_order'|'rfi', trade: string, text: string, costImpact: number|null }
-async function handleClassify(request, env) {
+async function handleClassify(request, env, json) {
   if (!env.ANTHROPIC_API_KEY) {
     return json({ error: 'ANTHROPIC_API_KEY secret is not set on this Worker.' }, 500);
   }
@@ -259,7 +263,7 @@ async function handleClassify(request, env) {
 // Speech-to-text for phones without SpeechRecognition (iOS Safari), via Workers AI Whisper.
 // Body: { audio: base64 (no data: prefix), mimeType?: string }
 // Reply: { text: string }
-async function handleTranscribe(request, env) {
+async function handleTranscribe(request, env, json) {
   if (!env.AI) {
     return json({ error: 'Workers AI (AI binding) is not configured on this Worker. Add [ai] binding = "AI" to wrangler.toml and redeploy.' }, 500);
   }
