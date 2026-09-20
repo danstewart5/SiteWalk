@@ -31,7 +31,7 @@ If `SITEWALK_KEY` is **not** set, the Worker still runs. CORS limits callers to 
 
 **Order is mandatory. Do not set the Cloudflare secret the same night you only merge code.**
 
-1. Merge header support (`index.html` sends `X-SiteWalk-Key` when a key is saved) → confirm the live Pages URL `https://danstewart5.github.io/SiteWalk/` actually has the **Shared key** field.
+1. Merge header support (`index.html` sends `X-SiteWalk-Key` when a key is saved) → confirm the live site (`https://sitewalk-app.netlify.app`, or `https://danstewart5.github.io/SiteWalk/`) actually has the **Shared key** field.
 2. Only then set `SITEWALK_KEY` in Cloudflare (steps below).
 3. Save the same string in the app’s **Shared key** field → **Save Worker URL & key**.
 4. Test one photo check live on that Pages URL before trusting it on site.
@@ -52,7 +52,7 @@ wrangler secret put SITEWALK_KEY
 The Worker then requires header `X-SiteWalk-Key` on every POST. The phone only sends that header when a shared key is saved in the app. Leave the field blank while the Worker secret is unset.
 
 ## 3. Paste into the app
-1. Open https://danstewart5.github.io/SiteWalk/ on the phone — not a Netlify preview. Preview origins will fail CORS against the tightened Worker and look like a dead network.
+1. Open https://sitewalk-app.netlify.app on the phone (or https://danstewart5.github.io/SiteWalk/, still allowed). Any other origin — a Netlify preview/branch subdomain, localhost, etc. — will fail CORS against the tightened Worker and look like a dead network.
 2. Scroll to **AI Code-Check Photo**.
 3. Paste the Worker URL. Leave **Shared key** blank until step 2b is done.
 4. Tap **Save Worker URL & key**.
@@ -63,7 +63,7 @@ If the network fails, the app shows *AI check unavailable offline — item saved
 If AI check suddenly 401s or looks dead after a new phone, a browser data clear, or an iOS/Android “clear website data”: check the **Shared key** field first (and re-save it). That value lives only in this phone’s `localStorage` (`swAiKey`). It is not on the Worker, and a wipe will stop sending the header even though Cloudflare is fine.
 
 ## Security (already in the Worker)
-- CORS origin is `https://danstewart5.github.io` — that is the live Pages host (path `/SiteWalk/` is not part of the origin). If you later add a custom domain, update `ALLOWED_ORIGIN` in `worker.js` or phone calls will fail with a silent CORS error.
+- CORS is locked to the origins in `ALLOWED_ORIGINS` in `worker.js` — currently the Netlify site and the GitHub Pages host. If you add a custom domain or retire one of these, update `ALLOWED_ORIGINS` in `worker.js` or phone calls will fail with a silent CORS error.
 - To reopen CORS for local testing, change `ALLOWED_ORIGIN` back to `*` (comment is in the file).
 - Optional `SITEWALK_KEY` stops strangers from burning credits once the live app and the Worker both have the same key.
 - Anthropic key never lives in `index.html`. The shared key is stored only in this phone’s `localStorage` (`swAiKey`), not in the repo.
