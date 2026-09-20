@@ -24,6 +24,19 @@ document.querySelectorAll('.home-chapter-btn[data-tab], .home-admin-btn[data-tab
     if (tab) showTab(tab);
   });
 });
+function openHomeDrilldown(block) {
+  document.getElementById('tab-home').classList.add('showing-drilldown');
+  document.querySelectorAll('.home-block').forEach(function (el) {
+    el.classList.toggle('expanded', block ? el.getAttribute('data-block') === block : false);
+  });
+}
+document.querySelectorAll('.home-pillar').forEach(function (btn) {
+  btn.addEventListener('click', function () { openHomeDrilldown(btn.getAttribute('data-block')); });
+});
+document.getElementById('homeMoreLink').addEventListener('click', function () { openHomeDrilldown(null); });
+document.getElementById('homeDrilldownBack').addEventListener('click', function () {
+  document.getElementById('tab-home').classList.remove('showing-drilldown');
+});
 document.getElementById('homeStartWalkBtn').addEventListener('click', function () {
   showTab('walk');
   if (!walkActive) window.startWalk();
