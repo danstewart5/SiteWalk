@@ -836,6 +836,7 @@ function setupRecognition() {
           const remainder = extractSnapTriggerRemainder(transcript);
           if (remainder !== null) { voiceTriggeredSnap(transcript); if (remainder) fileVoiceUtterance(remainder); }
           else fileVoiceUtterance(transcript);
+          processVoiceValue(transcript);
         }
       }
       else if (!isNoiseTranscript(transcript)) interim += transcript;
@@ -878,6 +879,7 @@ function transcribeAndFile(blob) {
         if (!text) { setWalkStatus('info', 'Heard nothing usable. Try again closer to the mic.'); return; }
         setWalkStatus('ok', 'Heard: "' + text + '"');
         fileVoiceUtterance(text);
+        processVoiceValue(text);
       })
       .catch(function (err) { setWalkStatus('err', 'Transcribe failed: ' + (err && err.message ? err.message : 'unknown')); });
   });
