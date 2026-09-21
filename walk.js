@@ -13,37 +13,21 @@ document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
 });
 
-document.querySelectorAll('.home-block-header').forEach(function (btn) {
+document.querySelectorAll('.home-link-btn[data-tab], .home-menu-item[data-tab]').forEach(function (btn) {
   btn.addEventListener('click', function () {
-    btn.closest('.home-block').classList.toggle('expanded');
+    document.getElementById('tab-home').classList.remove('showing-menu');
+    showTab(btn.getAttribute('data-tab'));
   });
 });
-document.querySelectorAll('.home-chapter-btn[data-tab], .home-admin-btn[data-tab]').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    const tab = btn.getAttribute('data-tab');
-    if (tab) showTab(tab);
-  });
+document.getElementById('homeMenuBtn').addEventListener('click', function () {
+  document.getElementById('tab-home').classList.add('showing-menu');
 });
-function openHomeDrilldown(block) {
-  document.getElementById('tab-home').classList.add('showing-drilldown');
-  document.querySelectorAll('.home-block').forEach(function (el) {
-    el.classList.toggle('expanded', block ? el.getAttribute('data-block') === block : false);
-  });
-}
-document.querySelectorAll('.home-pillar').forEach(function (btn) {
-  btn.addEventListener('click', function () { openHomeDrilldown(btn.getAttribute('data-block')); });
-});
-document.getElementById('homeMoreLink').addEventListener('click', function () { openHomeDrilldown(null); });
-document.getElementById('homeDrilldownBack').addEventListener('click', function () {
-  document.getElementById('tab-home').classList.remove('showing-drilldown');
+document.getElementById('homeMenuClose').addEventListener('click', function () {
+  document.getElementById('tab-home').classList.remove('showing-menu');
 });
 document.getElementById('homeStartWalkBtn').addEventListener('click', function () {
   showTab('walk');
   if (!walkActive) window.startWalk();
-});
-document.getElementById('homeGenerateReportBtn').addEventListener('click', function () {
-  showTab('report');
-  window.generateReport();
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];

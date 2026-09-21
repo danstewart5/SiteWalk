@@ -220,107 +220,36 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .top-tab-btn span { font-size: 9px; font-weight: 600; white-space: nowrap; }
 .top-tab-btn.active { color: #14395E; background: #EAF3FB; }
 
-/* ---------- Home landing scene ---------- */
-.home-scene {
-  position: relative;
-  overflow: hidden;
-  margin: -16px -16px 14px;
-  padding: 24px 16px 28px;
-  border-radius: 12px;
-  background:
-    radial-gradient(ellipse at 50% 8%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 82%),
-    repeating-linear-gradient(90deg, #46311d 0px, #503a24 36px, #3a2814 38px, #46311d 74px);
-}
-.home-floor {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 20%;
-  background: linear-gradient(180deg, #6f6e68 0%, #8f8e85 55%, #a9a79a 100%);
-  box-shadow: 0 1px 0 rgba(0,0,0,0.35) inset;
-}
-.home-window {
-  position: relative; z-index: 1;
-  width: 82%; max-width: 320px; aspect-ratio: 16 / 9;
-  margin: 0 auto 18px;
-  background: #0a0a0a url('assets/photos/hero-framing.jpg') center 55% / cover;
-  border: 9px solid #111; border-radius: 3px;
-  box-shadow: 0 10px 22px rgba(0,0,0,0.55), inset 0 0 0 2px rgba(255,255,255,0.05);
-}
-.home-window::before {
-  content: ''; position: absolute; inset: -9px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 28%, rgba(0,0,0,0.4) 100%);
-}
-.home-window-mullion { position: absolute; inset: 0; }
-.home-window-mullion::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; background: #111; }
-.home-window-mullion::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; background: #111; }
-.home-stage { position: relative; z-index: 1; width: min(84vw, 360px); aspect-ratio: 1 / 1; margin: 0 auto; }
-.home-pillars { position: absolute; inset: 0; --radius: min(33vw, 132px); }
-.home-pillar {
-  position: absolute; top: 50%; left: 50%; width: 58px; margin: -29px 0 0 -29px;
-  background: none; border: none; padding: 0; cursor: pointer;
-  transform: rotate(var(--angle)) translate(0, calc(-1 * var(--radius))) rotate(calc(-1 * var(--angle)));
-}
-.pillar-visual { display: flex; flex-direction: column; align-items: center; gap: 5px; transform: scale(1); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1); }
-.home-pillar:hover .pillar-visual, .home-pillar:active .pillar-visual, .home-pillar:focus-visible .pillar-visual { transform: scale(1.15); }
-.pillar-column { width: 14px; height: 52px; border-radius: 2px; position: relative; background: linear-gradient(90deg, #7f6d50, #ecdfc5 42%, #d1c09a 56%, #7f6d50); box-shadow: 0 5px 10px rgba(0,0,0,0.45); }
-.pillar-column::before, .pillar-column::after { content: ''; position: absolute; left: -4px; right: -4px; height: 6px; border-radius: 2px; background: linear-gradient(90deg, #6d5c42, #f2e7d0 45%, #ddcca6 58%, #6d5c42); }
-.pillar-column::before { top: -5px; }
-.pillar-column::after { bottom: -5px; }
-.pillar-label { font-size: 9.5px; font-weight: 700; color: #f1e9dc; text-align: center; line-height: 1.15; max-width: 66px; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
-.home-start-btn {
-  position: absolute; top: 50%; left: 50%; width: 122px; height: 122px; margin: -61px 0 0 -61px;
-  border-radius: 50%; z-index: 2;
+/* ---------- Home landing screen ----------
+   2026-09-21: simplified from the seven-pillar radial dashboard (dark-wood scene,
+   angled columns, two-tap drilldown) to a single primary action. Start Walk is the
+   one thing everyone does on arrival, so it's the only large control; the six most-used
+   secondary sections are plain text links, and everything else (including those six)
+   lives in a one-tap hamburger menu so no existing tab lost its entry point. */
+.home-simple { position: relative; padding: 44px 16px 20px; display: flex; flex-direction: column; align-items: center; }
+.home-menu-btn { position: absolute; top: 4px; right: 4px; width: auto; background: none; color: #1a365d; font-size: 26px; line-height: 1; padding: 8px 10px; }
+.home-primary { margin: 22px 0 26px; }
+.home-start-btn-big {
+  width: 200px; height: 200px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #6cd292, #4CAF6E 55%, #327a4c 100%);
-  color: #fff; font-weight: 800; font-size: 15px; line-height: 1.3;
-  border: 2px solid rgba(255,255,255,0.25);
-  box-shadow: 0 0 0 6px rgba(76,175,110,0.16), 0 0 24px 7px rgba(76,175,110,0.5), 0 8px 16px rgba(0,0,0,0.5);
-  padding: 0; cursor: pointer; transition: transform 0.15s ease;
+  color: #fff; font-weight: 800; font-size: 24px;
+  border: 3px solid rgba(255,255,255,0.3);
+  box-shadow: 0 0 0 8px rgba(76,175,110,0.15), 0 0 30px 10px rgba(76,175,110,0.4), 0 10px 24px rgba(0,0,0,0.3);
+  cursor: pointer; transition: transform 0.15s ease;
 }
-.home-start-btn:active { transform: scale(0.96); }
-.home-report-btn {
-  position: relative; z-index: 1; display: block; margin: 20px auto 8px; width: 82%; max-width: 320px;
-  background: #e0a94a; color: #2b1d0e; font-weight: 800; font-size: 15px; padding: 16px;
-  border-radius: 4px; border: 1px solid #b98430; box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-}
-.home-more-link { position: relative; z-index: 1; display: block; width: auto; margin: 6px auto 0; background: none; color: rgba(241,233,220,0.6); font-size: 11px; font-weight: 600; padding: 4px; }
-.home-drilldown { display: none; }
-#tab-home.showing-drilldown .home-scene { display: none; }
-#tab-home.showing-drilldown .home-drilldown { display: block; }
-.home-drilldown-back { width: auto; background: #edf2f7; color: #2d3748; font-size: 13px; font-weight: 700; padding: 9px 16px; border-radius: 8px; margin-bottom: 14px; }
-.home-blocks { display: flex; flex-direction: column; gap: 10px; }
-.home-block { border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-.home-block-header { display: flex; align-items: center; gap: 12px; width: 100%; background: #fff; color: #1a365d; border: none; border-radius: 0; padding: 14px 16px; font-size: 15px; font-weight: 800; text-align: left; cursor: pointer; }
-.home-block-icon { font-size: 19px; width: 38px; height: 38px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
-.home-block-title { flex: 1; line-height: 1.25; }
-.home-block-chevron { font-size: 20px; color: #a0aec0; transition: transform 0.15s ease; }
-.home-block.expanded .home-block-chevron { transform: rotate(90deg); }
-.home-block[data-block="land"] { border-top: 4px solid #2c7a7b; }
-.home-block[data-block="land"] .home-block-icon { background: #e6fffa; }
-.home-block[data-block="preconstruction"] { border-top: 4px solid #805ad5; }
-.home-block[data-block="preconstruction"] .home-block-icon { background: #f3e8ff; }
-.home-block[data-block="design"] { border-top: 4px solid #3182ce; }
-.home-block[data-block="design"] .home-block-icon { background: #ebf8ff; }
-.home-block[data-block="field"] { border-top: 4px solid #2b6cb0; }
-.home-block[data-block="field"] .home-block-icon { background: #e6f0fa; }
-.home-block[data-block="scheduling"] { border-top: 4px solid #38a169; }
-.home-block[data-block="scheduling"] .home-block-icon { background: #e6fff2; }
-.home-block[data-block="safety"] { border-top: 4px solid #c53030; }
-.home-block[data-block="safety"] .home-block-icon { background: #fff0f0; }
-.home-block[data-block="financial"] { border-top: 4px solid #d69e2e; }
-.home-block[data-block="financial"] .home-block-icon { background: #fffaeb; }
-.home-block-chapters { display: none; flex-direction: column; gap: 6px; padding: 4px 12px 14px; }
-.home-block.expanded .home-block-chapters { display: flex; }
-.home-chapter-btn { width: 100%; text-align: left; background: #fafafa; border: 1px solid #edf2f7; color: #2d3748; font-weight: 600; font-size: 13px; padding: 10px 12px; border-radius: 8px; }
-.home-chapter-btn:disabled { color: #a0aec0; cursor: default; }
-.home-chapter-btn em { display: block; font-style: normal; font-weight: 500; font-size: 11px; color: #a0aec0; margin-top: 2px; }
-.home-admin { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #e2e8f0; }
-.home-admin-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #a0aec0; margin-bottom: 8px; }
-.home-admin-links { display: flex; flex-wrap: wrap; gap: 6px; }
-.home-admin-btn { width: auto; flex: 0 0 auto; background: #edf2f7; color: #4a5568; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
-.home-admin-btn:disabled { color: #cbd5e0; cursor: default; }
+.home-start-btn-big:active { transform: scale(0.96); }
+.home-secondary-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 20px; max-width: 340px; }
+.home-link-btn { width: auto; background: none; border: none; color: #2b6cb0; font-size: 14px; font-weight: 700; padding: 8px 4px; text-decoration: underline; text-underline-offset: 3px; }
+.home-menu { display: none; position: fixed; inset: 0; z-index: 50; background: #fff; padding: 20px 16px; overflow-y: auto; }
+#tab-home.showing-menu .home-menu { display: block; }
+.home-menu-close { width: auto; background: #edf2f7; color: #2d3748; font-size: 13px; font-weight: 700; padding: 9px 16px; border-radius: 8px; margin-bottom: 16px; }
+.home-menu-links { display: flex; flex-direction: column; gap: 8px; }
+.home-menu-item { width: 100%; text-align: left; background: #fafafa; border: 1px solid #edf2f7; color: #1a365d; font-weight: 700; font-size: 15px; padding: 14px 16px; border-radius: 10px; }
 
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-simple, .home-menu { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -337,121 +266,47 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="tab-panel active" id="tab-home">
 
-<div class="home-scene">
-<div class="home-floor"></div>
+<!-- Single primary action: Start Walk. Six most-used sections are quick text links;
+     the hamburger menu gives one-tap access to every other tab (nothing removed,
+     just no longer surfaced as pillars/blocks). -->
+<div class="home-simple">
+<button id="homeMenuBtn" type="button" class="home-menu-btn" aria-label="Menu">☰</button>
 
-<div class="home-window">
-<div class="home-window-mullion"></div>
+<div class="home-primary">
+<button id="homeStartWalkBtn" type="button" class="home-start-btn-big">Start<br>Walk</button>
 </div>
 
-<div class="home-stage">
-<div class="home-pillars">
-<button class="home-pillar" data-block="land" style="--angle:-90deg" type="button" aria-label="Land &amp; Acquisition">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Land &amp; Acquisition</span></span>
-</button>
-<button class="home-pillar" data-block="preconstruction" style="--angle:-38.57deg" type="button" aria-label="Preconstruction &amp; Estimating">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Preconstruction &amp; Estimating</span></span>
-</button>
-<button class="home-pillar" data-block="design" style="--angle:12.86deg" type="button" aria-label="Design &amp; Drawings">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Design &amp; Drawings</span></span>
-</button>
-<button class="home-pillar" data-block="field" style="--angle:64.29deg" type="button" aria-label="Field Operations &amp; Walk-Around">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Field Operations &amp; Walk-Around</span></span>
-</button>
-<button class="home-pillar" data-block="scheduling" style="--angle:115.71deg" type="button" aria-label="Scheduling &amp; Resources">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Scheduling &amp; Resources</span></span>
-</button>
-<button class="home-pillar" data-block="safety" style="--angle:167.14deg" type="button" aria-label="Safety &amp; Quality">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Safety &amp; Quality</span></span>
-</button>
-<button class="home-pillar" data-block="financial" style="--angle:218.57deg" type="button" aria-label="Financial Management &amp; Invoicing">
-  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Financial Management &amp; Invoicing</span></span>
-</button>
-</div>
-<button id="homeStartWalkBtn" type="button" class="home-start-btn">Start<br>Walk-Around</button>
-</div>
-
-<button id="homeGenerateReportBtn" type="button" class="home-report-btn">Generate Report</button>
-<button class="home-more-link" id="homeMoreLink" type="button">⋯ More (Dashboard, Report, Setup)</button>
-</div>
-
-<div class="home-drilldown" id="homeDrilldown">
-<button class="home-drilldown-back" id="homeDrilldownBack" type="button">‹ Back</button>
-
-<div class="home-blocks">
-
-<div class="home-block" data-block="land">
-<button class="home-block-header" type="button"><span class="home-block-icon">🗺️</span><span class="home-block-title">Land &amp; Acquisition</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" disabled>Land Acquisition <em>Coming soon</em></button>
-<button class="home-chapter-btn" disabled>Ch. 6 · Land-to-Contract Pipeline (Victoria Land) <em>Coming soon</em></button>
+<div class="home-secondary-links">
+<button class="home-link-btn" data-tab="punch" type="button">Punch List</button>
+<button class="home-link-btn" data-tab="rfis" type="button">RFIs</button>
+<button class="home-link-btn" data-tab="changes" type="button">Change Orders</button>
+<button class="home-link-btn" data-tab="safety" type="button">Safety</button>
+<button class="home-link-btn" data-tab="jobcost" type="button">Job Cost</button>
+<button class="home-link-btn" data-tab="report" type="button">Report</button>
 </div>
 </div>
 
-<div class="home-block" data-block="preconstruction">
-<button class="home-block-header" type="button"><span class="home-block-icon">📐</span><span class="home-block-title">Preconstruction &amp; Estimating</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="punch" type="button">Ch. 3 · Punch List &amp; Estimating</button>
-<button class="home-chapter-btn" disabled>Ch. 9 · Price-the-House <em>Coming soon</em></button>
+<div class="home-menu" id="homeMenu">
+<button class="home-menu-close" id="homeMenuClose" type="button">✕ Close</button>
+<div class="home-menu-links">
+<button class="home-menu-item" data-tab="walk" type="button">🎥 Walk-Around</button>
+<button class="home-menu-item" data-tab="punch" type="button">✅ Punch List</button>
+<button class="home-menu-item" data-tab="changes" type="button">📝 Change Orders</button>
+<button class="home-menu-item" data-tab="rfis" type="button">❓ RFIs</button>
+<button class="home-menu-item" data-tab="drawingrefs" type="button">📐 Drawing References</button>
+<button class="home-menu-item" data-tab="drawings" type="button">🗂️ Drawings &amp; Plans</button>
+<button class="home-menu-item" data-tab="submittals" type="button">📄 Submittals</button>
+<button class="home-menu-item" data-tab="safety" type="button">⚠️ Safety Log</button>
+<button class="home-menu-item" data-tab="clock" type="button">⏱ Clock In/Out</button>
+<button class="home-menu-item" data-tab="dailylog" type="button">📆 Daily Log</button>
+<button class="home-menu-item" data-tab="jobcost" type="button">💰 Job Cost Dashboard</button>
+<button class="home-menu-item" data-tab="dashboard" type="button">📊 Open Items Dashboard</button>
+<button class="home-menu-item" data-tab="contacts" type="button">👥 Trade Contacts</button>
+<button class="home-menu-item" data-tab="report" type="button">📋 Report</button>
+<button class="home-menu-item" data-tab="setup" type="button">⚙️ Setup</button>
 </div>
 </div>
 
-<div class="home-block" data-block="design">
-<button class="home-block-header" type="button"><span class="home-block-icon">🗂️</span><span class="home-block-title">Design &amp; Drawings</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="drawingrefs" type="button">Drawing References</button>
-<button class="home-chapter-btn" data-tab="drawings" type="button">Drawings &amp; Plans</button>
-<button class="home-chapter-btn" data-tab="submittals" type="button">Submittals</button>
-</div>
-</div>
-
-<div class="home-block" data-block="field">
-<button class="home-block-header" type="button"><span class="home-block-icon">🎥</span><span class="home-block-title">Field Operations &amp; Walk-Around</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="walk" type="button">Ch. 1 · Walk-Around</button>
-<button class="home-chapter-btn" data-tab="rfis" type="button">RFIs</button>
-</div>
-</div>
-
-<div class="home-block" data-block="scheduling">
-<button class="home-block-header" type="button"><span class="home-block-icon">👷</span><span class="home-block-title">Scheduling &amp; Resources</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="clock" type="button">Ch. 2 · GPS Clock-In</button>
-<button class="home-chapter-btn" data-tab="contacts" type="button">Ch. 4 · Trade Routing (Contacts)</button>
-<button class="home-chapter-btn" data-tab="dailylog" type="button">Daily Log</button>
-</div>
-</div>
-
-<div class="home-block" data-block="safety">
-<button class="home-block-header" type="button"><span class="home-block-icon">⚠️</span><span class="home-block-title">Safety &amp; Quality</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" data-tab="safety" type="button">Safety Log</button>
-</div>
-</div>
-
-<div class="home-block" data-block="financial">
-<button class="home-block-header" type="button"><span class="home-block-icon">💵</span><span class="home-block-title">Financial Management &amp; Invoicing</span><span class="home-block-chevron">›</span></button>
-<div class="home-block-chapters">
-<button class="home-chapter-btn" disabled>Ch. 5 · Invoicing <em>Coming soon</em></button>
-<button class="home-chapter-btn" data-tab="jobcost" type="button">Job Cost Dashboard</button>
-<button class="home-chapter-btn" data-tab="changes" type="button">Change Orders</button>
-</div>
-</div>
-
-</div>
-
-<div class="home-admin">
-<span class="home-admin-label">Admin &amp; Overview</span>
-<div class="home-admin-links">
-<button class="home-admin-btn" disabled>Ch. 7 · Consulting Business Rollout</button>
-<button class="home-admin-btn" disabled>Ch. 8 · Developer Dashboard</button>
-<button class="home-admin-btn" data-tab="dashboard" type="button">Open Items Dashboard</button>
-<button class="home-admin-btn" data-tab="report" type="button">Report</button>
-<button class="home-admin-btn" data-tab="setup" type="button">Setup</button>
-</div>
-</div>
-
-</div>
 </div>
 
 <div class="tab-panel" id="tab-walk">
