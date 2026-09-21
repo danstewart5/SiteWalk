@@ -230,7 +230,10 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
   background:
     radial-gradient(ellipse at 50% 8%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 82%),
     repeating-linear-gradient(90deg, #46311d 0px, #503a24 36px, #3a2814 38px, #46311d 74px);
+  opacity: 1;
+  transition: opacity 0.32s ease;
 }
+.home-scene.home-fade-out { opacity: 0; pointer-events: none; }
 .home-floor {
   position: absolute; left: 0; right: 0; bottom: 0; height: 20%;
   background: linear-gradient(180deg, #6f6e68 0%, #8f8e85 55%, #a9a79a 100%);

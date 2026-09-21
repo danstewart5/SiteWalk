@@ -38,8 +38,16 @@ document.getElementById('homeDrilldownBack').addEventListener('click', function 
   document.getElementById('tab-home').classList.remove('showing-drilldown');
 });
 document.getElementById('homeStartWalkBtn').addEventListener('click', function () {
-  showTab('walk');
-  if (!walkActive) window.startWalk();
+  // Fade the wood-panel scene (background, pillars, framed photo, Generate
+  // Report button all live inside .home-scene) out before handing off to the
+  // Walk tab, instead of the scene just vanishing under an instant tab swap.
+  const scene = document.querySelector('#tab-home .home-scene');
+  if (scene) scene.classList.add('home-fade-out');
+  setTimeout(function () {
+    showTab('walk');
+    if (!walkActive) window.startWalk();
+    if (scene) scene.classList.remove('home-fade-out');
+  }, 320);
 });
 document.getElementById('homeGenerateReportBtn').addEventListener('click', function () {
   showTab('report');
