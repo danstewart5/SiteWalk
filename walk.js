@@ -1363,10 +1363,47 @@ function renderWalkLogSection() {
   }
   return html + '</div>';
 }
+// Safety entries don't carry a severity or trade field at capture time (see
+// logSafetyFromVoice / the manual Safety Log form) — these grade the report
+// display only, from keywords already used to detect a hazard in the first
+// place (classifySafetyText), without touching how safety logs are captured
+// or stored.
+const SAFETY_SEVERITY_HIGH_RE = /gas leak|exposed wire|fall risk|blocked (exit|fire exit)|unguarded|missing (guard|rail|railing)|no hard hat|not wearing (a )?harness/i;
+const SAFETY_SEVERITY_MEDIUM_RE = /trip hazard|ppe violation|not wearing (a )?(ppe|goggles)|no eye protection|safety violation/i;
+function classifySafetyHazardSeverity(entry) {
+  const t = ((entry.type || '') + ' ' + (entry.desc || '')).toLowerCase();
+  if (SAFETY_SEVERITY_HIGH_RE.test(t)) return 'High';
+  if (SAFETY_SEVERITY_MEDIUM_RE.test(t)) return 'Medium';
+  return 'Low';
+}
+function classifySafetyHazardTrade(entry) {
+  return entry.trade || classifyTrade((entry.type || '') + ' ' + (entry.desc || '')) || 'General';
+}
+const SAFETY_SEVERITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+function renderSafetyHazardsSection() {
+  if (!safetyLogs.length) return '';
+  const rows = safetyLogs.map(function (s) {
+    return { entry: s, severity: classifySafetyHazardSeverity(s), trade: classifySafetyHazardTrade(s) };
+  });
+  rows.sort(function (a, b) {
+    const diff = SAFETY_SEVERITY_ORDER[a.severity] - SAFETY_SEVERITY_ORDER[b.severity];
+    return diff !== 0 ? diff : (b.entry.ts || 0) - (a.entry.ts || 0);
+  });
+  let html = '<div class="report-section"><h3>Safety Hazards</h3>';
+  rows.forEach(function (r) {
+    html += '<div class="punch-item">'
+      + '<span class="severity-badge severity-' + r.severity.toLowerCase() + '">' + r.severity + '</span> '
+      + '<span class="trade-tag">' + escapeHtml(r.trade) + '</span> '
+      + escapeHtml(r.entry.desc)
+      + '<div class="meta">' + escapeHtml(r.entry.time) + '</div></div>';
+  });
+  return html + '</div>';
+}
 window.generateReport = function () {
   const trades = {};
   photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + new Date().toLocaleString() + '</div>';
+  html += renderSafetyHazardsSection();
   html += renderWalkLogSection();
   const galleryObservations = allDistilledObservations();
   Object.keys(trades).forEach(function (t) {
@@ -1389,7 +1426,6 @@ window.generateReport = function () {
   html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
   if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
-  if (safetyLogs.length) { html += '<div class="report-section"><h3>Safety Log</h3>'; safetyLogs.forEach(function (s) { html += '<div class="punch-item">[' + s.type + '] ' + s.desc + (s.action ? ' — Action: ' + s.action : '') + '</div>'; }); html += '</div>'; }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   const laborRows = laborCostByEmployee();
