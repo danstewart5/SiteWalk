@@ -37,6 +37,10 @@ const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electric
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
 let walkActive = false, walkStream = null, walkGpsWatch = null;
+// walkStartTs scopes the Finish Walk report to just this session's photos/items
+// (anything with ts >= walkStartTs); lastGpsCoords is the latest fix from the
+// existing GPS watch, stamped onto photos as they're saved.
+let walkStartTs = null, lastGpsCoords = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null, listening = false;
 
@@ -757,7 +761,7 @@ function snapFromVideo(video) { if (!video || !video.videoWidth) return null; co
 // meta carries structured, timestamped provenance (how the shot was taken and
 // the transcript that triggered it, if any) so a still can be matched back
 // to both the spoken record and whatever punch/change/RFI item it links to.
-function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); return item; }
+function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual', gps: lastGpsCoords }, meta || {}); photos.push(item); tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); return item; }
 
 // Voice-triggered snap runs entirely off the live <video> element and never
 // touches `recognition` (no stop/start) — a "take a photo" trigger must not
@@ -1020,16 +1024,20 @@ function openWalkCamera() { const video = document.getElementById('walkVideo'); 
 window.startWalk = function () {
   if (walkActive) return;
   walkActive = true;
+  walkStartTs = Date.now();
+  lastGpsCoords = null;
   const btn = document.getElementById('walkBtn');
   btn.classList.add('recording');
   btn.innerHTML = '📷<br>Take Photo';
   document.getElementById('stopWalkBtn').classList.add('visible');
+  document.getElementById('finishWalkBtn').classList.add('visible');
   document.getElementById('walkHero').style.display = 'none';
   document.getElementById('walkStage').classList.add('active');
   setWalkStatus('ok', 'Asking for camera and mic…');
   document.getElementById('gpsLabel').textContent = navigator.geolocation ? 'Waiting for GPS…' : 'GPS off';
   if (navigator.geolocation) {
     walkGpsWatch = navigator.geolocation.watchPosition(function (pos) {
+      lastGpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       document.getElementById('gpsLabel').textContent = pos.coords.latitude.toFixed(5) + ', ' + pos.coords.longitude.toFixed(5);
     }, function (err) { document.getElementById('gpsLabel').textContent = err.message || 'GPS unavailable'; }, { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 });
   }
@@ -1049,6 +1057,7 @@ window.endWalk = function () {
   btn.classList.remove('recording');
   btn.innerHTML = 'Start<br>Walk-Around';
   document.getElementById('stopWalkBtn').classList.remove('visible');
+  document.getElementById('finishWalkBtn').classList.remove('visible');
   document.getElementById('walkHero').style.display = '';
   document.getElementById('walkStage').classList.remove('active');
   setWalkStatus('info', 'Walk ended. Check Summary for what was found.');
@@ -1056,6 +1065,146 @@ window.endWalk = function () {
 };
 document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? takePhoto() : window.startWalk(); });
 document.getElementById('stopWalkBtn').addEventListener('click', function () { window.endWalk(); });
+
+/* ---------- Finish Walk: ends the walk and builds a report scoped to just
+   this session (anything with ts >= walkStartTs), not the whole job's history
+   like the full Report tab. Grouped by trade with timestamp + GPS per photo,
+   a one-line auto-written summary, and any punch/change/RFI items filed
+   during the walk. ---------- */
+let lastWalkReportHtml = '', lastWalkReportFilenameBase = '';
+function buildWalkReportData() {
+  const start = walkStartTs || 0;
+  const wPhotos = photos.filter(function (p) { return photoTs(p) >= start; });
+  const wPunch = punch.filter(function (e) { return (e.ts || 0) >= start; });
+  const wChanges = changes.filter(function (e) { return (e.ts || 0) >= start; });
+  const wRfis = rfis.filter(function (e) { return (e.ts || 0) >= start; });
+  const byTrade = {};
+  wPhotos.forEach(function (p) { const t = p.trade || 'General'; (byTrade[t] = byTrade[t] || []).push(p); });
+  const tradesPresent = Object.keys(byTrade);
+  const itemCount = wPunch.length + wChanges.length + wRfis.length;
+  let summaryText;
+  if (!wPhotos.length && !itemCount) {
+    summaryText = 'No photos or items were captured during this walk.';
+  } else {
+    summaryText = 'Captured ' + wPhotos.length + ' photo' + (wPhotos.length === 1 ? '' : 's') +
+      ' across ' + tradesPresent.length + ' trade' + (tradesPresent.length === 1 ? '' : 's') + '.';
+    if (itemCount) {
+      summaryText += ' Logged ' + wPunch.length + ' punch item' + (wPunch.length === 1 ? '' : 's') +
+        ', ' + wChanges.length + ' change order' + (wChanges.length === 1 ? '' : 's') +
+        ', and ' + wRfis.length + ' RFI' + (wRfis.length === 1 ? '' : 's') + '.';
+    }
+  }
+  return {
+    siteName: (document.getElementById('siteName').textContent || '').trim() || 'Job Site',
+    siteAddress: (document.getElementById('siteAddress').textContent || '').trim(),
+    started: start ? new Date(start).toLocaleString() : '',
+    ended: new Date().toLocaleString(),
+    summaryText: summaryText,
+    byTrade: byTrade,
+    tradesPresent: tradesPresent,
+    wPunch: wPunch, wChanges: wChanges, wRfis: wRfis
+  };
+}
+function walkPhotoMeta(p) {
+  const ts = p.ts ? new Date(p.ts).toLocaleString() : (p.time || '');
+  const gps = p.gps && typeof p.gps.lat === 'number' ? (p.gps.lat.toFixed(5) + ', ' + p.gps.lng.toFixed(5)) : 'No GPS';
+  return ts + ' · ' + gps;
+}
+function walkReportItemSection(title, arr, extra) {
+  if (!arr.length) return '';
+  let h = '<div class="report-section"><h3>' + title + '</h3>';
+  arr.forEach(function (item) { h += '<div class="punch-item">[' + escapeHtml(item.trade) + '] ' + escapeHtml(item.text) + (extra ? extra(item) : '') + '</div>'; });
+  return h + '</div>';
+}
+// In-app preview reuses the classic Report tab's own CSS classes
+// (.report-section/.punch-item/.trade-tag) so it looks native to the rest of the app.
+function renderWalkReportPreview(data) {
+  let html = '';
+  data.tradesPresent.forEach(function (trade) {
+    html += '<div class="report-section"><h3>' + escapeHtml(trade) + '</h3>';
+    data.byTrade[trade].forEach(function (p) {
+      html += '<img src="' + p.src + '">';
+      html += '<div class="punch-item"><span class="trade-tag">' + escapeHtml(trade) + '</span> ' + escapeHtml(walkPhotoMeta(p)) + (p.linkedItemText ? ' — ' + escapeHtml(p.linkedItemText) : '') + '</div>';
+    });
+    html += '</div>';
+  });
+  html += walkReportItemSection('Punch List', data.wPunch, function (i) { return i.resolved ? ' — Resolved' : ' — Open'; });
+  html += walkReportItemSection('Change Orders', data.wChanges, function (i) { return ' — $' + (i.costEstimate != null ? i.costEstimate : '?') + ' (' + (i.approval || 'Pending') + ')'; });
+  html += walkReportItemSection('RFIs', data.wRfis, function (i) { return ' — ' + (i.status || 'Open'); });
+  if (!data.tradesPresent.length && !data.wPunch.length && !data.wChanges.length && !data.wRfis.length) {
+    html = '<p class="hint">Nothing was captured during this walk.</p>';
+  }
+  return html;
+}
+// The downloadable/shareable file is a fully self-contained document (own inline
+// CSS) since it has to render correctly outside this app's own stylesheet.
+function buildStandaloneReportHtml(data) {
+  function itemSection(title, arr, extra) {
+    if (!arr.length) return '';
+    let h = '<h2>' + title + '</h2>';
+    arr.forEach(function (item) { h += '<div class="item">[' + escapeHtml(item.trade) + '] ' + escapeHtml(item.text) + (extra ? extra(item) : '') + '</div>'; });
+    return h;
+  }
+  let html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SiteWalk Report — ' + escapeHtml(data.siteName) + '</title>';
+  html += '<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:0 auto;padding:24px;color:#222}h1{margin:0 0 2px}h2{margin-top:26px;border-bottom:2px solid #eee;padding-bottom:4px;font-size:17px}img{max-width:100%;border-radius:8px;margin-top:8px;display:block}.item{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:10px 12px;margin:8px 0;font-size:14px}.meta{font-size:12px;color:#777;margin-top:4px}.summary{background:#eef7f0;border:1px solid #cde8d3;border-radius:10px;padding:14px;margin:16px 0;font-size:14px}.top-meta{font-size:12px;color:#777}</style></head><body>';
+  html += '<h1>' + escapeHtml(data.siteName) + '</h1>';
+  if (data.siteAddress && data.siteAddress !== 'Tap to add address') html += '<p class="top-meta">' + escapeHtml(data.siteAddress) + '</p>';
+  html += '<p class="top-meta">Walk: ' + escapeHtml(data.started) + ' – ' + escapeHtml(data.ended) + '</p>';
+  html += '<div class="summary">' + escapeHtml(data.summaryText) + '</div>';
+  data.tradesPresent.forEach(function (trade) {
+    html += '<h2>' + escapeHtml(trade) + '</h2>';
+    data.byTrade[trade].forEach(function (p) {
+      html += '<div class="item"><img src="' + p.src + '">';
+      html += '<div class="meta">' + escapeHtml(walkPhotoMeta(p)) + (p.linkedItemText ? ' · ' + escapeHtml(p.linkedItemText) : '') + '</div></div>';
+    });
+  });
+  html += itemSection('Punch List', data.wPunch, function (i) { return i.resolved ? ' — Resolved' : ' — Open'; });
+  html += itemSection('Change Orders', data.wChanges, function (i) { return ' — $' + (i.costEstimate != null ? i.costEstimate : '?') + ' (' + (i.approval || 'Pending') + ')'; });
+  html += itemSection('RFIs', data.wRfis, function (i) { return ' — ' + (i.status || 'Open'); });
+  html += '</body></html>';
+  return html;
+}
+// Shares a real HTML file via the OS share sheet (same fallback chain as
+// saveVideoFile) rather than a hosted link — there's no backend to host one.
+function shareOrDownloadWalkReport() {
+  const filename = lastWalkReportFilenameBase + '.html';
+  const blob = new Blob([lastWalkReportHtml], { type: 'text/html' });
+  const file = (typeof File !== 'undefined') ? new File([blob], filename, { type: 'text/html' }) : null;
+  const canShareFiles = !!(file && navigator.canShare && navigator.share && (function () { try { return navigator.canShare({ files: [file] }); } catch (e) { return false; } })());
+  if (canShareFiles) {
+    navigator.share({ files: [file], title: filename })
+      .then(function () { setWalkStatus('ok', 'Report shared.'); })
+      .catch(function () { downloadWalkReportBlob(blob, filename); });
+    return;
+  }
+  downloadWalkReportBlob(blob, filename);
+}
+function downloadWalkReportBlob(blob, filename) {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    setWalkStatus('ok', "Report saved. Open it and use your browser's Print > Save as PDF for a PDF copy.");
+  } catch (e) {
+    setWalkStatus('err', 'Report save failed — check the browser console.');
+  }
+}
+window.finishWalk = function () {
+  if (walkActive) window.endWalk();
+  const data = buildWalkReportData();
+  lastWalkReportHtml = buildStandaloneReportHtml(data);
+  lastWalkReportFilenameBase = 'sitewalk-report-' + new Date().toISOString().replace(/[:.]/g, '-');
+  document.getElementById('walkFinishSummary').textContent = data.summaryText;
+  document.getElementById('walkFinishBody').innerHTML = renderWalkReportPreview(data);
+  document.getElementById('walkFinishModal').classList.add('open');
+};
+document.getElementById('finishWalkBtn').addEventListener('click', window.finishWalk);
+document.getElementById('walkFinishClose').addEventListener('click', function () { document.getElementById('walkFinishModal').classList.remove('open'); });
+document.getElementById('walkFinishShareBtn').addEventListener('click', shareOrDownloadWalkReport);
+document.getElementById('walkFinishDownloadBtn').addEventListener('click', function () { downloadWalkReportBlob(new Blob([lastWalkReportHtml], { type: 'text/html' }), lastWalkReportFilenameBase + '.html'); });
+
 function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); }
 document.getElementById('shutterBtn').addEventListener('click', takePhoto);
 document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedPhotos);

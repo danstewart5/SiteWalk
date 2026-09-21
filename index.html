@@ -129,6 +129,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-photo-btn:active { transform: scale(0.95); }
 .w-photo-btn.stop-btn { display: none; border-color: var(--w-accent-dark); color: var(--w-accent-dark); }
 .w-photo-btn.stop-btn.visible { display: flex; }
+.w-photo-btn.finish-btn { display: none; border-color: var(--w-recording); color: var(--w-recording); }
+.w-photo-btn.finish-btn.visible { display: flex; }
 #walkBtn { width: 148px; height: 148px; border-radius: 50%; border: none; background: var(--w-recording); color: #fff; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; cursor: pointer; box-shadow: 0 10px 26px rgba(63,145,66,0.35); transition: background .25s ease, box-shadow .25s ease, transform .15s ease; display: flex; align-items: center; justify-content: center; padding: 10px; margin: 0; }
 #walkBtn:active { transform: scale(0.97); }
 #walkBtn.recording { background: var(--w-accent); box-shadow: 0 10px 26px rgba(217,119,72,0.35); animation: w-pulse 1.8s ease-in-out infinite; }
@@ -191,6 +193,16 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #lightbox.open { display: flex; }
 #lightbox img { max-width: 100%; max-height: 80vh; border-radius: 18px; }
 #lightboxClose { position: absolute; top: 22px; right: 22px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 18px; margin: 0; }
+
+/* ---------- Finish Walk report modal ---------- */
+#walkFinishModal { display: none; position: fixed; inset: 0; background: rgba(26,24,21,0.6); z-index: 500; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+#walkFinishModal.open { display: flex; }
+.wf-modal-card { position: relative; background: #fff; border-radius: 16px; padding: 20px 18px; max-width: 480px; width: 100%; margin: 20px 0; }
+#walkFinishClose { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: none; background: #edf2f7; color: #2d3748; font-size: 15px; margin: 0; }
+.wf-summary { background: #eef7f0; border: 1px solid #cde8d3; border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #234; margin: 30px 0 16px; }
+.wf-meta { font-size: 11px; color: #718096; margin: 2px 0 8px; }
+.wf-actions { display: flex; gap: 10px; margin-top: 14px; }
+.wf-actions button { margin: 0; }
 
 .tag-general    { background: #E7E5DE; color: #4A463F; }
 .tag-plumbing   { background: #DCEAEF; color: #2A5A68; }
@@ -341,6 +353,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sim
     <div class="w-record-row">
       <button id="walkBtn" type="button">Start<br>Walk-Around</button>
       <button id="stopWalkBtn" type="button" class="w-photo-btn stop-btn" aria-label="Stop walk-around">⏹<span>Stop</span></button>
+      <button id="finishWalkBtn" type="button" class="w-photo-btn finish-btn" aria-label="Finish walk and generate report">✅<span>Finish</span></button>
     </div>
     <label class="w-video-toggle"><input type="checkbox" id="saveVideoToggle"> Also save a video of this walk</label>
     <p id="videoStatusLabel"></p>
@@ -560,6 +573,22 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sim
 <div id="lightbox">
   <button id="lightboxClose" type="button" aria-label="Close">✕</button>
   <img id="lightboxImg" src="" alt="Photo">
+</div>
+<!-- Finish Walk report: a preview of this walk's photos/items plus Share/Download
+     of a standalone HTML file (see buildStandaloneReportHtml in walk.js). No backend
+     exists to host a "shareable link", so sharing means handing the OS share sheet
+     a real file, same pattern as the existing video-save feature. -->
+<div id="walkFinishModal">
+  <div class="wf-modal-card">
+    <button id="walkFinishClose" type="button" aria-label="Close">✕</button>
+    <h2>📋 Walk Report</h2>
+    <div id="walkFinishSummary" class="wf-summary"></div>
+    <div id="walkFinishBody"></div>
+    <div class="wf-actions">
+      <button id="walkFinishShareBtn" type="button" class="green">📤 Share</button>
+      <button id="walkFinishDownloadBtn" type="button" class="gray">⬇️ Download</button>
+    </div>
+  </div>
 </div>
 <script src="./clean-speech.js"></script>
 <script src="./walk.js"></script>
