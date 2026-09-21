@@ -55,8 +55,8 @@ document.getElementById('homeGenerateReportBtn').addEventListener('click', funct
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled' };
-let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [];
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks' };
+let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
 const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
@@ -87,6 +87,22 @@ function persistWages() { saveJson(LS.wages, wages); }
 function persistMaterials() { saveJson(LS.materials, materials); }
 function persistBudget() { saveJson(LS.budget, budget); }
 function persistDrawings() { saveJson(LS.drawings, drawings); }
+function persistWalks() { saveJson(LS.walks, walks); }
+// One Date read shared by time/ts/iso so a single captured moment never
+// disagrees with itself across the three representations different parts
+// of the app already expect (display string, epoch for sorting, ISO for
+// the walk log) — each is derived from this one Date, not computed later.
+function nowStamp() { const d = new Date(); return { time: d.toLocaleString(), ts: d.getTime(), iso: d.toISOString() }; }
+function makeWalkId() { return 'w_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+// Mirrors a captured entry into the walk it happened during, so the walk log
+// never mixes entries across walks — a no-op if no walk is active (or none
+// has ever been started), leaving the caller's own (pre-existing) storage
+// untouched either way.
+function pushToCurrentWalk(kind, entry) {
+  if (!currentWalk) return;
+  currentWalk[kind].push(entry);
+  persistWalks();
+}
 function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str == null ? '' : String(str); return div.innerHTML; }
 function setWalkStatus(kind, text) { const s = document.getElementById('walkStatus'); s.className = 'w-walk-status ' + kind; s.textContent = text; }
 function compressImage(dataUrl, cb) { const img = new Image(); img.onload = function () { let w = img.width, h = img.height, max = 1280; if (w > max) { h = Math.round(h * max / w); w = max; } if (h > max) { w = Math.round(w * max / h); h = max; } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); cb(c.toDataURL('image/jpeg', 0.72)); }; img.onerror = function () { cb(dataUrl); }; img.src = dataUrl; }
@@ -234,7 +250,7 @@ function renderNote(entry) {
   const wrap = document.getElementById('notesList');
   const card = document.createElement('div');
   card.className = 'w-note-entry';
-  card.innerHTML = '<span class="w-note-trade ' + (TRADE_CLASS[entry.trade] || 'tag-general') + '">' + entry.trade + '</span>' + escapeHtml(entry.text) + '<span class="w-note-time">' + entry.time + '</span>';
+  card.innerHTML = '<span class="w-note-trade ' + (TRADE_CLASS[entry.trade] || 'tag-general') + '">' + entry.trade + '</span>' + escapeHtml(entry.text) + '<span class="w-note-time">' + entry.time + '</span>' + (entry.iso ? '<span class="w-note-iso">' + escapeHtml(entry.iso) + '</span>' : '');
   wrap.appendChild(card);
 }
 function renderAllNotes() {
@@ -244,8 +260,10 @@ function renderAllNotes() {
   notesLog.forEach(renderNote);
 }
 function logNote(text, trade) {
-  const entry = { text: text, trade: trade, time: new Date().toLocaleString() };
+  const stamp = nowStamp();
+  const entry = { text: text, trade: trade, time: stamp.time, ts: stamp.ts, iso: stamp.iso };
   notesLog.push(entry); persistNotes();
+  pushToCurrentWalk('transcript', entry);
   const wrap = document.getElementById('notesList');
   if (wrap.querySelector('.w-empty')) wrap.innerHTML = '';
   renderNote(entry);
@@ -625,7 +643,8 @@ function renderBudgetSummary() {
 // routing, estimating, invoicing — can reuse a captured item without asking
 // the crew to re-enter it.
 function fileEntry(data) {
-  const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), verified: data.verified !== false };
+  const stamp = nowStamp();
+  const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: stamp.time, ts: stamp.ts, iso: stamp.iso, verified: data.verified !== false };
   if (data.photo) entry.photo = data.photo;
   const drawingRef = extractDrawingRef(entry.text);
   if (drawingRef) entry.drawingRef = drawingRef;
@@ -633,6 +652,7 @@ function fileEntry(data) {
   if (type === 'change') { entry.costEstimate = typeof data.costEstimate === 'number' ? data.costEstimate : null; entry.location = data.location || ''; entry.approval = data.approval || 'Pending'; changes.push(entry); }
   else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
   else { type = 'punch'; entry.resolved = false; entry.costEstimate = typeof data.costEstimate === 'number' ? data.costEstimate : null; entry.location = data.location || ''; punch.push(entry); }
+  if (type === 'punch') pushToCurrentWalk('punches', entry);
   if (!entry.photo) tryLinkItemToRecentPhoto(entry);
   persistLists();
   renderItemCard(entry, type);
@@ -668,10 +688,12 @@ function detectVoiceDecline(text) {
 // Routes a spoken hazard/violation straight into the existing Safety Log
 // instead of trade punch routing — it needs its own follow-up, not a trade.
 function logSafetyFromVoice(text) {
-  const entry = { type: 'Hazard Observed', desc: text, person: '', action: '', photo: null, time: new Date().toLocaleString(), ts: Date.now() };
+  const stamp = nowStamp();
+  const entry = { type: 'Hazard Observed', desc: text, person: '', action: '', photo: null, time: stamp.time, ts: stamp.ts, iso: stamp.iso };
   tryLinkItemToRecentPhoto(entry);
   safetyLogs.push(entry);
   persistSafety();
+  pushToCurrentWalk('safety', entry);
   renderSafetyLogs();
   renderDashboard();
   logNote(text, 'Safety');
@@ -827,12 +849,19 @@ function isNoiseTranscript(text) { return TRANSCRIPT_NOISE_RE.test(text.trim());
 // is the only way to confirm recognition actually started and is hearing
 // anything — a fully silent transcript looks identical whether recognition
 // never started or the mic just heard nothing.
+// Android Chrome plays its own start/stop chime on every recognition
+// restart. A short silence gap between onend and the next start() suppresses
+// it on most devices; restartPending guards against onend firing again
+// (or startListening racing in) while that gap is still pending, so two
+// restarts never queue on top of each other.
+const RECOGNITION_RESTART_DELAY_MS = 250;
 function setupRecognition() {
   if (!SpeechRecognition) return null;
   const rec = new SpeechRecognition();
   rec.continuous = true;
   rec.interimResults = true;
   rec.lang = 'en-US';
+  let restartPending = false;
   rec.onstart = function () { console.log('[SiteWalk] speech recognition started'); };
   rec.onresult = function (event) {
     let interim = '';
@@ -853,7 +882,16 @@ function setupRecognition() {
     if (walkLive) walkLive.textContent = interim ? ('AI hearing: "' + interim + '"') : 'AI listening.';
   };
   rec.onerror = function (err) { console.error('[SiteWalk] speech recognition error:', err.error); setWalkStatus('err', 'Voice error: ' + (err.error || 'unknown')); };
-  rec.onend = function () { console.log('[SiteWalk] speech recognition ended' + (listening ? ' — restarting' : '')); if (listening) { try { rec.start(); } catch (e) { console.error('[SiteWalk] recognition restart failed:', e); } } };
+  rec.onend = function () {
+    console.log('[SiteWalk] speech recognition ended' + (listening ? ' — restarting' : ''));
+    if (!listening || restartPending) return;
+    restartPending = true;
+    setTimeout(function () {
+      restartPending = false;
+      if (!listening) return;
+      try { rec.start(); } catch (e) { console.error('[SiteWalk] recognition restart failed:', e); }
+    }, RECOGNITION_RESTART_DELAY_MS);
+  };
   return rec;
 }
 function startListening() {
@@ -1046,6 +1084,9 @@ function openWalkCamera() { const video = document.getElementById('walkVideo'); 
 window.startWalk = function () {
   if (walkActive) return;
   walkActive = true;
+  currentWalk = { id: makeWalkId(), startedAt: new Date().toISOString(), endedAt: null, transcript: [], punches: [], costs: [], safety: [] };
+  walks.push(currentWalk);
+  persistWalks();
   const btn = document.getElementById('walkBtn');
   btn.classList.add('recording');
   btn.innerHTML = '📷<br>Take Photo';
@@ -1068,6 +1109,8 @@ window.startWalk = function () {
 };
 window.endWalk = function () {
   walkActive = false;
+  if (currentWalk && !currentWalk.endedAt) { currentWalk.endedAt = new Date().toISOString(); persistWalks(); }
+  selectedWalkId = null;
   stopVideoRecording();
   stopWalkCamera();
   stopWalkVoice();
@@ -1196,10 +1239,49 @@ function refreshAiStatus() { const url = currentAiEndpoint(); const key = curren
 document.getElementById('saveEndpointBtn').addEventListener('click', function () { const url = document.getElementById('aiEndpointInput').value.trim().replace(/\/$/, ''); const key = document.getElementById('aiKeyInput').value.trim(); if (url) localStorage.setItem(LS.aiEndpoint, url); else localStorage.removeItem(LS.aiEndpoint); if (key) localStorage.setItem(LS.aiKey, key); else localStorage.removeItem(LS.aiKey); refreshAiStatus(); });
 document.getElementById('aiPhotoBtn').addEventListener('click', function () { if (!currentAiEndpoint()) { setAiStatus('err', 'No worker URL yet.'); return; } document.getElementById('aiPhotoInput').click(); });
 document.getElementById('aiPhotoInput').addEventListener('change', function (e) { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (!file) return; const endpoint = currentAiEndpoint(); if (!endpoint) return; setAiStatus('info', 'Checking photo…'); const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const headers = { 'Content-Type': 'application/json' }; const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key; fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify({ image: src, trade: tradeSelect.value }) }).then(function (res) { return res.text().then(function (t) { let data; try { data = JSON.parse(t); } catch (err) { data = { error: t || res.statusText }; } if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status)); return data; }); }).then(function (data) { const text = (data.result || data.text || JSON.stringify(data)).trim(); document.getElementById('aiResult').style.display = 'block'; document.getElementById('aiResult').textContent = text; setAiStatus('ok', 'Check complete.'); if (text) fileEntry({ text: 'AI code-check: ' + text, type: 'punch', trade: tradeSelect.value, verified: true, costEstimate: null, photo: src });}).catch(function (err) { setAiStatus('err', 'AI check failed: ' + (err && err.message ? err.message : 'unknown')); }); }); }; r.readAsDataURL(file); });
+// Walk-scoped log (transcript/punches/costs/safety captured during one
+// walk, never mixed with another walk's). Defaults to the active walk, or
+// the most recently ended one if none is active; the select lets the crew
+// look back at an older walk without that becoming the default view.
+function renderWalkLogSection() {
+  if (!walks.length) return '';
+  const walkToShow = (selectedWalkId && walks.find(function (w) { return w.id === selectedWalkId; })) || currentWalk || walks[walks.length - 1];
+  if (!walkToShow) return '';
+  let html = '<div class="report-section"><h3>Voice Walk Log</h3>';
+  if (walks.length > 1) {
+    html += '<select id="walkLogSelect" class="walk-log-select">';
+    walks.slice().reverse().forEach(function (w) {
+      const label = new Date(w.startedAt).toLocaleString() + (w.endedAt ? '' : ' (active)');
+      html += '<option value="' + w.id + '"' + (w.id === walkToShow.id ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    });
+    html += '</select>';
+  }
+  html += '<div class="punch-item"><strong>Started</strong> ' + escapeHtml(new Date(walkToShow.startedAt).toLocaleString())
+    + (walkToShow.endedAt ? (' · <strong>Ended</strong> ' + escapeHtml(new Date(walkToShow.endedAt).toLocaleString())) : ' · <em>in progress</em>') + '</div>';
+  if (walkToShow.transcript.length) {
+    html += '<div class="punch-item"><strong>Transcript</strong></div>';
+    walkToShow.transcript.forEach(function (t) { html += '<div class="punch-item">[' + escapeHtml(t.iso) + '] ' + escapeHtml(t.text) + '</div>'; });
+  }
+  if (walkToShow.punches.length) {
+    html += '<div class="punch-item"><strong>Punch Items (this walk)</strong></div>';
+    walkToShow.punches.forEach(function (p) { html += '<div class="punch-item">[' + escapeHtml(p.iso) + '] ' + escapeHtml(p.text) + '</div>'; });
+  }
+  if (walkToShow.costs.length) {
+    const total = walkToShow.costs.reduce(function (s, c) { return s + c.amount; }, 0);
+    html += '<div class="punch-item"><strong>Cost Tallies (this walk)</strong> — Total: $' + total.toLocaleString() + '</div>';
+    walkToShow.costs.forEach(function (c) { html += '<div class="punch-item">[' + escapeHtml(c.iso) + '] $' + c.amount.toLocaleString() + ' — ' + escapeHtml(c.text) + '</div>'; });
+  }
+  if (walkToShow.safety.length) {
+    html += '<div class="punch-item"><strong>Safety Flags (this walk)</strong></div>';
+    walkToShow.safety.forEach(function (s) { html += '<div class="punch-item">[' + escapeHtml(s.iso) + '] ' + escapeHtml(s.text) + '</div>'; });
+  }
+  return html + '</div>';
+}
 window.generateReport = function () {
   const trades = {};
   photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + new Date().toLocaleString() + '</div>';
+  html += renderWalkLogSection();
   Object.keys(trades).forEach(function (t) {
     html += '<div class="report-section"><h3>' + t + '</h3>';
     trades[t].forEach(function (p) {
@@ -1243,12 +1325,14 @@ window.generateReport = function () {
     html += '</div>';
   }
   document.getElementById('report').innerHTML = html;
+  const walkSel = document.getElementById('walkLogSelect');
+  if (walkSel) walkSel.addEventListener('change', function () { selectedWalkId = walkSel.value; window.generateReport(); });
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
-  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = [];
+  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null;
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   document.getElementById('siteName').textContent = 'Job Site';
@@ -1282,10 +1366,13 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
-  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []);
+  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []); walks = loadJson(LS.walks, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
   if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
+  if (!Array.isArray(walks)) walks = [];
+  walks.forEach(function (w) { ['transcript', 'punches', 'costs', 'safety'].forEach(function (k) { if (!Array.isArray(w[k])) w[k] = []; }); });
+  currentWalk = walks.length ? walks[walks.length - 1] : null;
   const savedSiteName = loadJson(LS.siteName, null);
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;

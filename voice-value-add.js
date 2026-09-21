@@ -18,16 +18,19 @@ function currentTrade() {
 }
 
 function addPunchFromVoice(text) {
+  const stamp = nowStamp();
   const entry = {
     text: text.replace(PUNCH_TRIGGER_RE, '').trim() || text,
     trade: currentTrade(),
-    ts: Date.now(),
-    time: new Date().toLocaleString(),
+    ts: stamp.ts,
+    time: stamp.time,
+    iso: stamp.iso,
     resolved: false,
     source: 'voice'
   };
   punch.push(entry);
   persistLists();
+  if (typeof pushToCurrentWalk === 'function') pushToCurrentWalk('punches', entry);
   if (typeof tryLinkItemToRecentPhoto === 'function') tryLinkItemToRecentPhoto(entry);
   if (typeof renderAllItems === 'function') renderAllItems();
   if (typeof renderSummary === 'function') renderSummary();
@@ -44,6 +47,9 @@ function tallyCostFromVoice(text) {
     total += n;
   }
   if (total <= 0) return 0;
+  const stamp = nowStamp();
+  const entry = { text: text, amount: total, trade: currentTrade(), ts: stamp.ts, time: stamp.time, iso: stamp.iso, source: 'voice' };
+  if (typeof pushToCurrentWalk === 'function') pushToCurrentWalk('costs', entry);
   budget.materials = (budget.materials || 0) + total;
   persistBudget();
   if (typeof renderJobCost === 'function') renderJobCost();
@@ -61,17 +67,20 @@ function flagSafetyFromVoice(text) {
     if (sev) break;
   }
   if (!sev) return null;
+  const stamp = nowStamp();
   const entry = {
     text: text,
     trade: currentTrade(),
-    ts: Date.now(),
-    time: new Date().toLocaleString(),
+    ts: stamp.ts,
+    time: stamp.time,
+    iso: stamp.iso,
     severity: SAFETY_SEVERITY[sev],
     matched: matched,
     source: 'voice'
   };
   safetyLogs.push(entry);
   persistSafety();
+  if (typeof pushToCurrentWalk === 'function') pushToCurrentWalk('safety', entry);
   if (typeof renderSafety === 'function') renderSafety();
   if (typeof renderSummary === 'function') renderSummary();
   setWalkStatus('err', 'Safety: ' + SAFETY_SEVERITY[sev] + ' — ' + matched);
