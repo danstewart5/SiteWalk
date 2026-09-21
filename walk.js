@@ -8,6 +8,7 @@ function showTab(name) {
   document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
   });
+  if (name === 'report' && typeof window.generateReport === 'function') window.generateReport();
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
@@ -75,8 +76,13 @@ let mediaRecorder = null, mediaChunks = [], mediaStream = null, recordingNote = 
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); if (!raw) return fallback; const p = JSON.parse(raw); return p == null ? fallback : p; } catch (e) { return fallback; } }
 function saveJson(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { setWalkStatus('err', 'Storage full'); return false; } }
-function persistLists() { saveJson(LS.punch, punch); saveJson(LS.changes, changes); saveJson(LS.rfis, rfis); }
-function persistPhotos() { saveJson(LS.photos, photos); }
+// The report view is cheap to rebuild from the in-memory arrays, so rather
+// than track staleness we just regenerate it whenever data that the report
+// reads (photos, punch/change/rfi lists) changes while the tab is on screen.
+function reportTabActive() { const panel = document.getElementById('tab-report'); return !!panel && panel.classList.contains('active'); }
+function refreshReportIfActive() { if (reportTabActive() && typeof window.generateReport === 'function') window.generateReport(); }
+function persistLists() { saveJson(LS.punch, punch); saveJson(LS.changes, changes); saveJson(LS.rfis, rfis); refreshReportIfActive(); }
+function persistPhotos() { saveJson(LS.photos, photos); refreshReportIfActive(); }
 function persistContacts() { saveJson(LS.contacts, contacts); }
 function persistSubmittals() { saveJson(LS.submittals, submittals); }
 function persistClock() { saveJson(LS.clockEvents, clockEvents); }
@@ -1239,15 +1245,91 @@ function refreshAiStatus() { const url = currentAiEndpoint(); const key = curren
 document.getElementById('saveEndpointBtn').addEventListener('click', function () { const url = document.getElementById('aiEndpointInput').value.trim().replace(/\/$/, ''); const key = document.getElementById('aiKeyInput').value.trim(); if (url) localStorage.setItem(LS.aiEndpoint, url); else localStorage.removeItem(LS.aiEndpoint); if (key) localStorage.setItem(LS.aiKey, key); else localStorage.removeItem(LS.aiKey); refreshAiStatus(); });
 document.getElementById('aiPhotoBtn').addEventListener('click', function () { if (!currentAiEndpoint()) { setAiStatus('err', 'No worker URL yet.'); return; } document.getElementById('aiPhotoInput').click(); });
 document.getElementById('aiPhotoInput').addEventListener('change', function (e) { const file = e.target.files && e.target.files[0]; e.target.value = ''; if (!file) return; const endpoint = currentAiEndpoint(); if (!endpoint) return; setAiStatus('info', 'Checking photo…'); const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, function (src) { const headers = { 'Content-Type': 'application/json' }; const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key; fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify({ image: src, trade: tradeSelect.value }) }).then(function (res) { return res.text().then(function (t) { let data; try { data = JSON.parse(t); } catch (err) { data = { error: t || res.statusText }; } if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status)); return data; }); }).then(function (data) { const text = (data.result || data.text || JSON.stringify(data)).trim(); document.getElementById('aiResult').style.display = 'block'; document.getElementById('aiResult').textContent = text; setAiStatus('ok', 'Check complete.'); if (text) fileEntry({ text: 'AI code-check: ' + text, type: 'punch', trade: tradeSelect.value, verified: true, costEstimate: null, photo: src });}).catch(function (err) { setAiStatus('err', 'AI check failed: ' + (err && err.message ? err.message : 'unknown')); }); }); }; r.readAsDataURL(file); });
-// Walk-scoped log (transcript/punches/costs/safety captured during one
-// walk, never mixed with another walk's). Defaults to the active walk, or
-// the most recently ended one if none is active; the select lets the crew
-// look back at an older walk without that becoming the default view.
+// A live continuous-speech transcript finalizes the same utterance more than
+// once as it revises ("So" → "So snap" → "So, snap a photo of the header") —
+// this groups those revisions back into one observation per utterance
+// instead of printing every intermediate fragment as its own report line.
+const OBSERVATION_GROUP_GAP_MS = 1500;
+const OBSERVATION_FILLER_WORD_RE = /^(okay|ok|so|yeah|um|snap|photo|photos)$/i;
+function isFillerOnlyLine(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  if (words.length > 3) return false;
+  return words.every(function (w) { return OBSERVATION_FILLER_WORD_RE.test(w.replace(/^[.,!?]+|[.,!?]+$/g, '')); });
+}
+// Collapses a walk's raw finalized-speech entries into one distilled
+// "observation" per utterance: entries within ~1.5s of each other, or where
+// one is a growing prefix of the next, are the same utterance being revised
+// — keep the LAST (most complete/most recent) wording, not the longest.
+function distillObservations(entries) {
+  if (!entries || !entries.length) return [];
+  const sorted = entries.slice().sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
+  const groups = [];
+  sorted.forEach(function (e) {
+    const group = groups[groups.length - 1];
+    const prev = group && group[group.length - 1];
+    const gap = prev ? (e.ts || 0) - (prev.ts || 0) : Infinity;
+    const a = (prev && prev.text || '').toLowerCase(), b = (e.text || '').toLowerCase();
+    const growingPrefix = prev && a && b && (b.indexOf(a) === 0 || a.indexOf(b) === 0);
+    if (group && (gap <= OBSERVATION_GROUP_GAP_MS || growingPrefix)) group.push(e);
+    else groups.push([e]);
+  });
+  const out = [];
+  groups.forEach(function (g) {
+    const rep = g[g.length - 1];
+    const cleaned = typeof summarizeNote === 'function' ? summarizeNote(rep.text) : rep.text;
+    if (!cleaned || isFillerOnlyLine(cleaned)) return;
+    out.push({ text: cleaned, ts: rep.ts });
+  });
+  return out;
+}
+// Pairs each observation with its nearest photo (within the same 60s window
+// used for punch-item/photo linking), nearest-distance-first so a photo
+// never gets claimed by two observations and an observation never shows up
+// twice under two different photos.
+function matchObservationsToPhotos(observations, photoPool) {
+  const pairs = [];
+  observations.forEach(function (obs, oi) {
+    photoPool.forEach(function (p, pi) {
+      const dt = Math.abs((obs.ts || 0) - photoTs(p));
+      if (dt <= PHOTO_LINK_WINDOW_MS) pairs.push({ oi: oi, pi: pi, dt: dt });
+    });
+  });
+  pairs.sort(function (a, b) { return a.dt - b.dt; });
+  const usedObs = {}, usedPhoto = {}, photoByObservation = {};
+  pairs.forEach(function (pair) {
+    if (usedObs[pair.oi] || usedPhoto[pair.pi]) return;
+    usedObs[pair.oi] = true; usedPhoto[pair.pi] = true;
+    photoByObservation[pair.oi] = photoPool[pair.pi];
+  });
+  return photoByObservation;
+}
+// All distilled observations across every walk (photos aren't walk-scoped,
+// so the report's photo gallery needs a caption pool that isn't either).
+function allDistilledObservations() {
+  const entries = [];
+  walks.forEach(function (w) { entries.push.apply(entries, w.transcript || []); });
+  return distillObservations(entries.length ? entries : notesLog);
+}
+function nearestObservationText(observations, ts) {
+  let best = null, bestDt = Infinity;
+  observations.forEach(function (o) {
+    const dt = Math.abs((o.ts || 0) - ts);
+    if (dt <= PHOTO_LINK_WINDOW_MS && dt < bestDt) { bestDt = dt; best = o; }
+  });
+  return best ? best.text : '';
+}
+// Walk-scoped log section. Defaults to the active walk, or the most
+// recently ended one if none is active; the select lets the crew look back
+// at an older walk without that becoming the default view. Renders
+// distilled "Observations" (one line per utterance, photo-matched where
+// possible) instead of the raw per-fragment transcript — the raw log still
+// lives in the Notes tab.
 function renderWalkLogSection() {
   if (!walks.length) return '';
   const walkToShow = (selectedWalkId && walks.find(function (w) { return w.id === selectedWalkId; })) || currentWalk || walks[walks.length - 1];
   if (!walkToShow) return '';
-  let html = '<div class="report-section"><h3>Voice Walk Log</h3>';
+  let html = '<div class="report-section"><h3>Observations</h3>';
   if (walks.length > 1) {
     html += '<select id="walkLogSelect" class="walk-log-select">';
     walks.slice().reverse().forEach(function (w) {
@@ -1258,22 +1340,26 @@ function renderWalkLogSection() {
   }
   html += '<div class="punch-item"><strong>Started</strong> ' + escapeHtml(new Date(walkToShow.startedAt).toLocaleString())
     + (walkToShow.endedAt ? (' · <strong>Ended</strong> ' + escapeHtml(new Date(walkToShow.endedAt).toLocaleString())) : ' · <em>in progress</em>') + '</div>';
-  if (walkToShow.transcript.length) {
-    html += '<div class="punch-item"><strong>Transcript</strong></div>';
-    walkToShow.transcript.forEach(function (t) { html += '<div class="punch-item">[' + escapeHtml(t.iso) + '] ' + escapeHtml(t.text) + '</div>'; });
+
+  const observations = distillObservations(walkToShow.transcript);
+  if (observations.length) {
+    const photoByObservation = matchObservationsToPhotos(observations, photos);
+    observations.forEach(function (obs, i) {
+      const photo = photoByObservation[i];
+      html += '<div class="observation-card">'
+        + (photo ? '<img class="observation-photo" src="' + photo.src + '">' : '')
+        + '<div class="observation-text">' + escapeHtml(obs.text) + '</div></div>';
+    });
   }
-  if (walkToShow.punches.length) {
-    html += '<div class="punch-item"><strong>Punch Items (this walk)</strong></div>';
-    walkToShow.punches.forEach(function (p) { html += '<div class="punch-item">[' + escapeHtml(p.iso) + '] ' + escapeHtml(p.text) + '</div>'; });
-  }
+
   if (walkToShow.costs.length) {
     const total = walkToShow.costs.reduce(function (s, c) { return s + c.amount; }, 0);
     html += '<div class="punch-item"><strong>Cost Tallies (this walk)</strong> — Total: $' + total.toLocaleString() + '</div>';
-    walkToShow.costs.forEach(function (c) { html += '<div class="punch-item">[' + escapeHtml(c.iso) + '] $' + c.amount.toLocaleString() + ' — ' + escapeHtml(c.text) + '</div>'; });
+    walkToShow.costs.forEach(function (c) { html += '<div class="punch-item">$' + c.amount.toLocaleString() + ' — ' + escapeHtml(c.text) + '</div>'; });
   }
   if (walkToShow.safety.length) {
     html += '<div class="punch-item"><strong>Safety Flags (this walk)</strong></div>';
-    walkToShow.safety.forEach(function (s) { html += '<div class="punch-item">[' + escapeHtml(s.iso) + '] ' + escapeHtml(s.text) + '</div>'; });
+    walkToShow.safety.forEach(function (s) { html += '<div class="punch-item">' + escapeHtml(s.text) + '</div>'; });
   }
   return html + '</div>';
 }
@@ -1282,11 +1368,13 @@ window.generateReport = function () {
   photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + new Date().toLocaleString() + '</div>';
   html += renderWalkLogSection();
+  const galleryObservations = allDistilledObservations();
   Object.keys(trades).forEach(function (t) {
     html += '<div class="report-section"><h3>' + t + '</h3>';
     trades[t].forEach(function (p) {
+      const caption = p.linkedItemText || nearestObservationText(galleryObservations, photoTs(p));
       html += '<img src="' + p.src + '">';
-      html += '<div class="punch-item"><span class="trade-tag">' + escapeHtml(p.trade) + '</span> ' + escapeHtml(p.linkedItemText || '(no description)') + '</div>';
+      html += '<div class="punch-item"><span class="trade-tag">' + escapeHtml(p.trade) + '</span> ' + escapeHtml(caption || '(no description)') + '</div>';
     });
     html += '</div>';
   });
@@ -1328,7 +1416,7 @@ window.generateReport = function () {
   const walkSel = document.getElementById('walkLogSelect');
   if (walkSel) walkSel.addEventListener('change', function () { selectedWalkId = walkSel.value; window.generateReport(); });
 };
-document.getElementById('genBtn').addEventListener('click', window.generateReport);
+if (document.getElementById('genBtn')) document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;

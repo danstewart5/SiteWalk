@@ -65,6 +65,9 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .report-section h3 { margin: 0 0 8px 0; color: #1a365d; font-size: 15px; }
 .report-section img { max-width: 100%; border-radius: 6px; margin: 6px 0; }
 .punch-item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; font-size: 14px; }
+.observation-card { margin: 14px 0; }
+.observation-photo { max-width: 100%; border-radius: 8px; display: block; }
+.observation-text { font-size: 14px; margin-top: 6px; }
 .item-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; font-size: 14px; }
 .item-card .meta { font-size: 11px; color: #718096; margin-top: 4px; }
 .contact-row { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin: 8px 0; }
@@ -699,8 +702,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <div class="tab-panel" id="tab-report">
 <div class="section" id="reportSection">
 <h2>📋 Report</h2>
-<button id="genBtn" class="green">Generate Report</button>
-<button id="printBtn" class="gray">Print Report</button>
+<button id="printBtn" type="button" class="gray" aria-label="Print report">Print Report</button>
 <div id="report"></div>
 </div>
 </div>
