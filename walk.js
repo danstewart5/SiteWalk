@@ -1069,8 +1069,9 @@ window.endWalk = function () {
   document.getElementById('stopWalkBtn').classList.remove('visible');
   document.getElementById('walkHero').style.display = '';
   document.getElementById('walkStage').classList.remove('active');
-  setWalkStatus('info', 'Walk ended. Check Summary for what was found.');
-  showWalkTab('summary');
+  setWalkStatus('info', 'Walk ended. Generating report…');
+  showTab('report');
+  window.generateReport();
 };
 document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? takePhoto() : window.startWalk(); });
 document.getElementById('stopWalkBtn').addEventListener('click', function () { window.endWalk(); });
