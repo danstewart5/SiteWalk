@@ -152,7 +152,7 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', buildProgress: 'swBuildProgress', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
 // LeaseFlow (Hold mode) data — Property is root, Unit belongs to a Property,
 // Tenant is its own record linked to a Unit only through a Lease, Payment is
@@ -890,76 +890,171 @@ function renderFlagBar() {
 // data until cross-device sync exists.
 const ROLES = {
   manager: {
-    title: 'Manager', intro: 'Run the site: what\'s open, who\'s on the clock, what needs chasing today.', actions: true,
-    links: [['walk', 'Ch. 1 · Walk-Around'], ['punch', 'Punch List'], ['rfis', 'RFIs'], ['submittals', 'Submittals'], ['changes', 'Change Orders'], ['safety', 'Safety Log'], ['dailylog', 'Daily Log'], ['clock', 'Clock In/Out'], ['contacts', 'Trade Contacts'], ['drawings', 'Drawings & Plans'], ['drawingrefs', 'Drawing References'], ['leasewalk', 'Maintenance & Walk-throughs'], ['dashboard', 'Open Items Dashboard'], ['report', 'Report']],
+    title: 'Manager', intro: 'Run the build: what\'s flagged, where the job is at, what\'s slipping, and what it\'s costing.', actions: true,
+    sections: ['flags', 'build', 'delays', 'field', 'money'],
+    links: [['walk', 'Ch. 1 · Walk-Around'], ['punch', 'Punch List'], ['rfis', 'RFIs'], ['submittals', 'Submittals'], ['changes', 'Change Orders'], ['safety', 'Safety Log'], ['dailylog', 'Daily Log'], ['clock', 'Clock In/Out'], ['jobcost', 'Job Cost Dashboard'], ['contacts', 'Trade Contacts'], ['drawings', 'Drawings & Plans'], ['drawingrefs', 'Drawing References'], ['leasewalk', 'Maintenance & Walk-throughs'], ['dashboard', 'Open Items Dashboard'], ['report', 'Report']],
     soon: []
   },
   bookkeeper: {
     title: 'Bookkeeper', intro: 'Money in and out: job cost vs budget, change-order dollars, hours for payroll, rent collected and owed.',
+    sections: ['flags', 'books'],
     links: [['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['clock', 'Clock In/Out (hours for payroll)'], ['rentroll', 'Rent & Payments (CSV export)'], ['arrears', 'Arrears & Collections'], ['leases', 'Leases'], ['tenants', 'Tenants'], ['report', 'Report']],
     soon: ['Ch. 5 · Invoicing']
   },
   developer: {
-    title: 'Developer', intro: 'The big picture: is the build on budget, what\'s the change-order exposure, and how is the rental portfolio performing.',
-    links: [['dashboard', 'Open Items Dashboard'], ['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['units', 'Units & Properties'], ['leases', 'Leases'], ['rentroll', 'Rent & Payments'], ['arrears', 'Arrears & Collections'], ['report', 'Report']],
+    title: 'Developer', intro: 'The whole picture: every flagged problem, build progress and delays, the big dollars, and how the rentals are performing.',
+    sections: ['flags', 'build', 'money', 'delays', 'rentals'],
+    links: [['dashboard', 'Open Items Dashboard'], ['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['dailylog', 'Daily Log'], ['rfis', 'RFIs'], ['safety', 'Safety Log'], ['units', 'Units & Properties'], ['leases', 'Leases'], ['rentroll', 'Rent & Payments'], ['arrears', 'Arrears & Collections'], ['report', 'Report']],
     soon: ['Ch. 6 · Land-to-Contract Pipeline (Victoria Land)', 'Ch. 9 · Price-the-House']
   }
 };
+// Build stage + % complete is the one new piece of data role views add —
+// nothing else in the app tracks schedule progress. Set by hand from the
+// Manager or Developer view, stored in swBuildProgress.
+const BUILD_STAGES = ['Not started', 'Pre-construction / Permits', 'Site work & Foundation', 'Framing', 'Roof & Envelope', 'Rough-ins (Plumbing / Electrical / HVAC)', 'Insulation & Drywall', 'Interior Finishes', 'Exterior & Landscaping', 'Final Inspection & Punch', 'Complete'];
+function loadBuildProgress() {
+  const p = loadJson(LS.buildProgress, null);
+  return p && typeof p === 'object' ? p : { stage: 'Not started', pct: 0, updated: null };
+}
 function money(n) { return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
-function roleKpis(role) {
-  const openPunch = punch.filter(function (p) { return !p.resolved; }).length;
+function itemAgeDays(e) {
+  const t = e.ts || Date.parse(e.iso || e.time);
+  return t && !isNaN(t) ? (Date.now() - t) / 86400000 : null;
+}
+// One shared picture of the numbers every role section draws from.
+function roleStats() {
   const pendingCo = changes.filter(function (c) { return c.approval === 'Pending'; });
-  const openRfis = rfis.filter(function (r) { return r.status !== 'Answered'; }).length;
+  const approvedCo = changes.filter(function (c) { return c.approval === 'Approved'; });
   const coSum = function (list) { return list.reduce(function (s, c) { return s + (c.costEstimate || 0); }, 0); };
-  const labor = totalLaborCost(), mats = totalMaterialsCost(), spent = labor + mats;
-  const budgetTotal = (budget.labor || 0) + (budget.materials || 0);
+  const labor = totalLaborCost(), mats = totalMaterialsCost();
   const flags = computeLeaseFlags();
-  const pastDue = flags.arrears.reduce(function (s, r) { return s + r.balance; }, 0);
   const today = new Date().toISOString().slice(0, 10);
   const activeLeases = leases.filter(function (l) { return l.startDate <= today && (!l.endDate || l.endDate >= today); });
   const occupied = units.filter(function (u) { return activeLeases.some(function (l) { return l.unitId === u.id; }); }).length;
-  const budgetKpi = budgetTotal > 0
-    ? [Math.round(spent / budgetTotal * 100) + '%', 'of job budget spent (' + money(spent) + ' / ' + money(budgetTotal) + ')', spent > budgetTotal]
-    : [money(spent), 'job spend (no budget set)', false];
-  if (role === 'manager') {
-    const onClock = laborCostByEmployee().filter(function (r) { return r.active; }).length;
-    const missed = clockEvents.filter(function (e) { return e.flagged; }).length;
-    const lastLog = dailyLogs.length ? dailyLogs[dailyLogs.length - 1].date : 'None yet';
-    return [
-      [openPunch, 'open punch items', openPunch > 0], [openRfis, 'open RFIs', openRfis > 0],
-      [submittals.filter(function (x) { return x.status === 'Pending'; }).length, 'pending submittals', false], [pendingCo.length, 'change orders awaiting client', pendingCo.length > 0],
-      [onClock, 'on the clock now', false], [missed, 'missed clock-outs', missed > 0],
-      [safetyLogs.length, 'safety log entries', false], [lastLog, 'last daily log', false]
-    ];
+  return {
+    openPunch: punch.filter(function (p) { return !p.resolved; }).length,
+    openRfis: rfis.filter(function (r) { return r.status !== 'Answered'; }),
+    pendingSubmittals: submittals.filter(function (x) { return x.status === 'Pending'; }).length,
+    pendingCo: pendingCo, pendingCoSum: coSum(pendingCo), approvedCo: approvedCo, approvedCoSum: coSum(approvedCo),
+    labor: labor, mats: mats, spent: labor + mats, budget: (budget.labor || 0) + (budget.materials || 0),
+    missed: clockEvents.filter(function (e) { return e.flagged; }).length,
+    onClock: laborCostByEmployee().filter(function (r) { return r.active; }).length,
+    arrears: flags.arrears, pastDue: flags.arrears.reduce(function (s, r) { return s + r.balance; }, 0), renewalsSoon: flags.renewalsSoon,
+    collected: payments.reduce(function (s, x) { return s + (x.amount || 0); }, 0),
+    activeLeases: activeLeases, occupied: occupied, rentRoll: activeLeases.reduce(function (s, l) { return s + (l.rentAmount || 0); }, 0),
+    progress: loadBuildProgress(),
+    recentDelays: dailyLogs.filter(function (l) { return l.delays; }).slice(-5).reverse(),
+    lastLog: dailyLogs.length ? dailyLogs[dailyLogs.length - 1].date : null
+  };
+}
+// Every problem worth a look, each tagged with the roles that care about it
+// and the tab that fixes it. Red = act now, yellow = keep an eye on it.
+function computeProblemFlags(st) {
+  const out = [];
+  const add = function (level, text, tab, roles) { out.push({ level: level, text: text, tab: tab, roles: roles }); };
+  const M = 'manager', B = 'bookkeeper', D = 'developer';
+  const s = function (n) { return n === 1 ? '' : 's'; };
+  if (st.budget > 0 && st.spent > st.budget) add('red', 'Job is over budget by ' + money(st.spent - st.budget), 'jobcost', [M, B, D]);
+  const spentPct = st.budget > 0 ? st.spent / st.budget * 100 : null;
+  if (spentPct != null && st.progress.pct > 0 && spentPct > st.progress.pct + 10) add('yellow', 'Spending ahead of progress: ' + Math.round(spentPct) + '% of budget spent, build ' + st.progress.pct + '% complete', 'jobcost', [M, D]);
+  const staleRfis = st.openRfis.filter(function (r) { const d = itemAgeDays(r); return d != null && d >= 7; }).length;
+  if (staleRfis) add('red', staleRfis + ' RFI' + s(staleRfis) + ' unanswered for 7+ days', 'rfis', [M, D]);
+  const incidents = safetyLogs.filter(function (e) { const d = itemAgeDays(e); return e.type !== 'Near-Miss' && e.type !== 'Hazard Observed' && (d == null || d <= 14); }).length;
+  if (incidents) add('red', incidents + ' safety incident' + s(incidents) + ' in the last 14 days', 'safety', [M, D]);
+  if (st.missed) add('red', st.missed + ' missed clock-out' + s(st.missed) + ' (payroll hours unsure)', 'clock', [M, B]);
+  if (st.arrears.length) add('red', st.arrears.length + ' unit' + s(st.arrears.length) + ' in arrears — ' + money(st.pastDue) + ' past due', 'arrears', [B, D]);
+  const weekDelays = dailyLogs.filter(function (l) { return l.delays && (Date.now() - Date.parse(l.date)) / 86400000 <= 7; }).length;
+  if (weekDelays) add('yellow', weekDelays + ' day' + s(weekDelays) + ' with delays reported this week', 'dailylog', [M, D]);
+  if (st.pendingCo.length) add('yellow', st.pendingCo.length + ' change order' + s(st.pendingCo.length) + ' waiting on the client (' + money(st.pendingCoSum) + ')', 'changes', [M, B, D]);
+  if (st.openPunch) add('yellow', st.openPunch + ' open punch item' + s(st.openPunch), 'punch', [M, D]);
+  if (st.pendingSubmittals) add('yellow', st.pendingSubmittals + ' submittal' + s(st.pendingSubmittals) + ' pending approval', 'submittals', [M]);
+  if (st.lastLog && (Date.now() - Date.parse(st.lastLog)) / 86400000 > 2 && st.progress.stage !== 'Complete') add('yellow', 'No daily log since ' + st.lastLog, 'dailylog', [M]);
+  if (st.progress.updated && (Date.now() - Date.parse(st.progress.updated)) / 86400000 > 14 && st.progress.stage !== 'Complete') add('yellow', 'Build progress not updated in 2+ weeks', null, [M, D]);
+  if (st.renewalsSoon.length) add('yellow', st.renewalsSoon.length + ' lease renewal' + s(st.renewalsSoon.length) + ' due in 60 days', 'leases', [B, D]);
+  const vacant = units.length - st.occupied;
+  if (vacant > 0) add('yellow', vacant + ' vacant unit' + s(vacant), 'units', [D]);
+  return out.sort(function (x, y) { return (x.level === 'red' ? 0 : 1) - (y.level === 'red' ? 0 : 1); });
+}
+function tilesHtml(tiles) {
+  return '<div class="role-kpis">' + tiles.map(function (k) {
+    return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>';
+  }).join('') + '</div>';
+}
+function barHtml(label, pct, cls) {
+  const w = Math.max(0, Math.min(100, pct));
+  return '<div class="role-bar-row"><span>' + escapeHtml(label) + '</span><b>' + Math.round(pct) + '%</b></div><div class="role-bar"><div class="role-bar-fill ' + (cls || '') + '" style="width:' + w + '%"></div></div>';
+}
+function roleSectionHtml(name, role, st) {
+  const head = function (t) { return '<span class="role-section-label">' + t + '</span>'; };
+  const spentPct = st.budget > 0 ? st.spent / st.budget * 100 : null;
+  if (name === 'flags') {
+    const flags = computeProblemFlags(st).filter(function (f) { return f.roles.indexOf(role) !== -1; });
+    return head('Flagged problems') + '<div class="role-flags">' + (flags.length ? flags.map(function (f) {
+      return '<button type="button" class="role-flag ' + f.level + '"' + (f.tab ? ' data-tab="' + f.tab + '"' : ' data-role-action="noop"') + '>' + (f.level === 'red' ? '🔴 ' : '🟡 ') + escapeHtml(f.text) + (f.tab ? ' <i>›</i>' : '') + '</button>';
+    }).join('') : '<div class="role-flag ok">✅ Nothing flagged right now</div>') + '</div>';
   }
-  if (role === 'bookkeeper') {
-    const approved = changes.filter(function (c) { return c.approval === 'Approved'; });
-    const collected = payments.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
-    return [
-      budgetKpi, [money(labor), 'labor cost to date', false],
-      [money(mats), 'materials to date', false], [money(coSum(approved)), approved.length + ' approved change order' + (approved.length === 1 ? '' : 's') + ' to bill', false],
-      [money(coSum(pendingCo)), pendingCo.length + ' change order' + (pendingCo.length === 1 ? '' : 's') + ' pending', false], [money(collected), 'rent collected (all time)', false],
-      [money(pastDue), 'rent past due', pastDue > 0.005], [flags.arrears.length, 'units in arrears', flags.arrears.length > 0]
-    ];
+  if (name === 'build') {
+    const p = st.progress;
+    let html = head('Build progress') + '<div class="role-card"><div class="role-stage">' + escapeHtml(p.stage) + '</div>'
+      + barHtml('Complete', p.pct || 0, 'progress')
+      + (spentPct != null ? barHtml('Budget spent', spentPct, spentPct > (p.pct || 0) + 10 ? 'over' : 'spent') : '<p class="hint" style="margin:6px 0 0">Set a budget in Job Cost to compare spend against progress.</p>')
+      + '<div class="role-progress-edit"><select id="roleStageSelect">' + BUILD_STAGES.map(function (sname) { return '<option' + (sname === p.stage ? ' selected' : '') + '>' + escapeHtml(sname) + '</option>'; }).join('') + '</select>'
+      + '<input id="rolePctInput" type="number" min="0" max="100" inputmode="numeric" value="' + (p.pct || 0) + '" aria-label="Percent complete"><span>%</span>'
+      + '<button type="button" class="small" data-role-action="saveProgress">Update</button></div>'
+      + '<div class="meta">' + (p.updated ? 'Last updated ' + escapeHtml(p.updated) : 'Not set yet') + '</div></div>';
+    return html;
   }
-  return [
-    budgetKpi, [money(coSum(pendingCo)), 'pending change-order exposure', coSum(pendingCo) > 0],
-    [openPunch + pendingCo.length + openRfis, 'open items (punch + CO + RFI)', false], [properties.length + ' / ' + units.length, 'properties / units', false],
-    [units.length ? Math.round(occupied / units.length * 100) + '%' : '—', 'occupancy (' + occupied + ' of ' + units.length + ' units leased)', false],
-    [money(activeLeases.reduce(function (s, l) { return s + (l.rentAmount || 0); }, 0)), 'monthly rent roll', false],
-    [money(pastDue), 'rent past due', pastDue > 0.005], [flags.renewalsSoon.length, 'lease renewals in 60 days', flags.renewalsSoon.length > 0]
-  ];
+  if (name === 'delays') {
+    return head('Recent delays (from Daily Log)') + '<div class="role-card">' + (st.recentDelays.length ? st.recentDelays.map(function (l) {
+      return '<div class="role-delay"><b>' + escapeHtml(l.date) + '</b> ' + escapeHtml(l.delays) + '</div>';
+    }).join('') : '<p class="hint" style="margin:0">No delays reported. Delays entered in the Daily Log show up here.</p>') + '<button type="button" class="home-chapter-btn" data-tab="dailylog" style="margin-top:8px">Open Daily Log</button></div>';
+  }
+  if (name === 'field') {
+    return head('On site') + tilesHtml([
+      [st.openPunch, 'open punch items', st.openPunch > 0], [st.openRfis.length, 'open RFIs', st.openRfis.length > 0],
+      [st.pendingSubmittals, 'pending submittals', false], [st.onClock, 'on the clock now', false],
+      [safetyLogs.length, 'safety log entries', false], [st.lastLog || 'None yet', 'last daily log', false]
+    ]);
+  }
+  if (name === 'money') {
+    return head(role === 'developer' ? 'The big dollars' : 'Job money') + tilesHtml([
+      [money(st.budget), 'job budget (labor + materials)', false],
+      [money(st.spent), 'spent to date' + (spentPct != null ? ' (' + Math.round(spentPct) + '%)' : ''), st.budget > 0 && st.spent > st.budget],
+      [money(st.budget - st.spent), 'budget remaining', st.budget > 0 && st.spent > st.budget],
+      [money(st.approvedCoSum), st.approvedCo.length + ' approved change order' + (st.approvedCo.length === 1 ? '' : 's'), false],
+      [money(st.pendingCoSum), 'pending change-order exposure', st.pendingCoSum > 0],
+      [money(st.budget + st.approvedCoSum), 'revised contract (budget + approved COs)', false]
+    ]);
+  }
+  if (name === 'rentals') {
+    return head('Rentals') + tilesHtml([
+      [properties.length + ' / ' + units.length, 'properties / units', false],
+      [units.length ? Math.round(st.occupied / units.length * 100) + '%' : '—', 'occupancy (' + st.occupied + ' of ' + units.length + ' leased)', units.length > st.occupied],
+      [money(st.rentRoll), 'monthly rent roll', false], [money(st.collected), 'rent collected (all time)', false],
+      [money(st.pastDue), 'rent past due', st.pastDue > 0.005], [st.renewalsSoon.length, 'lease renewals in 60 days', st.renewalsSoon.length > 0]
+    ]);
+  }
+  if (name === 'books') {
+    return head('The books') + tilesHtml([
+      st.budget > 0 ? [Math.round(spentPct) + '%', 'of job budget spent (' + money(st.spent) + ' / ' + money(st.budget) + ')', st.spent > st.budget] : [money(st.spent), 'job spend (no budget set)', false],
+      [money(st.labor), 'labor cost to date', false], [money(st.mats), 'materials to date', false],
+      [money(st.approvedCoSum), st.approvedCo.length + ' approved change order' + (st.approvedCo.length === 1 ? '' : 's') + ' to bill', false],
+      [money(st.pendingCoSum), st.pendingCo.length + ' change order' + (st.pendingCo.length === 1 ? '' : 's') + ' pending', false],
+      [money(st.collected), 'rent collected (all time)', false], [money(st.pastDue), 'rent past due', st.pastDue > 0.005],
+      [st.arrears.length, 'units in arrears', st.arrears.length > 0]
+    ]);
+  }
+  return '';
 }
 function renderRoleView() {
   const home = document.getElementById('tab-home'), wrap = document.getElementById('homeRoleView');
   if (!home || !wrap) return;
-  const cfg = ROLES[home.getAttribute('data-role')];
+  const role = home.getAttribute('data-role'), cfg = ROLES[role];
   if (!cfg) { wrap.innerHTML = ''; return; }
+  const st = roleStats();
   let html = '<p class="role-intro"><strong>' + cfg.title + ' view</strong>' + cfg.intro + '</p>';
   if (cfg.actions) html += '<div class="role-actions"><button type="button" class="role-walk" data-role-action="walk">▶ Start Walk-Around</button><button type="button" class="role-report" data-role-action="report">Generate Report</button></div>';
-  html += '<div class="role-kpis">' + roleKpis(home.getAttribute('data-role')).map(function (k) {
-    return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>';
-  }).join('') + '</div>';
+  cfg.sections.forEach(function (sec) { html += roleSectionHtml(sec, role, st); });
   html += '<span class="role-section-label">Your tools</span><div class="role-links">'
     + cfg.links.map(function (l) { return '<button type="button" class="home-chapter-btn" data-tab="' + l[0] + '">' + escapeHtml(l[1]) + '</button>'; }).join('')
     + cfg.soon.map(function (t) { return '<button type="button" class="home-chapter-btn" disabled>' + escapeHtml(t) + ' <em>Coming soon</em></button>'; }).join('')
@@ -972,6 +1067,12 @@ document.getElementById('homeRoleView').addEventListener('click', function (e) {
   const action = btn.getAttribute('data-role-action');
   if (action === 'walk') { showTab('walk'); if (!walkActive) window.startWalk(); return; }
   if (action === 'report') { showTab('report'); window.generateReport(); return; }
+  if (action === 'saveProgress') {
+    const pct = Math.max(0, Math.min(100, parseInt(document.getElementById('rolePctInput').value, 10) || 0));
+    saveJson(LS.buildProgress, { stage: document.getElementById('roleStageSelect').value, pct: pct, updated: new Date().toISOString().slice(0, 10) });
+    renderRoleView();
+    return;
+  }
   const tab = btn.getAttribute('data-tab');
   if (tab) showTab(tab);
 });
