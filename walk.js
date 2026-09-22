@@ -35,29 +35,46 @@ document.querySelectorAll('.home-pillar').forEach(function (btn) {
 });
 document.getElementById('homeMoreLink').addEventListener('click', function () { openHomeDrilldown(null); });
 
-// Spinnable pillar ring: drag anywhere on the ring to rotate it (with a
-// little momentum on release); the touched pillar magnifies while held.
-// A plain tap still falls through to the pillar's click → drilldown; a drag
-// swallows that click. No pointer capture — it would retarget the click
-// away from the pillar button.
+// Pillar dial: drag anywhere on the ring to turn it (with momentum), or use
+// the ◀ ▶ buttons to step one pillar at a time; it always settles with a
+// pillar under the top pointer. The held pillar magnifies. A plain tap still
+// falls through to the pillar's click → drilldown; a drag swallows that
+// click. No pointer capture — it would retarget the click off the pillar.
 (function () {
   const ring = document.querySelector('.home-pillars');
   if (!ring) return;
+  const STEP = 360 / 7;
   let spin = 0, drag = null, velocity = 0, raf = 0, suppressClick = false;
-  function setSpin(deg) { spin = deg % 360; ring.style.setProperty('--spin', spin + 'deg'); }
+  function setSpin(deg) { spin = deg; ring.style.setProperty('--spin', spin + 'deg'); }
+  function stopAnim() { cancelAnimationFrame(raf); raf = 0; }
   function angleAt(e) {
     const r = ring.getBoundingClientRect();
     return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
   }
+  function animateTo(target) {
+    stopAnim();
+    const from = spin, start = performance.now(), dur = 320;
+    (function tick(now) {
+      const t = Math.min(1, (now - start) / dur), ease = 1 - Math.pow(1 - t, 3);
+      setSpin(from + (target - from) * ease);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else { raf = 0; setSpin(((target % 360) + 360) % 360); }
+    })(start);
+  }
+  function snap() { animateTo(Math.round(spin / STEP) * STEP); }
   function coast() {
-    velocity *= 0.94;
-    if (Math.abs(velocity) < 0.05) { raf = 0; return; }
+    velocity *= 0.93;
+    if (Math.abs(velocity) < 0.4) { snap(); return; }
     setSpin(spin + velocity);
     raf = requestAnimationFrame(coast);
   }
+  function step(dir) { animateTo((Math.round(spin / STEP) + dir) * STEP); }
+  document.getElementById('homeDialLeft').addEventListener('click', function () { step(-1); });
+  document.getElementById('homeDialRight').addEventListener('click', function () { step(1); });
+
   ring.addEventListener('pointerdown', function (e) {
     if (e.button !== 0) return;
-    cancelAnimationFrame(raf); raf = 0; velocity = 0; suppressClick = false;
+    stopAnim(); velocity = 0; suppressClick = false;
     const pillar = e.target.closest('.home-pillar');
     if (pillar) pillar.classList.add('pressed');
     drag = { pillar: pillar, lastAngle: angleAt(e), lastTime: e.timeStamp, x: e.clientX, y: e.clientY, moved: false };
@@ -92,7 +109,7 @@ document.getElementById('homeMoreLink').addEventListener('click', function () { 
       setTimeout(function () { suppressClick = false; }, 400);
       if (e.timeStamp - drag.lastTime > 80) velocity = 0; // finger stopped before lifting
       velocity = Math.max(-12, Math.min(12, velocity));
-      if (velocity) raf = requestAnimationFrame(coast);
+      if (Math.abs(velocity) >= 0.4) raf = requestAnimationFrame(coast); else snap();
     }
     drag = null;
   }
