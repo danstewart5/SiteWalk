@@ -152,8 +152,10 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
+// Flat-contract subs (labor cost) and GPS job-site geofences (auto clock).
+let subContracts = [], geoSites = [], autoClock = { enabled: false, employee: '' };
 // LeaseFlow (Hold mode) data — Property is root, Unit belongs to a Property,
 // Tenant is its own record linked to a Unit only through a Lease, Payment is
 // a ledger line against a Lease. leaseWalkContext (below, near startWalk) is
@@ -197,6 +199,9 @@ function persistUnits() { saveJson(LS.units, units); }
 function persistTenants() { saveJson(LS.tenants, tenants); }
 function persistLeases() { saveJson(LS.leases, leases); }
 function persistPayments() { saveJson(LS.payments, payments); }
+function persistSubContracts() { saveJson(LS.subContracts, subContracts); }
+function persistGeoSites() { saveJson(LS.geoSites, geoSites); }
+function persistAutoClock() { saveJson(LS.autoClock, autoClock); }
 // One Date read shared by time/ts/iso so a single captured moment never
 // disagrees with itself across the three representations different parts
 // of the app already expect (display string, epoch for sorting, ISO for
@@ -560,16 +565,19 @@ function renderSubmittals() {
   });
 }
 
+// Clock events carry a display string (time) and, since GPS clock-in, an
+// epoch (ts). Older events only have the string, so fall back to parsing it.
+function clockMs(e) { return e.ts || new Date(e.time).getTime(); }
 function checkMissedClockOuts() {
   const MAX_MS = 16 * 60 * 60 * 1000;
   const byEmployee = {};
   clockEvents.forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
   Object.keys(byEmployee).forEach(function (name) {
-    const events = byEmployee[name].slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+    const events = byEmployee[name].slice().sort(function (a, b) { return clockMs(a) - clockMs(b); });
     events.forEach(function (e, i) {
       if (e.type !== 'in') return;
       const hasOut = events.slice(i + 1).some(function (o) { return o.type === 'out'; });
-      e.flagged = !hasOut && (Date.now() - new Date(e.time).getTime()) > MAX_MS;
+      e.flagged = !hasOut && (Date.now() - clockMs(e)) > MAX_MS;
     });
   });
   persistClock();
@@ -601,7 +609,11 @@ function renderClockLog() {
   clockEvents.slice().reverse().slice(0, 30).forEach(function (e) {
     const card = document.createElement('div');
     card.className = 'item-card';
-    card.innerHTML = '<span class="type-tag ' + (e.type === 'in' ? 'change' : 'punch') + '">' + e.type.toUpperCase() + '</span> ' + escapeHtml(e.employee) + ' — ' + escapeHtml(e.site) + '<div class="meta">' + e.time + '</div>';
+    let where = '';
+    if (e.gps && e.gps.distM != null) where = e.gps.onSite ? ' · 📍 on site' : ' · 📍 ' + e.gps.distM + ' m from ' + escapeHtml(e.gps.site);
+    card.innerHTML = '<span class="type-tag ' + (e.type === 'in' ? 'change' : 'punch') + '">' + e.type.toUpperCase() + '</span> ' + escapeHtml(e.employee) + ' — ' + escapeHtml(e.site)
+      + (e.method === 'gps' ? ' <span class="type-tag rfi">GPS auto</span>' : '')
+      + '<div class="meta">' + e.time + where + (e.review ? ' · ⚠️ app was closed ' + e.gapMin + ' min — check this time' : '') + '</div>';
     wrap.appendChild(card);
   });
 }
@@ -936,7 +948,8 @@ function roleKpis(role) {
     const approved = changes.filter(function (c) { return c.approval === 'Approved'; });
     const collected = payments.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
     return [
-      budgetKpi, [money(labor), 'labor cost to date', false],
+      budgetKpi, [money(labor), 'labor to date (hourly ' + money(totalHourlyLaborCost()) + ' + contracts ' + money(totalContractLaborCost()) + ')', false],
+      [money(totalContractOwed()), 'owed to flat-contract subs for work done', totalContractOwed() > 0.005], [money(totalContractCommitted()), subContracts.length + ' flat contract' + (subContracts.length === 1 ? '' : 's') + ' committed', false],
       [money(mats), 'materials to date', false], [money(coSum(approved)), approved.length + ' approved change order' + (approved.length === 1 ? '' : 's') + ' to bill', false],
       [money(coSum(pendingCo)), pendingCo.length + ' change order' + (pendingCo.length === 1 ? '' : 's') + ' pending', false], [money(collected), 'rent collected (all time)', false],
       [money(pastDue), 'rent past due', pastDue > 0.005], [flags.arrears.length, 'units in arrears', flags.arrears.length > 0]
@@ -1074,42 +1087,119 @@ function renderDashboard() {
 // Pairs each employee's in/out clock events chronologically into worked
 // hours; an unmatched trailing "in" counts as hours worked so far (the
 // "real-time" part of the running cost), not just completed shifts.
+// Each person is either hourly (hours × rate) or covered by a flat contract
+// (hours still tracked, $0 here — the contract carries the cost). wages[name]
+// used to be a bare hourly rate; that still reads as hourly.
+function wageFor(name) {
+  const w = wages[name];
+  if (typeof w === 'number') return { type: 'hourly', rate: w };
+  if (w && typeof w === 'object') return { type: w.type === 'contract' ? 'contract' : 'hourly', rate: w.rate || 0 };
+  return { type: 'hourly', rate: 0 };
+}
 function laborCostByEmployee() {
   const byEmployee = {};
   clockEvents.forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
   return Object.keys(byEmployee).sort().map(function (name) {
-    const events = byEmployee[name].slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
+    const events = byEmployee[name].slice().sort(function (a, b) { return clockMs(a) - clockMs(b); });
     let hours = 0, active = false, lastIn = null;
     events.forEach(function (e) {
-      if (e.type === 'in') { lastIn = new Date(e.time).getTime(); }
-      else if (e.type === 'out' && lastIn != null) { hours += (new Date(e.time).getTime() - lastIn) / 3600000; lastIn = null; }
+      if (e.type === 'in') { lastIn = clockMs(e); }
+      else if (e.type === 'out' && lastIn != null) { hours += (clockMs(e) - lastIn) / 3600000; lastIn = null; }
     });
     if (lastIn != null) { active = true; hours += (Date.now() - lastIn) / 3600000; }
-    const rate = wages[name] || 0;
-    return { name: name, hours: hours, active: active, rate: rate, cost: hours * rate };
+    const w = wageFor(name);
+    return { name: name, hours: hours, active: active, payType: w.type, rate: w.rate, cost: w.type === 'hourly' ? hours * w.rate : 0 };
   });
 }
-function totalLaborCost() { return laborCostByEmployee().reduce(function (sum, r) { return sum + r.cost; }, 0); }
+function totalHourlyLaborCost() { return laborCostByEmployee().reduce(function (sum, r) { return sum + r.cost; }, 0); }
+
+// Flat contract: cost to date is the larger of earned (% complete × amount)
+// and paid — a deposit is money out the door even before work starts.
+// Owed = earned − paid, when positive.
+function contractPaid(c) { return (c.payments || []).reduce(function (s, p) { return s + (p.amount || 0); }, 0); }
+function contractEarned(c) { return (c.amount || 0) * Math.min(100, Math.max(0, c.pctComplete || 0)) / 100; }
+function contractCostToDate(c) { return Math.max(contractEarned(c), contractPaid(c)); }
+function contractOwed(c) { return Math.max(0, contractEarned(c) - contractPaid(c)); }
+function totalContractLaborCost() { return subContracts.reduce(function (s, c) { return s + contractCostToDate(c); }, 0); }
+function totalContractOwed() { return subContracts.reduce(function (s, c) { return s + contractOwed(c); }, 0); }
+function totalContractCommitted() { return subContracts.reduce(function (s, c) { return s + (c.amount || 0); }, 0); }
+function totalLaborCost() { return totalHourlyLaborCost() + totalContractLaborCost(); }
 function totalMaterialsCost() { return materials.reduce(function (sum, m) { return sum + (m.cost || 0); }, 0); }
 
 function renderLaborCost() {
   const wrap = document.getElementById('laborCostList');
   if (!wrap) return;
   const rows = laborCostByEmployee();
-  if (!rows.length) { wrap.innerHTML = '<p class="hint">Clock-in data will populate labor cost per employee here.</p>'; return; }
-  let html = '';
-  rows.forEach(function (r) {
-    html += '<div class="item-card"><strong>' + escapeHtml(r.name) + '</strong>' + (r.active ? ' <span class="type-tag change">On the clock</span>' : '')
-      + '<div class="meta">' + r.hours.toFixed(2) + ' hrs · $<input type="number" step="0.01" min="0" class="wage-rate-input" data-employee="' + escapeHtml(r.name) + '" value="' + r.rate + '">/hr = $' + r.cost.toFixed(2) + '</div></div>';
-  });
-  html += '<div class="item-card"><strong>Total Labor Cost: $' + totalLaborCost().toFixed(2) + '</strong></div>';
-  wrap.innerHTML = html;
-  wrap.querySelectorAll('.wage-rate-input').forEach(function (inp) {
-    inp.addEventListener('change', function () {
-      wages[inp.getAttribute('data-employee')] = parseFloat(inp.value) || 0;
-      persistWages(); renderLaborCost(); renderBudgetSummary();
+  if (!rows.length) wrap.innerHTML = '<p class="hint">Clock-in data will populate labor cost per employee here.</p>';
+  else {
+    let html = '';
+    rows.forEach(function (r) {
+      const n = escapeHtml(r.name);
+      html += '<div class="item-card"><strong>' + n + '</strong>' + (r.active ? ' <span class="type-tag change">On the clock</span>' : '')
+        + '<div class="meta">' + r.hours.toFixed(2) + ' hrs · <select class="pay-type-select" data-employee="' + n + '"><option value="hourly"' + (r.payType === 'hourly' ? ' selected' : '') + '>Hourly</option><option value="contract"' + (r.payType === 'contract' ? ' selected' : '') + '>Flat contract</option></select>'
+        + (r.payType === 'hourly'
+          ? '$<input type="number" step="0.01" min="0" class="wage-rate-input" data-employee="' + n + '" value="' + r.rate + '">/hr = $' + r.cost.toFixed(2)
+          : 'covered by contract') + '</div></div>';
     });
-  });
+    html += '<div class="item-card"><strong>Hourly Labor: $' + totalHourlyLaborCost().toFixed(2) + '</strong></div>';
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.wage-rate-input').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        const name = inp.getAttribute('data-employee');
+        wages[name] = { type: 'hourly', rate: parseFloat(inp.value) || 0 };
+        persistWages(); renderLaborCost(); renderBudgetSummary();
+      });
+    });
+    wrap.querySelectorAll('.pay-type-select').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        const name = sel.getAttribute('data-employee');
+        wages[name] = { type: sel.value, rate: wageFor(name).rate };
+        persistWages(); renderLaborCost(); renderBudgetSummary();
+      });
+    });
+  }
+  renderSubContracts();
+}
+
+function renderSubContracts() {
+  const wrap = document.getElementById('subContractList');
+  if (!wrap) return;
+  if (!subContracts.length) wrap.innerHTML = '<p class="hint">Flat-contract subs you add will show up here.</p>';
+  else {
+    let html = '';
+    subContracts.forEach(function (c) {
+      const paid = contractPaid(c), owed = contractOwed(c);
+      html += '<div class="item-card" data-contract-id="' + c.id + '"><strong>' + escapeHtml(c.name) + '</strong>' + (c.trade ? ' <span class="type-tag change">' + escapeHtml(c.trade) + '</span>' : '')
+        + '<div class="meta">Contract $' + (c.amount || 0).toFixed(2) + ' · <input type="number" min="0" max="100" step="1" class="wage-rate-input contract-pct-input" value="' + (c.pctComplete || 0) + '">% complete</div>'
+        + '<div class="meta">Earned $' + contractEarned(c).toFixed(2) + ' · Paid $' + paid.toFixed(2) + ' · Cost to date $' + contractCostToDate(c).toFixed(2)
+        + (owed > 0.005 ? ' · <strong>Owed $' + owed.toFixed(2) + '</strong>' : '') + '</div>'
+        + ((c.payments || []).length ? '<div class="meta">Payments: ' + c.payments.map(function (p) { return '$' + p.amount.toFixed(2) + ' (' + escapeHtml(p.date) + ')'; }).join(', ') + '</div>' : '')
+        + '<button type="button" class="small green contract-pay-btn">Log Payment</button> <button type="button" class="small gray contract-remove-btn">Remove</button></div>';
+    });
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('[data-contract-id]').forEach(function (card) {
+      const c = subContracts.find(function (x) { return x.id === card.getAttribute('data-contract-id'); });
+      card.querySelector('.contract-pct-input').addEventListener('change', function (ev) {
+        c.pctComplete = Math.min(100, Math.max(0, parseFloat(ev.target.value) || 0));
+        persistSubContracts(); renderLaborCost(); renderBudgetSummary();
+      });
+      card.querySelector('.contract-pay-btn').addEventListener('click', function () {
+        const amt = parseFloat(prompt('Payment amount to ' + c.name + ' ($)?') || '');
+        if (isNaN(amt) || amt <= 0) return;
+        (c.payments = c.payments || []).push({ amount: amt, date: new Date().toISOString().slice(0, 10) });
+        persistSubContracts(); renderLaborCost(); renderBudgetSummary();
+      });
+      card.querySelector('.contract-remove-btn').addEventListener('click', function () {
+        if (!confirm('Remove the flat contract for ' + c.name + '?')) return;
+        subContracts = subContracts.filter(function (x) { return x !== c; });
+        persistSubContracts(); renderLaborCost(); renderBudgetSummary();
+      });
+    });
+  }
+  const total = document.getElementById('laborTotal');
+  if (total) total.innerHTML = '<div class="item-card"><strong>Total Labor Cost: $' + totalLaborCost().toFixed(2) + '</strong>'
+    + '<div class="meta">Hourly $' + totalHourlyLaborCost().toFixed(2) + ' · Flat contracts $' + totalContractLaborCost().toFixed(2)
+    + (subContracts.length ? ' (of $' + totalContractCommitted().toFixed(2) + ' committed, $' + totalContractOwed().toFixed(2) + ' owed)' : '') + '</div></div>';
 }
 
 function renderMaterials() {
@@ -1712,14 +1802,173 @@ document.getElementById('addSubBtn').addEventListener('click', function () {
   persistSubmittals(); renderSubmittals(); renderDashboard();
   document.getElementById('subItem').value = ''; document.getElementById('subTrade').value = '';
 });
+// Every clock event gets ts, a method (manual/gps), and the latest GPS fix
+// if it's under 2 minutes old, with distance to the nearest set site.
+// A manual punch from the truck shows up as "412 m from site" instead of
+// passing as on-site.
+function clockGpsStamp() {
+  if (!lastGeoFix || Date.now() - lastGeoFix.ts > 120000) return null;
+  const near = nearestGeoSite(lastGeoFix);
+  return { lat: lastGeoFix.lat, lng: lastGeoFix.lng, acc: Math.round(lastGeoFix.acc), site: near ? near.site.name : null, distM: near ? Math.round(near.dist) : null, onSite: near ? near.dist <= near.site.radius : null };
+}
+function pushClockEvent(employee, site, type, extra) {
+  const d = extra && extra.ts ? new Date(extra.ts) : new Date();
+  const ev = { employee: employee, site: site, type: type, time: d.toLocaleString(), ts: d.getTime(), flagged: false, method: 'manual', gps: clockGpsStamp() };
+  Object.keys(extra || {}).forEach(function (k) { ev[k] = extra[k]; });
+  clockEvents.push(ev);
+  persistClock(); checkMissedClockOuts(); renderClockLog(); renderClockFlagged(); renderDashboard();
+  renderLaborCost(); renderBudgetSummary();
+}
 function logClockEvent(type) {
   const employee = document.getElementById('clockEmployee').value.trim();
   const site = document.getElementById('clockSite').value.trim();
   if (!employee || !site) { alert('Enter your name and job site first.'); return; }
-  clockEvents.push({ employee: employee, site: site, type: type, time: new Date().toLocaleString(), flagged: false });
-  persistClock(); checkMissedClockOuts(); renderClockLog(); renderClockFlagged(); renderDashboard();
-  renderLaborCost(); renderBudgetSummary();
+  pushClockEvent(employee, site, type);
 }
+// The site this employee is currently clocked in at, or null.
+function openClockSite(employee) {
+  const mine = clockEvents.filter(function (e) { return e.employee === employee; }).sort(function (a, b) { return clockMs(a) - clockMs(b); });
+  const last = mine[mine.length - 1];
+  return last && last.type === 'in' ? last.site : null;
+}
+
+/* ---------- GPS auto clock-in (foreground only) ---------- */
+// No geocoding key: a site's location is captured by standing on it and
+// tapping "Set location". While the app is open and auto clock is on, a
+// watchPosition fix inside a site's radius clocks the named employee in;
+// being outside it for GEO_BUFFER_MS clocks them out. Browsers suspend GPS
+// in background tabs, so a gap in fixes is recorded (gapMin) and anything
+// over 10 min is marked for review. A native wrapper (Capacitor) is what
+// fixes that, parked for later.
+const GEO_RADIUS_M = 100, GEO_BUFFER_MS = 5 * 60 * 1000, GEO_MAX_ACC_M = 150;
+let autoClockWatch = null, autoClockTick = null, lastGeoFix = null;
+const geoState = {}; // siteId -> { inside, leftAt }
+function distanceM(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function nearestGeoSite(fix) {
+  let best = null;
+  geoSites.forEach(function (site) { const d = distanceM(fix, site); if (!best || d < best.dist) best = { site: site, dist: d }; });
+  return best;
+}
+function setGeoStatus(cls, msg) {
+  const el = document.getElementById('geoStatus');
+  if (!el) return;
+  el.style.display = msg ? 'block' : 'none'; el.className = 'status ' + cls; el.textContent = msg || '';
+}
+function getGeoFix(timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    if (!navigator.geolocation) { reject(new Error('This browser has no GPS access.')); return; }
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, ts: Date.now() });
+    }, function (err) { reject(new Error(err.code === 1 ? 'Location permission denied — allow it in browser settings.' : 'Could not get a GPS fix — try again outside.')); },
+    { enableHighAccuracy: true, timeout: timeoutMs || 15000, maximumAge: 0 });
+  });
+}
+function renderGeoSites() {
+  const wrap = document.getElementById('geoSiteList');
+  if (!wrap) return;
+  const toggle = document.getElementById('autoClockToggle');
+  if (toggle) toggle.checked = !!autoClock.enabled;
+  if (!geoSites.length) { wrap.innerHTML = '<p class="hint">No site locations set yet.</p>'; return; }
+  wrap.innerHTML = geoSites.map(function (g) {
+    return '<div class="item-card" data-geo-id="' + g.id + '"><strong>' + escapeHtml(g.name) + '</strong><div class="meta">' + g.lat.toFixed(5) + ', ' + g.lng.toFixed(5) + ' · ' + g.radius + ' m radius · set ±' + Math.round(g.acc || 0) + ' m</div>'
+      + '<button type="button" class="small gray geo-remove-btn">Remove</button></div>';
+  }).join('');
+  wrap.querySelectorAll('.geo-remove-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = btn.closest('[data-geo-id]').getAttribute('data-geo-id');
+      geoSites = geoSites.filter(function (g) { return g.id !== id; }); delete geoState[id];
+      persistGeoSites(); renderGeoSites();
+    });
+  });
+}
+document.getElementById('geoSetSiteBtn').addEventListener('click', function () {
+  const name = document.getElementById('clockSite').value.trim();
+  if (!name) { alert('Type the job site name in the box above first.'); return; }
+  setGeoStatus('info', 'Getting a GPS fix…');
+  getGeoFix(20000).then(function (fix) {
+    if (fix.acc > GEO_MAX_ACC_M) { setGeoStatus('err', 'GPS is only accurate to ±' + Math.round(fix.acc) + ' m right now — step outside and try again.'); return; }
+    const existing = geoSites.find(function (g) { return g.name.toLowerCase() === name.toLowerCase(); });
+    const site = existing || { id: 'g_' + Date.now().toString(36), name: name, radius: GEO_RADIUS_M };
+    site.lat = fix.lat; site.lng = fix.lng; site.acc = fix.acc; site.setAt = new Date().toISOString();
+    if (!existing) geoSites.push(site);
+    lastGeoFix = fix;
+    persistGeoSites(); renderGeoSites();
+    setGeoStatus('ok', 'Location set for ' + name + ' (±' + Math.round(fix.acc) + ' m).');
+  }).catch(function (e) { setGeoStatus('err', e.message); });
+});
+// fromTick: re-checking the last real fix on the 30s timer. That must not
+// count as a new fix, or the background-gap detection is lost.
+function evaluateGeo(fix, fromTick) {
+  const employee = autoClock.employee;
+  if (!autoClock.enabled || !employee) return;
+  const now = Date.now();
+  // A long gap between fixes means the app was backgrounded/closed.
+  const gapMin = !fromTick && lastGeoFix ? Math.round((fix.ts - lastGeoFix.ts) / 60000) : 0;
+  if (!fromTick) lastGeoFix = fix;
+  if (fix.acc > GEO_MAX_ACC_M) { setGeoStatus('info', 'Auto clock on for ' + employee + ' — waiting for a better GPS fix (±' + Math.round(fix.acc) + ' m).'); return; }
+  let msg = '';
+  geoSites.forEach(function (site) {
+    const st = geoState[site.id] || (geoState[site.id] = { inside: openClockSite(employee) === site.name, leftAt: null });
+    const inside = distanceM(fix, site) <= site.radius;
+    const open = openClockSite(employee);
+    if (inside) {
+      st.inside = true; st.leftAt = null;
+      if (!open) { pushClockEvent(employee, site.name, 'in', { method: 'gps', gapMin: gapMin }); msg = 'Auto clocked in at ' + site.name + '.'; }
+      else if (open === site.name) msg = msg || 'On site at ' + site.name + ' — clocked in.';
+      else msg = msg || 'At ' + site.name + ' but still clocked in at ' + open + ' — clock out there first.';
+    } else if (st.inside) {
+      st.inside = false; st.leftAt = now;
+    }
+    if (!inside && st.leftAt && open === site.name) {
+      if (now - st.leftAt >= GEO_BUFFER_MS) {
+        pushClockEvent(employee, site.name, 'out', { method: 'gps', gapMin: gapMin, review: gapMin > 10 });
+        st.leftAt = null; msg = 'Auto clocked out of ' + site.name + '.';
+      } else msg = msg || 'Left ' + site.name + ' — clocking out in ' + Math.ceil((GEO_BUFFER_MS - (now - st.leftAt)) / 60000) + ' min unless you return.';
+    }
+  });
+  setGeoStatus('ok', msg || ('Auto clock on for ' + employee + ' — not at a set site.'));
+}
+function startAutoClock() {
+  if (!navigator.geolocation) { setGeoStatus('err', 'This browser has no GPS access.'); return; }
+  stopAutoClock();
+  autoClockWatch = navigator.geolocation.watchPosition(function (pos) {
+    evaluateGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy, ts: Date.now() });
+  }, function (err) { setGeoStatus('err', err.code === 1 ? 'Location permission denied — auto clock can\'t run.' : 'GPS signal lost — retrying.'); },
+  { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
+  // watchPosition only fires on movement; the tick lets the 5-min
+  // leave buffer expire while someone sits still off-site.
+  autoClockTick = setInterval(function () { if (lastGeoFix) evaluateGeo(lastGeoFix, true); }, 30000);
+  setGeoStatus('info', 'Auto clock on for ' + autoClock.employee + ' — getting GPS…');
+}
+function stopAutoClock() {
+  if (autoClockWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(autoClockWatch);
+  autoClockWatch = null; clearInterval(autoClockTick); autoClockTick = null;
+}
+document.getElementById('autoClockToggle').addEventListener('change', function (ev) {
+  if (ev.target.checked) {
+    const employee = document.getElementById('clockEmployee').value.trim() || autoClock.employee;
+    if (!employee) { alert('Enter your name above first.'); ev.target.checked = false; return; }
+    if (!geoSites.length) { alert('Set at least one job site location first.'); ev.target.checked = false; return; }
+    autoClock = { enabled: true, employee: employee };
+    startAutoClock();
+  } else {
+    autoClock.enabled = false; stopAutoClock(); setGeoStatus('info', 'Auto clock off.');
+  }
+  persistAutoClock();
+});
+// Coming back to the foreground: grab a fresh fix right away instead of
+// waiting for the (possibly suspended) watcher.
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible' || !autoClock.enabled) return;
+  if (autoClockWatch == null) startAutoClock();
+  getGeoFix(15000).then(function (fix) { evaluateGeo(fix); }).catch(function () { });
+});
+
 document.getElementById('clockInBtn').addEventListener('click', function () { logClockEvent('in'); });
 document.getElementById('clockOutBtn').addEventListener('click', function () { logClockEvent('out'); });
 document.getElementById('addMaterialBtn').addEventListener('click', function () {
@@ -1730,6 +1979,15 @@ document.getElementById('addMaterialBtn').addEventListener('click', function () 
   materials.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2), item: item, cost: cost, vendor: vendor, time: new Date().toLocaleString() });
   persistMaterials(); renderMaterials(); renderBudgetSummary();
   document.getElementById('materialItem').value = ''; document.getElementById('materialCost').value = ''; document.getElementById('materialVendor').value = '';
+});
+document.getElementById('addSubContractBtn').addEventListener('click', function () {
+  const name = document.getElementById('subContractName').value.trim();
+  const trade = document.getElementById('subContractTrade').value.trim();
+  const amount = parseFloat(document.getElementById('subContractAmount').value);
+  if (!name || isNaN(amount) || amount <= 0) { alert('Enter the sub and a contract amount first.'); return; }
+  subContracts.push({ id: 'sc_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6), name: name, trade: trade, amount: amount, pctComplete: 0, payments: [], created: new Date().toISOString() });
+  persistSubContracts(); renderLaborCost(); renderBudgetSummary();
+  ['subContractName', 'subContractTrade', 'subContractAmount'].forEach(function (id) { document.getElementById(id).value = ''; });
 });
 document.getElementById('saveBudgetBtn').addEventListener('click', function () {
   budget.labor = parseFloat(document.getElementById('budgetLabor').value) || 0;
@@ -1845,13 +2103,17 @@ window.generateReport = function () {
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   const laborRows = laborCostByEmployee();
-  if (laborRows.length || materials.length) {
+  if (laborRows.length || subContracts.length || materials.length) {
     html += '<div class="report-section"><h3>Job Cost Summary</h3>';
     if (laborRows.length) {
       html += '<div class="punch-item"><strong>Labor</strong></div>';
-      laborRows.forEach(function (r) { html += '<div class="punch-item">' + escapeHtml(r.name) + ' — ' + r.hours.toFixed(2) + ' hrs @ $' + r.rate.toFixed(2) + '/hr = $' + r.cost.toFixed(2) + '</div>'; });
-      html += '<div class="punch-item">Labor Total: $' + totalLaborCost().toFixed(2) + '</div>';
+      laborRows.forEach(function (r) { html += '<div class="punch-item">' + escapeHtml(r.name) + ' — ' + r.hours.toFixed(2) + ' hrs' + (r.payType === 'hourly' ? ' @ $' + r.rate.toFixed(2) + '/hr = $' + r.cost.toFixed(2) : ' (flat contract)') + '</div>'; });
     }
+    if (subContracts.length) {
+      html += '<div class="punch-item"><strong>Flat-Contract Subs</strong></div>';
+      subContracts.forEach(function (c) { html += '<div class="punch-item">' + escapeHtml(c.name) + (c.trade ? ' [' + escapeHtml(c.trade) + ']' : '') + ' — $' + (c.amount || 0).toFixed(2) + ' contract, ' + (c.pctComplete || 0) + '% complete, paid $' + contractPaid(c).toFixed(2) + ', cost to date $' + contractCostToDate(c).toFixed(2) + (contractOwed(c) > 0.005 ? ', owed $' + contractOwed(c).toFixed(2) : '') + '</div>'; });
+    }
+    if (laborRows.length || subContracts.length) html += '<div class="punch-item">Labor Total: $' + totalLaborCost().toFixed(2) + ' (hourly $' + totalHourlyLaborCost().toFixed(2) + ' + contracts $' + totalContractLaborCost().toFixed(2) + ')</div>';
     if (materials.length) {
       html += '<div class="punch-item"><strong>Supplies &amp; Materials</strong></div>';
       materials.forEach(function (m) { html += '<div class="punch-item">' + escapeHtml(m.item) + (m.vendor ? ' (' + escapeHtml(m.vendor) + ')' : '') + ' — $' + m.cost.toFixed(2) + '</div>'; });
@@ -1871,9 +2133,10 @@ window.generateReport = function () {
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
-  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
+  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, flat sub contract, GPS site location, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
   photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null;
   properties = []; units = []; tenants = []; leases = []; payments = []; leaseWalkContext = null;
+  subContracts = []; geoSites = []; autoClock = { enabled: false, employee: '' }; stopAutoClock();
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   document.getElementById('siteName').textContent = 'Job Site';
@@ -1890,6 +2153,7 @@ function clearAllData() {
   checkMissedClockOuts();
   renderClockFlagged();
   renderClockLog();
+  renderGeoSites();
   renderDailyLogs();
   renderSafetyLogs();
   renderDashboard();
@@ -1913,6 +2177,49 @@ function clearAllData() {
   alert('All SiteWalk data cleared.');
 }
 document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
+
+/* ---------- Backup & restore (no account needed) ---------- */
+// One JSON file holding every LS key, so data can move to another phone
+// without a backend. Leaves out the AI Worker shared key (a secret). Not
+// sync: restoring replaces what's on the receiving phone.
+const BACKUP_SKIP = [LS.aiKey];
+function setBackupStatus(cls, msg) { const el = document.getElementById('backupStatus'); el.style.display = 'block'; el.className = 'status ' + cls; el.textContent = msg; }
+function exportBackup() {
+  const data = {};
+  Object.keys(LS).forEach(function (k) {
+    const key = LS[k];
+    if (BACKUP_SKIP.indexOf(key) !== -1) return;
+    try { const raw = localStorage.getItem(key); if (raw != null) data[key] = JSON.parse(raw); } catch (e) { }
+  });
+  const json = JSON.stringify({ app: 'SiteWalk', format: 1, exportedAt: new Date().toISOString(), data: data });
+  const filename = 'sitewalk-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  setBackupStatus('ok', 'Backup saved as ' + filename + ' (' + Math.round(json.length / 1024) + ' KB).');
+}
+function importBackup(file) {
+  const reader = new FileReader();
+  reader.onload = function () {
+    let parsed;
+    try { parsed = JSON.parse(reader.result); } catch (e) { setBackupStatus('err', 'That file isn\'t a SiteWalk backup.'); return; }
+    if (!parsed || parsed.app !== 'SiteWalk' || !parsed.data || typeof parsed.data !== 'object') { setBackupStatus('err', 'That file isn\'t a SiteWalk backup.'); return; }
+    if (!confirm('Replace ALL data on this phone with the backup from ' + (parsed.exportedAt || 'unknown date').slice(0, 10) + '?\n\nAnything on this phone that isn\'t in the backup will be lost.')) return;
+    const known = Object.keys(LS).map(function (k) { return LS[k]; });
+    known.forEach(function (key) { if (BACKUP_SKIP.indexOf(key) === -1) { try { localStorage.removeItem(key); } catch (e) { } } });
+    let failed = false;
+    Object.keys(parsed.data).forEach(function (key) { if (known.indexOf(key) !== -1 && BACKUP_SKIP.indexOf(key) === -1 && !saveJson(key, parsed.data[key])) failed = true; });
+    if (failed) { setBackupStatus('err', 'Phone storage filled up partway through the restore — some data (likely photos) didn\'t fit.'); return; }
+    location.reload();
+  };
+  reader.readAsText(file);
+}
+document.getElementById('exportBackupBtn').addEventListener('click', exportBackup);
+document.getElementById('importBackupBtn').addEventListener('click', function () { document.getElementById('importBackupInput').click(); });
+document.getElementById('importBackupInput').addEventListener('change', function (ev) { const f = ev.target.files[0]; ev.target.value = ''; if (f) importBackup(f); });
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
@@ -1922,6 +2229,8 @@ window.addEventListener('load', function () {
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
   if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
   if (!Array.isArray(walks)) walks = [];
+  subContracts = loadJson(LS.subContracts, []); geoSites = loadJson(LS.geoSites, []); autoClock = loadJson(LS.autoClock, { enabled: false, employee: '' });
+  if (!Array.isArray(subContracts)) subContracts = []; if (!Array.isArray(geoSites)) geoSites = []; if (!autoClock || typeof autoClock !== 'object') autoClock = { enabled: false, employee: '' };
   if (!Array.isArray(properties)) properties = []; if (!Array.isArray(units)) units = []; if (!Array.isArray(tenants)) tenants = []; if (!Array.isArray(leases)) leases = []; if (!Array.isArray(payments)) payments = [];
   walks.forEach(function (w) { ['transcript', 'punches', 'costs', 'safety'].forEach(function (k) { if (!Array.isArray(w[k])) w[k] = []; }); });
   currentWalk = walks.length ? walks[walks.length - 1] : null;
@@ -1942,7 +2251,8 @@ window.addEventListener('load', function () {
   checkMissedClockOuts();
   renderClockFlagged();
   renderClockLog();
-  renderDailyLogs();
+  renderGeoSites();
+  if (autoClock.enabled) startAutoClock();
   document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
   renderSafetyLogs();
   renderDashboard();

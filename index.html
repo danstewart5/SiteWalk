@@ -395,6 +395,9 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .role-actions button { flex: 1; margin: 0; padding: 12px 8px; font-size: 14px; font-weight: 800; border-radius: 10px; }
 .role-actions .role-walk { background: #4CAF6E; color: #fff; }
 .role-actions .role-report { background: #e0a94a; color: #2b1d0e; }
+.auto-clock-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 10px 0; }
+.auto-clock-toggle input { width: auto; margin: 2px 0 0; }
+.pay-type-select { width: auto; display: inline-block; padding: 4px; margin: 0 4px; }
 .role-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; }
 .role-kpi { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; min-width: 0; }
 .role-kpi b { display: block; font-size: 20px; color: #1a365d; overflow-wrap: anywhere; }
@@ -792,6 +795,12 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <input type="text" id="clockSite" placeholder="Job site, e.g. 123 Main St">
 <button id="clockInBtn" class="green">Clock In</button>
 <button id="clockOutBtn" class="red">Clock Out</button>
+<h3>📍 GPS Auto Clock-In</h3>
+<p class="hint">Foreground only: works while SiteWalk is open on screen. Phones pause GPS when the app is in the background, so a clock-out can land late. Anything off by more than 10 minutes is marked for review. Stand on site and set its location once. No map key needed.</p>
+<button id="geoSetSiteBtn" type="button" class="gray">📍 Set this job site's location to where I'm standing</button>
+<div id="geoSiteList"></div>
+<label class="auto-clock-toggle"><input type="checkbox" id="autoClockToggle"> Auto clock me in/out when I arrive at or leave a set site (100 m, 5-min grace on leaving)</label>
+<div id="geoStatus" class="status info" style="display:none"></div>
 <div id="clockFlagged"></div>
 <div id="clockLog"></div>
 </div>
@@ -818,8 +827,17 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <div class="section">
 <h2>💰 Job Cost Dashboard</h2>
 <p class="hint">Real-time running cost for this job site — labor (from Clock In/Out) plus supplies/materials, tracked against budget.</p>
-<h3>Labor Cost</h3>
+<h3>Labor Cost — Hourly</h3>
+<p class="hint">Hours come from Clock In/Out. Set each person to Hourly (hours × rate) or Flat contract. Flat-contract hours are still tracked, but they cost $0 here because the contract below covers them.</p>
 <div id="laborCostList"></div>
+<h3>Labor Cost — Flat-Contract Subs</h3>
+<p class="hint">Cost to date is whichever is larger: work done (% complete × contract) or what you've paid. A deposit counts as spent before any work is done.</p>
+<input type="text" id="subContractName" placeholder="Sub / company, e.g. Smith Drywall">
+<input type="text" id="subContractTrade" placeholder="Trade, e.g. Drywall">
+<input type="number" id="subContractAmount" step="0.01" min="0" placeholder="Contract amount ($)">
+<button id="addSubContractBtn" class="orange">Add Flat Contract</button>
+<div id="subContractList"></div>
+<div id="laborTotal"></div>
 <h3>Supplies &amp; Materials</h3>
 <input type="text" id="materialItem" placeholder="Item, e.g. Lumber - 2x4x8">
 <input type="number" id="materialCost" step="0.01" min="0" placeholder="Cost ($)">
@@ -952,6 +970,14 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <input type="file" id="aiPhotoInput" accept="image/*" capture="environment" style="display:none">
 <div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
 <div id="aiResult" class="ai-result" style="display:none"></div>
+</div>
+<div class="section">
+<h2>💾 Backup &amp; Move Data</h2>
+<p class="hint">Saves everything on this phone to one file: items, photos, clock, job cost, subs, GPS sites and LeaseFlow. Restore it on another phone to copy the data over. Your AI Worker key is left out. This is a one-time copy, not live sync, which still needs Firebase.</p>
+<button id="exportBackupBtn" type="button" class="gray">Save Backup File</button>
+<button id="importBackupBtn" type="button" class="gray">Restore From Backup…</button>
+<input type="file" id="importBackupInput" accept="application/json,.json" style="display:none">
+<div id="backupStatus" class="status info" style="display:none"></div>
 </div>
 <div class="section">
 <h2>🗑️ Reset App</h2>
