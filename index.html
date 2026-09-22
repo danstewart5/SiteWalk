@@ -258,9 +258,10 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-stage { position: relative; z-index: 1; width: min(84vw, 360px); aspect-ratio: 1 / 1; margin: 0 auto; }
 .home-pillars { position: absolute; inset: 0; --radius: min(33vw, 132px); }
 .home-pillar {
-  position: absolute; top: 50%; left: 50%; width: 58px; margin: -29px 0 0 -29px;
+  position: absolute; top: 50%; left: 50%; width: 58px; margin: 0;
   background: none; border: none; padding: 0; cursor: pointer;
-  transform: rotate(var(--angle)) translate(0, calc(-1 * var(--radius))) rotate(calc(-1 * var(--angle)));
+  /* 0deg = 3 o'clock, so --angle:-90deg is 12 o'clock; the final translate centres the pillar box on its point whatever its label height */
+  transform: rotate(var(--angle)) translate(var(--radius), 0) rotate(calc(-1 * var(--angle))) translate(-50%, -50%);
 }
 .pillar-visual { display: flex; flex-direction: column; align-items: center; gap: 5px; transform: scale(1); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1); }
 .home-pillar:hover .pillar-visual, .home-pillar:active .pillar-visual, .home-pillar:focus-visible .pillar-visual { transform: scale(1.15); }
