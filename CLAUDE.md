@@ -69,6 +69,22 @@ Not done / worth knowing:
 - No dedicated on-device keyword spotter — still riding the browser's own continuous Web Speech transcript, which is inherently the noisier/higher-latency option the earlier review note warned about. If false-triggers turn out to be a real field problem, that's the next lever to pull.
 - iOS Safari's `navigator.share`/download-blob support for video files specifically hasn't been phone-verified in this session (browser automation wasn't available) — confirm on an actual iPhone before relying on it.
 
+## LeaseFlow — Hold mode (shipped 2026-09-22)
+
+A Build/Hold mode toggle (`.home-mode-btn[data-mode]`, persisted `swHomeMode`, applied as `data-home-mode` on `#tab-home`) sits above the home scene, next to a shared flag bar (`#homeFlagBar`, `renderFlagBar()` in `walk.js`) that spans both modes — a red "Units in Arrears" or yellow "Lease Renewal Due Soon" pill is visible without switching modes, same as an open punch item count. The Start Walk-Around / Generate Report buttons are unaffected by the mode switch, per spec.
+
+**Build mode** (default) is the unchanged seven-pillar radial scene. **Hold mode** swaps in seven LeaseFlow pillars (`.home-pillar-hold`) at the same seven angles, with matching drilldown accordions (`.home-block-hold`, gold `#b98430` top border) — CSS hides whichever set doesn't match `data-home-mode`, so this is one shared stage, not a ninth pillar tile.
+
+LeaseFlow chapters, all live except Commercial Extras: **Units & Properties** (`units` tab — Property is root, can be `jobLinked` to the current job-site name/address or stand alone as an acquired rental; Unit belongs to a Property), **Tenants** (`tenants`, its own record, not a generic contact), **Leases** (`leases` — links a Unit + Tenant with start/end/renewal dates, rent amount, residential/commercial type), **Rent & Payments** (`rentroll` — a Payment ledger per lease, a computed rent roll, and a CSV export via `exportRentRollCsv()`), **Arrears & Collections** (`arrears` — a read-only computed list off the same rent-roll math, no collections workflow, no notice-period/RTB handling), **Maintenance & Walk-throughs** (`leasewalk` — "Start Lease Walk" sets `leaseWalkContext` then calls the *same* `window.startWalk()` Chapter-1 engine, no forked camera/mic code; context clears in `window.endWalk()`), **Commercial Extras** (`commercial` — titled/scaffolded only, no working UI, deliberately not built this pass).
+
+Rent roll math (`computeRentRoll()`/`monthsElapsed()` in `walk.js`) is a simple accrual: one month's rent per elapsed month since lease start (the start date's day-of-month is the recurring due day), balance = accrued rent minus logged payments. It's deliberately not a real amortization/proration engine.
+
+Shared schema extension, not a fork: `fileEntry()` now stamps every punch/change/RFI item with `source` (`'lease-walk'` when `leaseWalkContext` is set, else `'job-site'`), `property_id`, and `unit_id`. A lease-walk condition item and a job-site item live in the same `punch`/`changes`/`rfis` arrays, same Chapter 1 engine, distinguished only by these fields.
+
+New LS keys: `swProperties`, `swUnits`, `swTenants`, `swLeases`, `swPayments`, `swHomeMode`. All wired into `clearAllData()` — Setup's Reset App wipes LeaseFlow data too, and there's a new "LeaseFlow Storage Note" section in Setup calling out that everything here is still localStorage/single-device, same known limitation as the rest of the app, not solved this pass.
+
+**Phone-tested:** no — this session tested with headless Chromium + Playwright against a local static server (mode toggle, drilldown, full CRUD flow, rent-roll/arrears math, CSV download, and the Start Lease Walk → Chapter 1 handoff all verified with zero console errors). Real-device verification (especially the radial pillar layout on Hold mode, and that CSV download/share behaves the same as the existing video-save flow) is still outstanding.
+
 ## Known issues
 
 **Rear-camera fix confirmed working on phone** (2026-09-16) — `getWalkStream()`'s `exact: 'environment'` → soft `'environment'` → `video: true` fallback chain in `walk.js` (commit `0f17af1`) now correctly opens the rear camera on the user's phone.

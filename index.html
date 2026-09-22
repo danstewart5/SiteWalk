@@ -321,10 +321,26 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-admin-btn { width: auto; flex: 0 0 auto; background: #edf2f7; color: #4a5568; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
 .home-admin-btn:disabled { color: #cbd5e0; cursor: default; }
 
+/* ---------- Build / Hold mode toggle + shared flag bar ---------- */
+.home-flag-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.home-flag-pill { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
+.home-flag-pill.red { background: #fed7d7; color: #c53030; }
+.home-flag-pill.yellow { background: #fefcbf; color: #975a16; }
+.home-flag-pill.ok { background: #c6f6d5; color: #276749; }
+.home-mode-toggle { display: flex; gap: 6px; background: #edf2f7; border-radius: 999px; padding: 4px; margin: 0 0 10px; }
+.home-mode-btn { flex: 1; border: none; background: none; padding: 9px 4px; border-radius: 999px; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 700; color: #4a5568; cursor: pointer; margin: 0; width: auto; }
+.home-mode-btn.active { background: #1a365d; color: #fff; }
+#tab-home[data-home-mode="build"] .home-pillar-hold,
+#tab-home[data-home-mode="build"] .home-block-hold { display: none; }
+#tab-home[data-home-mode="hold"] .home-pillar-build,
+#tab-home[data-home-mode="hold"] .home-block-build { display: none; }
+.home-block-hold { border-top: 4px solid #b98430; }
+.home-block-hold .home-block-icon { background: #fdf3e0; }
+
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -339,7 +355,13 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <button class="top-tab-btn active" data-tab="home" type="button">🏠<span>Home</span></button>
 </nav>
 
-<div class="tab-panel active" id="tab-home">
+<div class="tab-panel active" id="tab-home" data-home-mode="build">
+
+<div class="home-flag-bar" id="homeFlagBar"></div>
+<div class="home-mode-toggle" id="homeModeToggle">
+<button type="button" class="home-mode-btn active" data-mode="build">🏗️ Build</button>
+<button type="button" class="home-mode-btn" data-mode="hold">🔑 Hold</button>
+</div>
 
 <div class="home-scene">
 <div class="home-floor"></div>
@@ -350,26 +372,47 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="home-stage">
 <div class="home-pillars">
-<button class="home-pillar" data-block="land" style="--angle:-90deg" type="button" aria-label="Land &amp; Acquisition">
+<button class="home-pillar home-pillar-build" data-block="land" style="--angle:-90deg" type="button" aria-label="Land &amp; Acquisition">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Land &amp; Acquisition</span></span>
 </button>
-<button class="home-pillar" data-block="preconstruction" style="--angle:-38.57deg" type="button" aria-label="Preconstruction &amp; Estimating">
+<button class="home-pillar home-pillar-build" data-block="preconstruction" style="--angle:-38.57deg" type="button" aria-label="Preconstruction &amp; Estimating">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Preconstruction &amp; Estimating</span></span>
 </button>
-<button class="home-pillar" data-block="design" style="--angle:12.86deg" type="button" aria-label="Design &amp; Drawings">
+<button class="home-pillar home-pillar-build" data-block="design" style="--angle:12.86deg" type="button" aria-label="Design &amp; Drawings">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Design &amp; Drawings</span></span>
 </button>
-<button class="home-pillar" data-block="field" style="--angle:64.29deg" type="button" aria-label="Field Operations &amp; Walk-Around">
+<button class="home-pillar home-pillar-build" data-block="field" style="--angle:64.29deg" type="button" aria-label="Field Operations &amp; Walk-Around">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Field Operations &amp; Walk-Around</span></span>
 </button>
-<button class="home-pillar" data-block="scheduling" style="--angle:115.71deg" type="button" aria-label="Scheduling &amp; Resources">
+<button class="home-pillar home-pillar-build" data-block="scheduling" style="--angle:115.71deg" type="button" aria-label="Scheduling &amp; Resources">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Scheduling &amp; Resources</span></span>
 </button>
-<button class="home-pillar" data-block="safety" style="--angle:167.14deg" type="button" aria-label="Safety &amp; Quality">
+<button class="home-pillar home-pillar-build" data-block="safety" style="--angle:167.14deg" type="button" aria-label="Safety &amp; Quality">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Safety &amp; Quality</span></span>
 </button>
-<button class="home-pillar" data-block="financial" style="--angle:218.57deg" type="button" aria-label="Financial Management &amp; Invoicing">
+<button class="home-pillar home-pillar-build" data-block="financial" style="--angle:218.57deg" type="button" aria-label="Financial Management &amp; Invoicing">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Financial Management &amp; Invoicing</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="units" style="--angle:-90deg" type="button" aria-label="Units &amp; Properties">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Units &amp; Properties</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="tenants" style="--angle:-38.57deg" type="button" aria-label="Tenants">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Tenants</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="leases" style="--angle:12.86deg" type="button" aria-label="Leases">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Leases</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="rentroll" style="--angle:64.29deg" type="button" aria-label="Rent &amp; Payments">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Rent &amp; Payments</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="arrears" style="--angle:115.71deg" type="button" aria-label="Arrears &amp; Collections">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Arrears &amp; Collections</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="leasewalk" style="--angle:167.14deg" type="button" aria-label="Maintenance &amp; Walk-throughs">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Maintenance &amp; Walk-throughs</span></span>
+</button>
+<button class="home-pillar home-pillar-hold" data-block="commercial" style="--angle:218.57deg" type="button" aria-label="Commercial Extras">
+  <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Commercial Extras</span></span>
 </button>
 </div>
 <button id="homeStartWalkBtn" type="button" class="home-start-btn">Start<br>Walk-Around</button>
@@ -384,7 +427,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="home-blocks">
 
-<div class="home-block" data-block="land">
+<div class="home-block home-block-build" data-block="land">
 <button class="home-block-header" type="button"><span class="home-block-icon">🗺️</span><span class="home-block-title">Land &amp; Acquisition</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" disabled>Land Acquisition <em>Coming soon</em></button>
@@ -392,7 +435,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
-<div class="home-block" data-block="preconstruction">
+<div class="home-block home-block-build" data-block="preconstruction">
 <button class="home-block-header" type="button"><span class="home-block-icon">📐</span><span class="home-block-title">Preconstruction &amp; Estimating</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="punch" type="button">Ch. 3 · Punch List &amp; Estimating</button>
@@ -400,7 +443,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
-<div class="home-block" data-block="design">
+<div class="home-block home-block-build" data-block="design">
 <button class="home-block-header" type="button"><span class="home-block-icon">🗂️</span><span class="home-block-title">Design &amp; Drawings</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="drawingrefs" type="button">Drawing References</button>
@@ -409,7 +452,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
-<div class="home-block" data-block="field">
+<div class="home-block home-block-build" data-block="field">
 <button class="home-block-header" type="button"><span class="home-block-icon">🎥</span><span class="home-block-title">Field Operations &amp; Walk-Around</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="walk" type="button">Ch. 1 · Walk-Around</button>
@@ -417,7 +460,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
-<div class="home-block" data-block="scheduling">
+<div class="home-block home-block-build" data-block="scheduling">
 <button class="home-block-header" type="button"><span class="home-block-icon">👷</span><span class="home-block-title">Scheduling &amp; Resources</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="clock" type="button">Ch. 2 · GPS Clock-In</button>
@@ -426,19 +469,68 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
-<div class="home-block" data-block="safety">
+<div class="home-block home-block-build" data-block="safety">
 <button class="home-block-header" type="button"><span class="home-block-icon">⚠️</span><span class="home-block-title">Safety &amp; Quality</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" data-tab="safety" type="button">Safety Log</button>
 </div>
 </div>
 
-<div class="home-block" data-block="financial">
+<div class="home-block home-block-build" data-block="financial">
 <button class="home-block-header" type="button"><span class="home-block-icon">💵</span><span class="home-block-title">Financial Management &amp; Invoicing</span><span class="home-block-chevron">›</span></button>
 <div class="home-block-chapters">
 <button class="home-chapter-btn" disabled>Ch. 5 · Invoicing <em>Coming soon</em></button>
 <button class="home-chapter-btn" data-tab="jobcost" type="button">Job Cost Dashboard</button>
 <button class="home-chapter-btn" data-tab="changes" type="button">Change Orders</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="units">
+<button class="home-block-header" type="button"><span class="home-block-icon">🏢</span><span class="home-block-title">Units &amp; Properties</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="units" type="button">Units &amp; Properties</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="tenants">
+<button class="home-block-header" type="button"><span class="home-block-icon">🧑‍🤝‍🧑</span><span class="home-block-title">Tenants</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="tenants" type="button">Tenants</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="leases">
+<button class="home-block-header" type="button"><span class="home-block-icon">📃</span><span class="home-block-title">Leases</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="leases" type="button">Leases</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="rentroll">
+<button class="home-block-header" type="button"><span class="home-block-icon">💳</span><span class="home-block-title">Rent &amp; Payments</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="rentroll" type="button">Rent &amp; Payments</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="arrears">
+<button class="home-block-header" type="button"><span class="home-block-icon">🚩</span><span class="home-block-title">Arrears &amp; Collections</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="arrears" type="button">Arrears &amp; Collections</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="leasewalk">
+<button class="home-block-header" type="button"><span class="home-block-icon">🧰</span><span class="home-block-title">Maintenance &amp; Walk-throughs</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" data-tab="leasewalk" type="button">Maintenance &amp; Walk-throughs</button>
+</div>
+</div>
+
+<div class="home-block home-block-hold" data-block="commercial">
+<button class="home-block-header" type="button"><span class="home-block-icon">🏬</span><span class="home-block-title">Commercial Extras</span><span class="home-block-chevron">›</span></button>
+<div class="home-block-chapters">
+<button class="home-chapter-btn" disabled>Commercial Extras <em>Coming soon</em></button>
 </div>
 </div>
 
@@ -677,6 +769,96 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 </div>
 
+<div class="tab-panel" id="tab-units">
+<div class="section">
+<h2>🏢 Properties</h2>
+<p class="hint">A Property is the root record — a job that's now held as a rental, or a rental acquired outside SiteWalk.</p>
+<input type="text" id="propName" placeholder="Property name, e.g. 123 Main St Fourplex">
+<input type="text" id="propAddress" placeholder="Address">
+<label class="w-video-toggle" style="justify-content:flex-start"><input type="checkbox" id="propLinkJob"> Link to current job site (<span id="propJobSiteLabel"></span>)</label>
+<button id="addPropertyBtn" class="orange">Add Property</button>
+<div id="propertyList"></div>
+</div>
+<div class="section">
+<h2>🏠 Units</h2>
+<p class="hint">A Property can have one unit (a house) or many (a multiplex, a commercial building).</p>
+<select id="unitPropertySelect"></select>
+<input type="text" id="unitLabel" placeholder="Unit label, e.g. Unit 2 / Suite B">
+<input type="text" id="unitNotes" placeholder="Notes (optional) — beds/baths/sqft">
+<button id="addUnitBtn" class="orange">Add Unit</button>
+<div id="unitList"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-tenants">
+<div class="section">
+<h2>🧑‍🤝‍🧑 Tenants</h2>
+<input type="text" id="tenantName" placeholder="Tenant name">
+<input type="email" id="tenantEmail" placeholder="Email (optional)">
+<input type="tel" id="tenantPhone" placeholder="Phone (optional)">
+<button id="addTenantBtn" class="orange">Add Tenant</button>
+<div id="tenantList"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-leases">
+<div class="section">
+<h2>📃 Leases</h2>
+<select id="leaseUnitSelect"></select>
+<select id="leaseTenantSelect"></select>
+<select id="leaseType"><option value="Residential">Residential</option><option value="Commercial">Commercial</option></select>
+<p class="hint">Start date, end date, renewal date:</p>
+<input type="date" id="leaseStart">
+<input type="date" id="leaseEnd">
+<input type="date" id="leaseRenewal">
+<input type="number" id="leaseRent" step="0.01" min="0" placeholder="Rent amount ($/month)">
+<button id="addLeaseBtn" class="orange">Add Lease</button>
+<div id="leaseList"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-rentroll">
+<div class="section">
+<h2>💳 Log a Payment</h2>
+<select id="paymentLeaseSelect"></select>
+<input type="date" id="paymentDate">
+<input type="number" id="paymentAmount" step="0.01" min="0" placeholder="Amount ($)">
+<select id="paymentMethod"><option>Cash</option><option>Cheque</option><option>E-Transfer</option><option>Bank Transfer</option><option>Other</option></select>
+<input type="text" id="paymentNote" placeholder="Note (optional)">
+<button id="addPaymentBtn" class="orange">Log Payment</button>
+</div>
+<div class="section">
+<h2>📋 Rent Roll</h2>
+<p class="hint">Balance = rent due since lease start minus payments logged. This is a prototype ledger — single device/browser only, see Setup for the data-persistence limitation.</p>
+<button id="exportRentRollBtn" class="gray">Export Rent Roll CSV</button>
+<div id="rentRollList"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-arrears">
+<div class="section">
+<h2>🚩 Arrears &amp; Collections</h2>
+<p class="hint">Computed from unpaid rent past due. This is a flag, not a collections workflow — no notice-period or RTB-process handling.</p>
+<div id="arrearsList"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-leasewalk">
+<div class="section">
+<h2>🧰 Maintenance &amp; Walk-throughs</h2>
+<p class="hint">Reuses the same walk-around engine as Chapter 1 — camera, mic, live transcript, voice-triggered snap. Condition items found here are tagged as lease-walk items on the same punch list, not a separate item type.</p>
+<select id="leaseWalkUnitSelect"></select>
+<button id="startLeaseWalkBtn" class="green">Start Lease Walk</button>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-commercial">
+<div class="section">
+<h2>🏬 Commercial Extras</h2>
+<p class="hint">CAM charges, percentage rent, and other commercial-only line items. Titled and scaffolded — not built this pass.</p>
+</div>
+</div>
+
 <div class="tab-panel" id="tab-setup">
 <div class="section">
 <h2>🔍 AI Worker Setup</h2>
@@ -691,8 +873,12 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </div>
 <div class="section">
 <h2>🗑️ Reset App</h2>
-<p class="hint">Permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup from this phone. This can't be undone.</p>
+<p class="hint">Permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, LeaseFlow property/unit/tenant/lease/payment record, and your AI Worker setup from this phone. This can't be undone.</p>
 <button id="clearAllBtn" class="red">Clear All Data</button>
+</div>
+<div class="section">
+<h2>🔑 LeaseFlow Storage Note</h2>
+<p class="hint">Units, tenants, leases, and payments are stored the same way as everything else in SiteWalk — localStorage, on this one device. That's fine for a single-user prototype, but a rent roll or payment ledger handed to a bookkeeper who isn't operating this browser needs storage that survives independent of one device/session. Known limitation of this pass, not solved yet.</p>
 </div>
 </div>
 

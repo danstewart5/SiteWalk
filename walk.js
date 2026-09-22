@@ -1,4 +1,4 @@
-const TABS = ['home', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'setup', 'report'];
+const TABS = ['home', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
 function showTab(name) {
   if (TABS.indexOf(name) === -1) name = 'home';
   TABS.forEach(function (t) {
@@ -54,9 +54,29 @@ document.getElementById('homeGenerateReportBtn').addEventListener('click', funct
   window.generateReport();
 });
 
+// Build / Hold mode toggle — organizes which seven chapters the pillars and
+// drilldown blocks expose (CSS keys off data-home-mode); the flag bar and
+// the two quick-action buttons above are deliberately outside this switch.
+function setHomeMode(mode) {
+  if (mode !== 'hold') mode = 'build';
+  document.getElementById('tab-home').setAttribute('data-home-mode', mode);
+  document.querySelectorAll('.home-mode-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === mode); });
+  saveJson(LS.homeMode, mode);
+}
+document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () { setHomeMode(btn.getAttribute('data-mode')); });
+});
+
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
+// LeaseFlow (Hold mode) data — Property is root, Unit belongs to a Property,
+// Tenant is its own record linked to a Unit only through a Lease, Payment is
+// a ledger line against a Lease. leaseWalkContext (below, near startWalk) is
+// the only thing that ties a lease walk-through back into the shared
+// punch/change-order schema.
+let properties = [], units = [], tenants = [], leases = [], payments = [];
+let leaseWalkContext = null;
 const TRADE_CLASS = { General: 'tag-general', Plumbing: 'tag-plumbing', Electrical: 'tag-electrical', Framing: 'tag-framing', Drywall: 'tag-drywall', Roofing: 'tag-roofing', Concrete: 'tag-concrete', Landscaping: 'tag-landscaping', Other: 'tag-other' };
 const TRADE_DOT = { General: 'dot-general', Plumbing: 'dot-plumbing', Electrical: 'dot-electrical', Framing: 'dot-framing', Drywall: 'dot-drywall', Roofing: 'dot-roofing', Concrete: 'dot-concrete', Landscaping: 'dot-landscaping', Other: 'dot-other' };
 const tradeSelect = document.getElementById('tradeSelect');
@@ -88,6 +108,11 @@ function persistMaterials() { saveJson(LS.materials, materials); }
 function persistBudget() { saveJson(LS.budget, budget); }
 function persistDrawings() { saveJson(LS.drawings, drawings); }
 function persistWalks() { saveJson(LS.walks, walks); }
+function persistProperties() { saveJson(LS.properties, properties); }
+function persistUnits() { saveJson(LS.units, units); }
+function persistTenants() { saveJson(LS.tenants, tenants); }
+function persistLeases() { saveJson(LS.leases, leases); }
+function persistPayments() { saveJson(LS.payments, payments); }
 // One Date read shared by time/ts/iso so a single captured moment never
 // disagrees with itself across the three representations different parts
 // of the app already expect (display string, epoch for sorting, ISO for
@@ -533,6 +558,308 @@ function renderSafetyLogs() {
   });
 }
 
+/* ---------- LeaseFlow (Hold mode): Units & Properties, Tenants, Leases, Rent & Payments, Arrears ---------- */
+function makeId(prefix) { return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+
+function renderProperties() {
+  const jobLabel = document.getElementById('propJobSiteLabel');
+  if (jobLabel) jobLabel.textContent = document.getElementById('siteName').textContent.trim() || 'Job Site';
+  const select = document.getElementById('unitPropertySelect');
+  if (select) {
+    const prev = select.value;
+    select.innerHTML = properties.length ? properties.map(function (p) { return '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>'; }).join('') : '<option value="">Add a property first</option>';
+    if (properties.some(function (p) { return p.id === prev; })) select.value = prev;
+  }
+  const wrap = document.getElementById('propertyList');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!properties.length) { wrap.innerHTML = '<p class="hint">No properties yet.</p>'; return; }
+  properties.slice().reverse().forEach(function (p) {
+    const unitCount = units.filter(function (u) { return u.propertyId === p.id; }).length;
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong>' + (p.address ? '<div class="meta">' + escapeHtml(p.address) + '</div>' : '')
+      + (p.jobLinked ? '<span class="type-tag change">From job: ' + escapeHtml(p.jobSiteName || 'Job Site') + '</span>' : '<span class="type-tag rfi">Acquired</span>')
+      + '<div class="meta">' + unitCount + ' unit' + (unitCount === 1 ? '' : 's') + '</div>';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'small gray'; delBtn.type = 'button'; delBtn.textContent = 'Remove';
+    delBtn.onclick = function () {
+      if (!confirm('Remove ' + p.name + ' and its units? Leases/payments on those units are kept but orphaned.')) return;
+      properties = properties.filter(function (x) { return x.id !== p.id; });
+      units = units.filter(function (u) { return u.propertyId !== p.id; });
+      persistProperties(); persistUnits(); renderProperties(); renderUnits(); renderLeases(); renderRentRoll(); renderArrears(); renderFlagBar();
+    };
+    card.appendChild(delBtn);
+    wrap.appendChild(card);
+  });
+}
+
+function populateUnitSelects() {
+  const opts = units.length ? units.map(function (u) {
+    const property = properties.find(function (p) { return p.id === u.propertyId; });
+    return '<option value="' + u.id + '">' + escapeHtml((property ? property.name + ' — ' : '') + u.label) + '</option>';
+  }).join('') : '<option value="">Add a unit first</option>';
+  ['leaseUnitSelect', 'leaseWalkUnitSelect'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    el.innerHTML = opts;
+    if (units.some(function (u) { return u.id === prev; })) el.value = prev;
+  });
+}
+function renderUnits() {
+  populateUnitSelects();
+  const wrap = document.getElementById('unitList');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!units.length) { wrap.innerHTML = '<p class="hint">No units yet.</p>'; return; }
+  units.slice().reverse().forEach(function (u) {
+    const property = properties.find(function (p) { return p.id === u.propertyId; });
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<strong>' + escapeHtml(u.label) + '</strong><div class="meta">' + escapeHtml(property ? property.name : 'Unknown property') + (u.notes ? ' · ' + escapeHtml(u.notes) : '') + '</div>';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'small gray'; delBtn.type = 'button'; delBtn.textContent = 'Remove';
+    delBtn.onclick = function () {
+      if (!confirm('Remove unit ' + u.label + '? Leases on it are kept but orphaned.')) return;
+      units = units.filter(function (x) { return x.id !== u.id; });
+      persistUnits(); renderUnits(); renderProperties(); renderLeases(); renderRentRoll(); renderArrears(); renderFlagBar();
+    };
+    card.appendChild(delBtn);
+    wrap.appendChild(card);
+  });
+}
+
+function renderTenants() {
+  const select = document.getElementById('leaseTenantSelect');
+  if (select) {
+    const prev = select.value;
+    select.innerHTML = tenants.length ? tenants.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('') : '<option value="">Add a tenant first</option>';
+    if (tenants.some(function (t) { return t.id === prev; })) select.value = prev;
+  }
+  const wrap = document.getElementById('tenantList');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!tenants.length) { wrap.innerHTML = '<p class="hint">No tenants yet.</p>'; return; }
+  tenants.slice().reverse().forEach(function (t) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<strong>' + escapeHtml(t.name) + '</strong><div class="meta">' + (t.email ? escapeHtml(t.email) : '') + (t.email && t.phone ? ' · ' : '') + (t.phone ? escapeHtml(t.phone) : '') + '</div>';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'small gray'; delBtn.type = 'button'; delBtn.textContent = 'Remove';
+    delBtn.onclick = function () {
+      if (!confirm('Remove tenant ' + t.name + '? Leases referencing them are kept but orphaned.')) return;
+      tenants = tenants.filter(function (x) { return x.id !== t.id; });
+      persistTenants(); renderTenants(); renderLeases(); renderRentRoll(); renderArrears(); renderFlagBar();
+    };
+    card.appendChild(delBtn);
+    wrap.appendChild(card);
+  });
+}
+
+function leaseLabel(l) {
+  const unit = units.find(function (u) { return u.id === l.unitId; });
+  const property = unit ? properties.find(function (p) { return p.id === unit.propertyId; }) : null;
+  const tenant = tenants.find(function (t) { return t.id === l.tenantId; });
+  return (tenant ? tenant.name : 'Unknown tenant') + ' — ' + (property ? property.name + ' ' : '') + (unit ? unit.label : 'Unknown unit');
+}
+function renderLeases() {
+  const select = document.getElementById('paymentLeaseSelect');
+  if (select) {
+    const prev = select.value;
+    select.innerHTML = leases.length ? leases.map(function (l) { return '<option value="' + l.id + '">' + escapeHtml(leaseLabel(l)) + '</option>'; }).join('') : '<option value="">Add a lease first</option>';
+    if (leases.some(function (l) { return l.id === prev; })) select.value = prev;
+  }
+  const wrap = document.getElementById('leaseList');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!leases.length) { wrap.innerHTML = '<p class="hint">No leases yet.</p>'; return; }
+  leases.slice().reverse().forEach(function (l) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = '<strong>' + escapeHtml(leaseLabel(l)) + '</strong>'
+      + '<span class="type-tag ' + (l.leaseType === 'Commercial' ? 'change' : 'punch') + '">' + escapeHtml(l.leaseType || 'Residential') + '</span>'
+      + '<div class="meta">$' + (l.rentAmount || 0).toFixed(2) + '/mo · ' + escapeHtml(l.startDate || '?') + ' – ' + escapeHtml(l.endDate || '?') + (l.renewalDate ? ' · Renews ' + escapeHtml(l.renewalDate) : '') + '</div>';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'small gray'; delBtn.type = 'button'; delBtn.textContent = 'Remove';
+    delBtn.onclick = function () {
+      if (!confirm('Remove this lease? Its payment history is kept but orphaned.')) return;
+      leases = leases.filter(function (x) { return x.id !== l.id; });
+      persistLeases(); renderLeases(); renderRentRoll(); renderArrears(); renderFlagBar();
+    };
+    card.appendChild(delBtn);
+    wrap.appendChild(card);
+  });
+}
+
+// Rent roll model: each lease owes one month's rent per elapsed month since
+// its start date (the day-of-month of startDate is the recurring due day);
+// balance is what's due to date minus what's been logged in Payments. This
+// is deliberately a simple accrual, not a real amortization/proration engine
+// — good enough for the flag bar and a bookkeeper's rent roll, not a
+// full accounting product (see Commercial Extras, not built this pass).
+function monthsElapsed(startDateStr, now) {
+  const start = new Date(startDateStr);
+  if (isNaN(start.getTime()) || start > now) return 0;
+  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  return Math.max(0, months + 1);
+}
+function computeRentRoll() {
+  return leases.map(function (l) {
+    const unit = units.find(function (u) { return u.id === l.unitId; });
+    const property = unit ? properties.find(function (p) { return p.id === unit.propertyId; }) : null;
+    const tenant = tenants.find(function (t) { return t.id === l.tenantId; });
+    const leasePayments = payments.filter(function (p) { return p.leaseId === l.id; }).sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+    const totalPaid = leasePayments.reduce(function (s, p) { return s + (p.amount || 0); }, 0);
+    const totalDue = monthsElapsed(l.startDate, new Date()) * (l.rentAmount || 0);
+    return { lease: l, unit: unit, property: property, tenant: tenant, totalDue: totalDue, totalPaid: totalPaid, balance: totalDue - totalPaid, lastPayment: leasePayments.length ? leasePayments[leasePayments.length - 1] : null };
+  });
+}
+function renderRentRoll() {
+  const wrap = document.getElementById('rentRollList');
+  if (!wrap) return;
+  const rows = computeRentRoll();
+  if (!rows.length) { wrap.innerHTML = '<p class="hint">Add a lease to see it on the rent roll.</p>'; return; }
+  let html = '';
+  rows.forEach(function (r) {
+    const statusClass = r.balance > 0.005 ? 'over' : 'under';
+    const statusText = r.balance > 0.005 ? ('$' + r.balance.toFixed(2) + ' past due') : (r.balance < -0.005 ? ('$' + Math.abs(r.balance).toFixed(2) + ' credit') : 'Paid up');
+    html += '<div class="item-card"><strong>' + escapeHtml(leaseLabel(r.lease)) + '</strong>'
+      + '<div class="meta">Rent: $' + (r.lease.rentAmount || 0).toFixed(2) + '/mo · Due to date: $' + r.totalDue.toFixed(2) + ' · Paid: $' + r.totalPaid.toFixed(2) + '</div>'
+      + (r.lastPayment ? '<div class="meta">Last payment: ' + escapeHtml(r.lastPayment.date) + ' — $' + r.lastPayment.amount.toFixed(2) + '</div>' : '')
+      + '<div class="status ' + statusClass + '" style="margin-top:6px">' + statusText + '</div></div>';
+  });
+  wrap.innerHTML = html;
+}
+function csvField(val) { const s = val == null ? '' : String(val); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function exportRentRollCsv() {
+  const rows = computeRentRoll();
+  if (!rows.length) { alert('No leases to export yet.'); return; }
+  const header = ['Property', 'Unit', 'Tenant', 'Lease Type', 'Rent Amount', 'Total Due', 'Total Paid', 'Balance', 'Last Payment Date', 'Renewal Date'];
+  const lines = [header.map(csvField).join(',')];
+  rows.forEach(function (r) {
+    lines.push([
+      r.property ? r.property.name : '', r.unit ? r.unit.label : '', r.tenant ? r.tenant.name : '', r.lease.leaseType || 'Residential',
+      (r.lease.rentAmount || 0).toFixed(2), r.totalDue.toFixed(2), r.totalPaid.toFixed(2), r.balance.toFixed(2),
+      r.lastPayment ? r.lastPayment.date : '', r.lease.renewalDate || ''
+    ].map(csvField).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'sitewalk-rent-roll-' + new Date().toISOString().slice(0, 10) + '.csv'; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+}
+
+// Arrears is a computed, read-only view — no collections workflow, no
+// notice-period/RTB handling. Also the source for the shared flag bar's red
+// "in arrears" count, alongside a yellow "renewal due soon" count.
+function computeLeaseFlags() {
+  const rentRoll = computeRentRoll();
+  const arrears = rentRoll.filter(function (r) { return r.balance > 0.005; });
+  const now = new Date();
+  const renewalsSoon = leases.filter(function (l) {
+    if (!l.renewalDate) return false;
+    const days = (new Date(l.renewalDate) - now) / 86400000;
+    return days >= 0 && days <= 60;
+  });
+  return { arrears: arrears, renewalsSoon: renewalsSoon };
+}
+function renderArrears() {
+  const wrap = document.getElementById('arrearsList');
+  if (!wrap) return;
+  const rows = computeLeaseFlags().arrears.sort(function (a, b) { return b.balance - a.balance; });
+  if (!rows.length) { wrap.innerHTML = '<p class="hint">No units in arrears.</p>'; return; }
+  let html = '';
+  rows.forEach(function (r) {
+    html += '<div class="item-card"><span class="type-tag unverified">$' + r.balance.toFixed(2) + ' past due</span> <strong>' + escapeHtml(leaseLabel(r.lease)) + '</strong>'
+      + '<div class="meta">Rent: $' + (r.lease.rentAmount || 0).toFixed(2) + '/mo · Paid to date: $' + r.totalPaid.toFixed(2) + ' of $' + r.totalDue.toFixed(2) + '</div></div>';
+  });
+  wrap.innerHTML = html;
+}
+
+// Shared flag bar — spans both Build and Hold mode (never scoped to
+// whichever mode is currently active); a punch flag from Build mode and a
+// rent/renewal flag from Hold mode sit in the same bar.
+function renderFlagBar() {
+  const wrap = document.getElementById('homeFlagBar');
+  if (!wrap) return;
+  const openPunch = punch.filter(function (p) { return !p.resolved; }).length;
+  const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; }).length;
+  const flags = computeLeaseFlags();
+  const pills = [];
+  if (openPunch) pills.push({ cls: 'red', text: openPunch + ' Open Punch Item' + (openPunch === 1 ? '' : 's') });
+  if (missedClockOuts) pills.push({ cls: 'red', text: missedClockOuts + ' Missed Clock-Out' + (missedClockOuts === 1 ? '' : 's') });
+  if (flags.arrears.length) pills.push({ cls: 'red', text: flags.arrears.length + ' Unit' + (flags.arrears.length === 1 ? '' : 's') + ' in Arrears' });
+  if (flags.renewalsSoon.length) pills.push({ cls: 'yellow', text: flags.renewalsSoon.length + ' Lease Renewal' + (flags.renewalsSoon.length === 1 ? '' : 's') + ' Due Soon' });
+  wrap.innerHTML = pills.length ? pills.map(function (f) { return '<span class="home-flag-pill ' + f.cls + '">' + f.text + '</span>'; }).join('') : '<span class="home-flag-pill ok">All clear</span>';
+}
+
+document.getElementById('addPropertyBtn').addEventListener('click', function () {
+  const name = document.getElementById('propName').value.trim();
+  if (!name) { alert('Enter a property name first.'); return; }
+  const address = document.getElementById('propAddress').value.trim();
+  const linkJob = document.getElementById('propLinkJob').checked;
+  properties.push({
+    id: makeId('prop'), name: name, address: address, jobLinked: linkJob,
+    jobSiteName: linkJob ? document.getElementById('siteName').textContent.trim() : '',
+    jobSiteAddress: linkJob ? document.getElementById('siteAddress').textContent.trim() : '',
+    createdAt: new Date().toISOString()
+  });
+  persistProperties(); renderProperties();
+  document.getElementById('propName').value = ''; document.getElementById('propAddress').value = ''; document.getElementById('propLinkJob').checked = false;
+});
+document.getElementById('addUnitBtn').addEventListener('click', function () {
+  const propertyId = document.getElementById('unitPropertySelect').value;
+  if (!propertyId) { alert('Add a property first.'); return; }
+  const label = document.getElementById('unitLabel').value.trim();
+  if (!label) { alert('Enter a unit label first.'); return; }
+  units.push({ id: makeId('unit'), propertyId: propertyId, label: label, notes: document.getElementById('unitNotes').value.trim() });
+  persistUnits(); renderUnits(); renderProperties();
+  document.getElementById('unitLabel').value = ''; document.getElementById('unitNotes').value = '';
+});
+document.getElementById('addTenantBtn').addEventListener('click', function () {
+  const name = document.getElementById('tenantName').value.trim();
+  if (!name) { alert('Enter a tenant name first.'); return; }
+  tenants.push({ id: makeId('tenant'), name: name, email: document.getElementById('tenantEmail').value.trim(), phone: document.getElementById('tenantPhone').value.trim() });
+  persistTenants(); renderTenants();
+  document.getElementById('tenantName').value = ''; document.getElementById('tenantEmail').value = ''; document.getElementById('tenantPhone').value = '';
+});
+document.getElementById('addLeaseBtn').addEventListener('click', function () {
+  const unitId = document.getElementById('leaseUnitSelect').value;
+  if (!unitId) { alert('Add a unit first.'); return; }
+  const tenantId = document.getElementById('leaseTenantSelect').value;
+  if (!tenantId) { alert('Add a tenant first.'); return; }
+  const rentAmount = parseFloat(document.getElementById('leaseRent').value);
+  if (isNaN(rentAmount) || rentAmount <= 0) { alert('Enter a rent amount first.'); return; }
+  const startDate = document.getElementById('leaseStart').value;
+  if (!startDate) { alert('Enter a start date first.'); return; }
+  leases.push({
+    id: makeId('lease'), unitId: unitId, tenantId: tenantId, leaseType: document.getElementById('leaseType').value,
+    startDate: startDate, endDate: document.getElementById('leaseEnd').value, renewalDate: document.getElementById('leaseRenewal').value, rentAmount: rentAmount
+  });
+  persistLeases(); renderLeases(); renderRentRoll(); renderArrears(); renderFlagBar();
+  document.getElementById('leaseRent').value = ''; document.getElementById('leaseStart').value = ''; document.getElementById('leaseEnd').value = ''; document.getElementById('leaseRenewal').value = '';
+});
+document.getElementById('addPaymentBtn').addEventListener('click', function () {
+  const leaseId = document.getElementById('paymentLeaseSelect').value;
+  if (!leaseId) { alert('Add a lease first.'); return; }
+  const amount = parseFloat(document.getElementById('paymentAmount').value);
+  if (isNaN(amount) || amount <= 0) { alert('Enter a payment amount first.'); return; }
+  const date = document.getElementById('paymentDate').value || new Date().toISOString().split('T')[0];
+  payments.push({ id: makeId('pay'), leaseId: leaseId, date: date, amount: amount, method: document.getElementById('paymentMethod').value, note: document.getElementById('paymentNote').value.trim() });
+  persistPayments(); renderRentRoll(); renderArrears(); renderFlagBar();
+  document.getElementById('paymentAmount').value = ''; document.getElementById('paymentNote').value = '';
+});
+document.getElementById('exportRentRollBtn').addEventListener('click', exportRentRollCsv);
+document.getElementById('startLeaseWalkBtn').addEventListener('click', function () {
+  const unitId = document.getElementById('leaseWalkUnitSelect').value;
+  if (!unitId) { alert('Add a unit first.'); return; }
+  startLeaseWalk(unitId);
+});
+
 function renderDashboard() {
   const wrap = document.getElementById('dashboard');
   if (!wrap) return;
@@ -549,6 +876,7 @@ function renderDashboard() {
   wrap.innerHTML = '<table style="width:100%;border-collapse:collapse">' + rows.map(function (r) {
     return '<tr><td style="padding:6px">' + r[0] + '</td><td style="padding:6px;text-align:right;font-weight:bold">' + r[1] + '</td></tr>';
   }).join('') + '</table>';
+  renderFlagBar();
 }
 
 /* ---------- Job Cost Dashboard: labor, materials, budget vs actual ---------- */
@@ -645,6 +973,13 @@ function renderBudgetSummary() {
 function fileEntry(data) {
   const stamp = nowStamp();
   const entry = { text: data.text, trade: data.trade || tradeSelect.value, time: stamp.time, ts: stamp.ts, iso: stamp.iso, verified: data.verified !== false };
+  // Shared schema extension for LeaseFlow: every punch/change/RFI item now
+  // carries where it came from, so a lease-walk condition item and a
+  // job-site item live in the same table/array, distinguished only by these
+  // fields — not by a second schema or a forked engine.
+  entry.source = leaseWalkContext ? 'lease-walk' : 'job-site';
+  entry.property_id = leaseWalkContext ? leaseWalkContext.propertyId : null;
+  entry.unit_id = leaseWalkContext ? leaseWalkContext.unitId : null;
   if (data.photo) entry.photo = data.photo;
   const drawingRef = extractDrawingRef(entry.text);
   if (drawingRef) entry.drawingRef = drawingRef;
@@ -1111,6 +1446,7 @@ window.endWalk = function () {
   walkActive = false;
   if (currentWalk && !currentWalk.endedAt) { currentWalk.endedAt = new Date().toISOString(); persistWalks(); }
   selectedWalkId = null;
+  leaseWalkContext = null;
   stopVideoRecording();
   stopWalkCamera();
   stopWalkVoice();
@@ -1126,6 +1462,19 @@ window.endWalk = function () {
 };
 document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? takePhoto() : window.startWalk(); });
 document.getElementById('stopWalkBtn').addEventListener('click', function () { window.endWalk(); });
+// "Start Lease Walk" — opens the same Chapter 1 walk-around engine with
+// context already set to the selected unit, no new capture tooling. Setting
+// leaseWalkContext before calling window.startWalk() is the only hook into
+// the shared engine; camera/mic/listening code above is untouched.
+function startLeaseWalk(unitId) {
+  const unit = units.find(function (u) { return u.id === unitId; });
+  if (!unit) { alert('Select a unit first.'); return; }
+  const property = properties.find(function (p) { return p.id === unit.propertyId; });
+  leaseWalkContext = { unitId: unit.id, propertyId: unit.propertyId };
+  showTab('walk');
+  if (!walkActive) window.startWalk();
+  setWalkStatus('ok', 'Lease walk — ' + (property ? property.name + ' · ' : '') + unit.label + '. Camera + AI listening.');
+}
 function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getElementById('walkVideo')) : null; if (fromLive) { saveWalkPhoto(fromLive); return; } document.getElementById('photoInput').click(); }
 document.getElementById('shutterBtn').addEventListener('click', takePhoto);
 document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedPhotos);
@@ -1333,6 +1682,7 @@ document.getElementById('printBtn').addEventListener('click', function () { wind
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
   photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null;
+  properties = []; units = []; tenants = []; leases = []; payments = []; leaseWalkContext = null;
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
   document.getElementById('siteName').textContent = 'Job Site';
@@ -1359,6 +1709,14 @@ function clearAllData() {
   renderDrawingRefs();
   refreshAiStatus();
   renderSummary();
+  renderProperties();
+  renderUnits();
+  renderTenants();
+  renderLeases();
+  renderRentRoll();
+  renderArrears();
+  renderFlagBar();
+  setHomeMode('build');
   setWalkStatus('info', 'Ready. Tap to begin.');
   alert('All SiteWalk data cleared.');
 }
@@ -1367,10 +1725,12 @@ window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
   wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []); walks = loadJson(LS.walks, []);
+  properties = loadJson(LS.properties, []); units = loadJson(LS.units, []); tenants = loadJson(LS.tenants, []); leases = loadJson(LS.leases, []); payments = loadJson(LS.payments, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
   if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
   if (!Array.isArray(walks)) walks = [];
+  if (!Array.isArray(properties)) properties = []; if (!Array.isArray(units)) units = []; if (!Array.isArray(tenants)) tenants = []; if (!Array.isArray(leases)) leases = []; if (!Array.isArray(payments)) payments = [];
   walks.forEach(function (w) { ['transcript', 'punches', 'costs', 'safety'].forEach(function (k) { if (!Array.isArray(w[k])) w[k] = []; }); });
   currentWalk = walks.length ? walks[walks.length - 1] : null;
   const savedSiteName = loadJson(LS.siteName, null);
@@ -1405,5 +1765,13 @@ window.addEventListener('load', function () {
     document.getElementById('walkRecordBtn').style.display = 'block';
   }
   document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to open the camera and AI listening.';
+  setHomeMode(loadJson(LS.homeMode, 'build'));
+  renderProperties();
+  renderUnits();
+  renderTenants();
+  renderLeases();
+  renderRentRoll();
+  renderArrears();
+  renderFlagBar();
   showTab('home');
 });
