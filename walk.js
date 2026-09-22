@@ -34,6 +34,72 @@ document.querySelectorAll('.home-pillar').forEach(function (btn) {
   btn.addEventListener('click', function () { openHomeDrilldown(btn.getAttribute('data-block')); });
 });
 document.getElementById('homeMoreLink').addEventListener('click', function () { openHomeDrilldown(null); });
+
+// Spinnable pillar ring: drag anywhere on the ring to rotate it (with a
+// little momentum on release); the touched pillar magnifies while held.
+// A plain tap still falls through to the pillar's click → drilldown; a drag
+// swallows that click. No pointer capture — it would retarget the click
+// away from the pillar button.
+(function () {
+  const ring = document.querySelector('.home-pillars');
+  if (!ring) return;
+  let spin = 0, drag = null, velocity = 0, raf = 0, suppressClick = false;
+  function setSpin(deg) { spin = deg % 360; ring.style.setProperty('--spin', spin + 'deg'); }
+  function angleAt(e) {
+    const r = ring.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+  }
+  function coast() {
+    velocity *= 0.94;
+    if (Math.abs(velocity) < 0.05) { raf = 0; return; }
+    setSpin(spin + velocity);
+    raf = requestAnimationFrame(coast);
+  }
+  ring.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    cancelAnimationFrame(raf); raf = 0; velocity = 0; suppressClick = false;
+    const pillar = e.target.closest('.home-pillar');
+    if (pillar) pillar.classList.add('pressed');
+    drag = { pillar: pillar, lastAngle: angleAt(e), lastTime: e.timeStamp, x: e.clientX, y: e.clientY, moved: false };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  });
+  function onMove(e) {
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) {
+      drag.moved = true;
+      ring.classList.add('spinning');
+    }
+    if (!drag.moved) return;
+    const a = angleAt(e);
+    let d = a - drag.lastAngle;
+    if (d > 180) d -= 360; else if (d < -180) d += 360;
+    const dt = Math.max(1, e.timeStamp - drag.lastTime);
+    velocity = d / dt * 16; // degrees per ~frame
+    drag.lastAngle = a; drag.lastTime = e.timeStamp;
+    setSpin(spin + d);
+  }
+  function onUp(e) {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
+    if (!drag) return;
+    if (drag.pillar) drag.pillar.classList.remove('pressed');
+    ring.classList.remove('spinning');
+    if (drag.moved) {
+      suppressClick = true;
+      setTimeout(function () { suppressClick = false; }, 400);
+      if (e.timeStamp - drag.lastTime > 80) velocity = 0; // finger stopped before lifting
+      velocity = Math.max(-12, Math.min(12, velocity));
+      if (velocity) raf = requestAnimationFrame(coast);
+    }
+    drag = null;
+  }
+  ring.addEventListener('click', function (e) {
+    if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; }
+  }, true);
+})();
 document.getElementById('homeDrilldownBack').addEventListener('click', function () {
   document.getElementById('tab-home').classList.remove('showing-drilldown');
 });
