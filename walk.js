@@ -8,6 +8,7 @@ function showTab(name) {
   document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
   });
+  if (name === 'home' && typeof renderRoleView === 'function') renderRoleView();
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
@@ -151,7 +152,7 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
 // LeaseFlow (Hold mode) data — Property is root, Unit belongs to a Property,
 // Tenant is its own record linked to a Unit only through a Lease, Payment is
@@ -878,7 +879,114 @@ function renderFlagBar() {
   if (flags.arrears.length) pills.push({ cls: 'red', text: flags.arrears.length + ' Unit' + (flags.arrears.length === 1 ? '' : 's') + ' in Arrears' });
   if (flags.renewalsSoon.length) pills.push({ cls: 'yellow', text: flags.renewalsSoon.length + ' Lease Renewal' + (flags.renewalsSoon.length === 1 ? '' : 's') + ' Due Soon' });
   wrap.innerHTML = pills.length ? pills.map(function (f) { return '<span class="home-flag-pill ' + f.cls + '">' + f.text + '</span>'; }).join('') : '<span class="home-flag-pill ok">All clear</span>';
+  renderRoleView();
 }
+
+// Role views — "View as" on Home. Admin ('all') is the full dial scene;
+// Manager / Bookkeeper / Developer each get a focused dashboard of live
+// numbers off the same in-app arrays plus shortcuts to their tabs. This is a
+// lens, not access control: there's no login, and data is still per-device
+// localStorage, so a bookkeeper on their own phone sees their own (empty)
+// data until cross-device sync exists.
+const ROLES = {
+  manager: {
+    title: 'Manager', intro: 'Run the site: what\'s open, who\'s on the clock, what needs chasing today.', actions: true,
+    links: [['walk', 'Ch. 1 · Walk-Around'], ['punch', 'Punch List'], ['rfis', 'RFIs'], ['submittals', 'Submittals'], ['changes', 'Change Orders'], ['safety', 'Safety Log'], ['dailylog', 'Daily Log'], ['clock', 'Clock In/Out'], ['contacts', 'Trade Contacts'], ['drawings', 'Drawings & Plans'], ['drawingrefs', 'Drawing References'], ['leasewalk', 'Maintenance & Walk-throughs'], ['dashboard', 'Open Items Dashboard'], ['report', 'Report']],
+    soon: []
+  },
+  bookkeeper: {
+    title: 'Bookkeeper', intro: 'Money in and out: job cost vs budget, change-order dollars, hours for payroll, rent collected and owed.',
+    links: [['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['clock', 'Clock In/Out (hours for payroll)'], ['rentroll', 'Rent & Payments (CSV export)'], ['arrears', 'Arrears & Collections'], ['leases', 'Leases'], ['tenants', 'Tenants'], ['report', 'Report']],
+    soon: ['Ch. 5 · Invoicing']
+  },
+  developer: {
+    title: 'Developer', intro: 'The big picture: is the build on budget, what\'s the change-order exposure, and how is the rental portfolio performing.',
+    links: [['dashboard', 'Open Items Dashboard'], ['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['units', 'Units & Properties'], ['leases', 'Leases'], ['rentroll', 'Rent & Payments'], ['arrears', 'Arrears & Collections'], ['report', 'Report']],
+    soon: ['Ch. 6 · Land-to-Contract Pipeline (Victoria Land)', 'Ch. 9 · Price-the-House']
+  }
+};
+function money(n) { return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+function roleKpis(role) {
+  const openPunch = punch.filter(function (p) { return !p.resolved; }).length;
+  const pendingCo = changes.filter(function (c) { return c.approval === 'Pending'; });
+  const openRfis = rfis.filter(function (r) { return r.status !== 'Answered'; }).length;
+  const coSum = function (list) { return list.reduce(function (s, c) { return s + (c.costEstimate || 0); }, 0); };
+  const labor = totalLaborCost(), mats = totalMaterialsCost(), spent = labor + mats;
+  const budgetTotal = (budget.labor || 0) + (budget.materials || 0);
+  const flags = computeLeaseFlags();
+  const pastDue = flags.arrears.reduce(function (s, r) { return s + r.balance; }, 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const activeLeases = leases.filter(function (l) { return l.startDate <= today && (!l.endDate || l.endDate >= today); });
+  const occupied = units.filter(function (u) { return activeLeases.some(function (l) { return l.unitId === u.id; }); }).length;
+  const budgetKpi = budgetTotal > 0
+    ? [Math.round(spent / budgetTotal * 100) + '%', 'of job budget spent (' + money(spent) + ' / ' + money(budgetTotal) + ')', spent > budgetTotal]
+    : [money(spent), 'job spend (no budget set)', false];
+  if (role === 'manager') {
+    const onClock = laborCostByEmployee().filter(function (r) { return r.active; }).length;
+    const missed = clockEvents.filter(function (e) { return e.flagged; }).length;
+    const lastLog = dailyLogs.length ? dailyLogs[dailyLogs.length - 1].date : 'None yet';
+    return [
+      [openPunch, 'open punch items', openPunch > 0], [openRfis, 'open RFIs', openRfis > 0],
+      [submittals.filter(function (x) { return x.status === 'Pending'; }).length, 'pending submittals', false], [pendingCo.length, 'change orders awaiting client', pendingCo.length > 0],
+      [onClock, 'on the clock now', false], [missed, 'missed clock-outs', missed > 0],
+      [safetyLogs.length, 'safety log entries', false], [lastLog, 'last daily log', false]
+    ];
+  }
+  if (role === 'bookkeeper') {
+    const approved = changes.filter(function (c) { return c.approval === 'Approved'; });
+    const collected = payments.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+    return [
+      budgetKpi, [money(labor), 'labor cost to date', false],
+      [money(mats), 'materials to date', false], [money(coSum(approved)), approved.length + ' approved change order' + (approved.length === 1 ? '' : 's') + ' to bill', false],
+      [money(coSum(pendingCo)), pendingCo.length + ' change order' + (pendingCo.length === 1 ? '' : 's') + ' pending', false], [money(collected), 'rent collected (all time)', false],
+      [money(pastDue), 'rent past due', pastDue > 0.005], [flags.arrears.length, 'units in arrears', flags.arrears.length > 0]
+    ];
+  }
+  return [
+    budgetKpi, [money(coSum(pendingCo)), 'pending change-order exposure', coSum(pendingCo) > 0],
+    [openPunch + pendingCo.length + openRfis, 'open items (punch + CO + RFI)', false], [properties.length + ' / ' + units.length, 'properties / units', false],
+    [units.length ? Math.round(occupied / units.length * 100) + '%' : '—', 'occupancy (' + occupied + ' of ' + units.length + ' units leased)', false],
+    [money(activeLeases.reduce(function (s, l) { return s + (l.rentAmount || 0); }, 0)), 'monthly rent roll', false],
+    [money(pastDue), 'rent past due', pastDue > 0.005], [flags.renewalsSoon.length, 'lease renewals in 60 days', flags.renewalsSoon.length > 0]
+  ];
+}
+function renderRoleView() {
+  const home = document.getElementById('tab-home'), wrap = document.getElementById('homeRoleView');
+  if (!home || !wrap) return;
+  const cfg = ROLES[home.getAttribute('data-role')];
+  if (!cfg) { wrap.innerHTML = ''; return; }
+  let html = '<p class="role-intro"><strong>' + cfg.title + ' view</strong>' + cfg.intro + '</p>';
+  if (cfg.actions) html += '<div class="role-actions"><button type="button" class="role-walk" data-role-action="walk">▶ Start Walk-Around</button><button type="button" class="role-report" data-role-action="report">Generate Report</button></div>';
+  html += '<div class="role-kpis">' + roleKpis(home.getAttribute('data-role')).map(function (k) {
+    return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>';
+  }).join('') + '</div>';
+  html += '<span class="role-section-label">Your tools</span><div class="role-links">'
+    + cfg.links.map(function (l) { return '<button type="button" class="home-chapter-btn" data-tab="' + l[0] + '">' + escapeHtml(l[1]) + '</button>'; }).join('')
+    + cfg.soon.map(function (t) { return '<button type="button" class="home-chapter-btn" disabled>' + escapeHtml(t) + ' <em>Coming soon</em></button>'; }).join('')
+    + '</div>';
+  wrap.innerHTML = html;
+}
+document.getElementById('homeRoleView').addEventListener('click', function (e) {
+  const btn = e.target.closest('button');
+  if (!btn || btn.disabled) return;
+  const action = btn.getAttribute('data-role-action');
+  if (action === 'walk') { showTab('walk'); if (!walkActive) window.startWalk(); return; }
+  if (action === 'report') { showTab('report'); window.generateReport(); return; }
+  const tab = btn.getAttribute('data-tab');
+  if (tab) showTab(tab);
+});
+function setRole(role) {
+  if (!ROLES[role]) role = 'all';
+  const home = document.getElementById('tab-home');
+  home.setAttribute('data-role', role);
+  home.classList.remove('showing-drilldown');
+  document.querySelectorAll('.home-role-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-role') === role); });
+  saveJson(LS.role, role);
+  renderRoleView();
+}
+document.querySelectorAll('.home-role-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () { setRole(btn.getAttribute('data-role')); });
+});
 
 document.getElementById('addPropertyBtn').addEventListener('click', function () {
   const name = document.getElementById('propName').value.trim();
@@ -1800,6 +1908,7 @@ function clearAllData() {
   renderArrears();
   renderFlagBar();
   setHomeMode('build');
+  setRole('all');
   setWalkStatus('info', 'Ready. Tap to begin.');
   alert('All SiteWalk data cleared.');
 }
@@ -1849,6 +1958,7 @@ window.addEventListener('load', function () {
   }
   document.getElementById('walkStatus').textContent = 'Ready. Tap Start Walk-Around to open the camera and AI listening.';
   setHomeMode(loadJson(LS.homeMode, 'build'));
+  setRole(loadJson(LS.role, 'all'));
   renderProperties();
   renderUnits();
   renderTenants();
