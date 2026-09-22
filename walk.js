@@ -151,8 +151,11 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', review: 'swReviewQueue' };
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
+// Spoken sentences the transcript filter wasn't sure about — held for the
+// user to promote or dismiss after the walk, never silently dropped.
+let reviewQueue = [];
 // LeaseFlow (Hold mode) data — Property is root, Unit belongs to a Property,
 // Tenant is its own record linked to a Unit only through a Lease, Payment is
 // a ledger line against a Lease. leaseWalkContext (below, near startWalk) is
@@ -191,6 +194,7 @@ function persistMaterials() { saveJson(LS.materials, materials); }
 function persistBudget() { saveJson(LS.budget, budget); }
 function persistDrawings() { saveJson(LS.drawings, drawings); }
 function persistWalks() { saveJson(LS.walks, walks); }
+function persistReview() { saveJson(LS.review, reviewQueue); }
 function persistProperties() { saveJson(LS.properties, properties); }
 function persistUnits() { saveJson(LS.units, units); }
 function persistTenants() { saveJson(LS.tenants, tenants); }
@@ -391,6 +395,7 @@ function logNote(text, trade) {
 
 /* ---------- Summary tab (report grouped by trade) ---------- */
 function renderSummary() {
+  renderReviewBucket();
   const content = document.getElementById('summaryContent');
   document.getElementById('statPhotos').textContent = photos.length;
   const allItems = punch.concat(changes, rfis);
@@ -1120,6 +1125,8 @@ function detectVoiceDecline(text) {
 function logSafetyFromVoice(text) {
   const stamp = nowStamp();
   const entry = { type: 'Hazard Observed', desc: text, person: '', action: '', photo: null, time: stamp.time, ts: stamp.ts, iso: stamp.iso };
+  const sev = typeof safetySeverity === 'function' ? safetySeverity(text) : null;
+  if (sev) entry.severity = sev.severity;
   tryLinkItemToRecentPhoto(entry);
   safetyLogs.push(entry);
   persistSafety();
@@ -1128,6 +1135,7 @@ function logSafetyFromVoice(text) {
   renderDashboard();
   logNote(text, 'Safety');
   setWalkStatus('ok', 'Safety issue logged separately from the punch list.');
+  return entry;
 }
 
 function renderDrawingRefs() {
@@ -1202,7 +1210,7 @@ function localClassify(text, approval) {
 function fileVoiceUtterance(text) {
   text = text.trim();
   if (!text) return;
-  if (classifySafetyText(text)) { logSafetyFromVoice(text); return; }
+  if (isSafetyObservation(text)) { logSafetyFromVoice(text); return; }
   const voiceApproval = detectVoiceApproval(text) ? 'Approved' : (detectVoiceDecline(text) ? 'Declined' : null);
   const endpoint = currentAiEndpoint();
   if (!endpoint) { const e = fileEntry(localClassify(text, voiceApproval)); const cleaned = summarizeNote(e.text); if (cleaned) logNote(cleaned, e.trade); return; }
@@ -1227,6 +1235,181 @@ function fileVoiceUtterance(text) {
       const cleaned = summarizeNote(e.text);
       if (cleaned) logNote(cleaned, e.trade);
     });
+}
+
+/* ---------- Transcript filter: which spoken sentences become items ---------- */
+// The walk listens continuously, so most of what it hears is crew chatter.
+// Every finalized sentence is kept verbatim in the walk's raw transcript
+// (currentWalk.rawTranscript); this filter only decides what surfaces as an
+// item. Three outcomes:
+//   'item'   — a clear observation (defect, safety, change order, RFI,
+//              drawing reference) → filed through fileVoiceUtterance into
+//              the shared punch/change/RFI/Safety arrays, exactly as before.
+//   'review' — borderline (mentions the building or a trade but no clear
+//              problem, or an observation wrapped in chatter) → held in
+//              reviewQueue for a one-tap promote/dismiss after the walk.
+//   'drop'   — small talk with nothing job-related in it → raw transcript only.
+// "Note this" at the start of a sentence forces it (or, said on its own, the
+// next sentence) to be filed as an item regardless of the filter.
+const NOTE_TRIGGER_RE = /^\s*(?:(?:okay|ok|hey|so|and)[,\s]+)?(?:note|log|flag) (?:this|that)\b[\s,.:;!-]*/i;
+const NOTE_TRIGGER_WINDOW_MS = 20000;
+let noteTriggerArmedUntil = 0;
+const DEFECT_RE = /\b(crack(?:ed|s|ing)?|broken|damaged?|missing|loose|leak(?:s|ing|y)?|gaps?|uneven|not (?:level|plumb|square|flush|sealed|secured|installed|finished|done|working|to code|up to code)|out of (?:plumb|level|square)|scratch(?:ed|es)?|dent(?:ed|s)?|chipped|stain(?:ed|s)?|peeling|sagging|warped|rott?(?:ed|en|ing)|mold|mildew|water damage|incomplete|unfinished|crooked|backwards|upside down|wrong (?:size|color|colour|spot|place|way|one)|installed wrong|code violation|violation|failed inspection|(?:does|did|do)(?:n'?t| not) (?:work|close|latch|open|drain|fit|line up)|won'?t (?:close|latch|open|drain|fit)|redo|re-?do|re-?install|re-?caulk|re-?paint|re-?tape|re-?set|touch[- ]?ups?|fix|repair|replace|patch|needs? (?:to be |to get )?(?:fixed|repaired|replaced|patched|redone|sealed|caulked|painted|adjusted|moved|cleaned|finished|installed|secured|shimmed|sanded|re-?\w+)|needs? (?:a |another |more )?(?:coat|patch|shim|screws?|nails?|bead|caulk|touch[- ]?up|fix|repair|sanding|paint|mud|trim|cover|plate))\b/i;
+const BUILDING_RE = /\b(walls?|ceilings?|floors?|flooring|windows?|doors?|trim|baseboards?|casing|cabinets?|counters?|countertops?|tiles?|grout|outlets?|receptacles?|switch(?:es)?|fixtures?|lights?|stairs?|stairway|railings?|handrail|deck|roof|siding|soffit|fascia|beams?|joists?|studs?|headers?|slab|foundation|ducts?|ductwork|vents?|pipes?|drains?|faucets?|toilets?|sinks?|shower|tub|panel|breakers?|insulation|drywall|sheetrock|paint|caulk|carpet|hardwood|kitchen|bath(?:room)?|bedroom|garage|hallway|basement|attic|closet|laundry|unit|suite|hvac|furnace|water heater|gutters?|flashing|shingles?|sheathing|subfloor|framing|concrete|rebar|footing|electrical|plumbing)\b/i;
+const CHATTER_RE = /(^\s*(?:hey|hi|hello|morning|thanks|thank you|cheers|bye|yeah|nah|nope|sure|cool)\b[\s,.!?]*$)|\b(hand me|pass me|toss me|grab me|give me (?:that|the|a|your)|can you (?:hand|pass|grab|hold|get me|toss)|hold (?:this|that) for me|lunch|coffee|break time|smoke break|the game|this weekend|last night|see you|see ya|talk (?:to you )?later|good morning|my truck|let'?s go|no worries|sounds good|how(?:'s| is) it going|how are you|what time is it)\b/i;
+function wordCount(text) { const c = cleanSpeech(text); return c ? c.split(/\s+/).length : 0; }
+function isSafetyObservation(text) {
+  if (classifySafetyText(text)) return true;
+  const sev = typeof safetySeverity === 'function' ? safetySeverity(text) : null;
+  return !!(sev && sev.level !== 'low');
+}
+function assessUtterance(text) {
+  const words = wordCount(text);
+  if (!words) return { level: 'drop', reason: 'Filler only' };
+  const strong = [], weak = [];
+  if (isSafetyObservation(text)) strong.push('safety');
+  const kind = classifyText(text);
+  if (kind === 'change') strong.push('change order');
+  if (kind === 'rfi') strong.push('RFI');
+  if (extractDrawingRef(text)) strong.push('drawing reference');
+  if (DEFECT_RE.test(text) || (typeof PUNCH_TRIGGER_RE !== 'undefined' && PUNCH_TRIGGER_RE.test(text))) strong.push('defect');
+  if (BUILDING_RE.test(text)) weak.push('building element');
+  if (classifyTrade(text)) weak.push('trade');
+  if (/\$\s?\d/.test(text)) weak.push('cost');
+  const sev = typeof safetySeverity === 'function' ? safetySeverity(text) : null;
+  if (sev && sev.level === 'low') weak.push('housekeeping');
+  const chatter = CHATTER_RE.test(text);
+  if (strong.length && !chatter) return { level: 'item', reason: 'Mentions ' + strong.join(', ') };
+  if (strong.length) return { level: 'review', reason: 'Mentions ' + strong.join(', ') + ' but sounds like conversation' };
+  if (weak.length && !chatter && words >= 3) return { level: 'review', reason: 'Mentions ' + weak.join(', ') + ' but no clear problem' };
+  return { level: 'drop', reason: chatter ? 'Small talk' : 'Nothing job-related' };
+}
+// Appends one finalized sentence, verbatim, to the active walk's record.
+// disposition is filled in once the filter has decided what to do with it.
+function recordRawTranscript(text) {
+  if (!currentWalk || !walkActive) return null;
+  if (!currentWalk.rawTranscript) currentWalk.rawTranscript = [];
+  const stamp = nowStamp();
+  const entry = { text: text, ts: stamp.ts, iso: stamp.iso, disposition: null };
+  currentWalk.rawTranscript.push(entry);
+  persistWalks();
+  return entry;
+}
+// Entry point for every finalized spoken sentence (continuous listening,
+// the text left over after a "take a photo" trigger, or a push-to-talk note).
+// opts.rawEntry: the raw-transcript line to annotate; opts.forced: file it
+// no matter what (push-to-talk is a deliberate note); opts.fromSnap: a photo
+// was just taken on this sentence, so anything job-ish is at least reviewed.
+function handleSpokenUtterance(text, opts) {
+  opts = opts || {};
+  text = (text || '').trim();
+  // "take a photo of the tile edge" leaves "of the tile edge" behind.
+  if (opts.fromSnap) text = text.replace(/^of\s+/i, '');
+  const rawEntry = opts.rawEntry || null;
+  function mark(disposition, reason) {
+    if (rawEntry) { rawEntry.disposition = disposition; if (reason) rawEntry.reason = reason; persistWalks(); }
+  }
+  if (!text) { mark(opts.fromSnap ? 'photo' : 'drop'); return 'drop'; }
+  let forced = !!opts.forced;
+  const trig = text.match(NOTE_TRIGGER_RE);
+  if (trig) {
+    text = text.slice(trig[0].length).trim();
+    if (!text) {
+      noteTriggerArmedUntil = Date.now() + NOTE_TRIGGER_WINDOW_MS;
+      mark('trigger', '"Note this" — next sentence will be filed');
+      setWalkStatus('ok', 'Noting the next thing you say…');
+      return 'trigger';
+    }
+    forced = true;
+  } else if (noteTriggerArmedUntil && Date.now() <= noteTriggerArmedUntil) {
+    forced = true;
+  }
+  if (forced) noteTriggerArmedUntil = 0;
+  let verdict = forced ? { level: 'item', reason: opts.forced ? 'Recorded note' : '"Note this"' } : assessUtterance(text);
+  if (opts.fromSnap && verdict.level === 'drop' && wordCount(text) >= 2) verdict = { level: 'review', reason: 'Said while taking a photo' };
+  mark(verdict.level, verdict.reason);
+  if (verdict.level === 'item') { fileVoiceUtterance(text); processVoiceValue(text); }
+  else if (verdict.level === 'review') addToReviewQueue(text, verdict.reason);
+  else console.log('[SiteWalk] transcript only (' + verdict.reason + '):', text);
+  return verdict.level;
+}
+
+/* ---------- Low confidence — review bucket ---------- */
+function addToReviewQueue(text, reason) {
+  const stamp = nowStamp();
+  reviewQueue.push({
+    id: 'r_' + stamp.ts.toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+    text: text, reason: reason, trade: classifyTrade(text) || tradeSelect.value,
+    time: stamp.time, ts: stamp.ts, iso: stamp.iso,
+    walkId: currentWalk ? currentWalk.id : null,
+    leaseCtx: leaseWalkContext ? { propertyId: leaseWalkContext.propertyId, unitId: leaseWalkContext.unitId } : null
+  });
+  persistReview();
+  renderReviewBucket();
+  setWalkStatus('info', 'Not sure that was an item — saved to Review.');
+}
+// Files a held sentence through the same path a confident one takes, as if
+// it had been filed when it was spoken: same walk, same lease-walk context,
+// original timestamp (so the 60s photo link still finds photos snapped then).
+function promoteReviewItem(id) {
+  const r = reviewQueue.find(function (x) { return x.id === id; });
+  if (!r) return;
+  reviewQueue = reviewQueue.filter(function (x) { return x.id !== id; });
+  persistReview();
+  const prevWalk = currentWalk, prevCtx = leaseWalkContext;
+  const walk = r.walkId ? walks.find(function (w) { return w.id === r.walkId; }) : null;
+  if (walk) currentWalk = walk;
+  leaseWalkContext = r.leaseCtx || null;
+  let entry = null, type = null;
+  try {
+    if (isSafetyObservation(r.text)) { entry = logSafetyFromVoice(r.text); type = 'safety'; }
+    else {
+      const approval = detectVoiceApproval(r.text) ? 'Approved' : (detectVoiceDecline(r.text) ? 'Declined' : undefined);
+      entry = fileEntry({ text: r.text, type: classifyText(r.text), trade: r.trade, verified: true, approval: approval });
+      const cleaned = summarizeNote(entry.text);
+      if (cleaned) logNote(cleaned, entry.trade);
+    }
+    processVoiceValue(r.text);
+  } finally { currentWalk = prevWalk; leaseWalkContext = prevCtx; }
+  if (entry) {
+    entry.time = r.time; entry.ts = r.ts; entry.iso = r.iso; entry.promotedFromReview = true;
+    if (!entry.photo) tryLinkItemToRecentPhoto(entry);
+    if (type === 'safety') { persistSafety(); renderSafetyLogs(); } else { persistLists(); renderAllItems(); }
+    persistWalks();
+  }
+  markRawTranscript(r, 'item', 'Promoted from review');
+  renderReviewBucket(); renderSummary(); renderDashboard();
+}
+function dismissReviewItem(id) {
+  const r = reviewQueue.find(function (x) { return x.id === id; });
+  reviewQueue = reviewQueue.filter(function (x) { return x.id !== id; });
+  persistReview();
+  if (r) markRawTranscript(r, 'dismissed', 'Dismissed from review');
+  renderReviewBucket();
+}
+function markRawTranscript(r, disposition, reason) {
+  const walk = r.walkId ? walks.find(function (w) { return w.id === r.walkId; }) : null;
+  if (!walk || !walk.rawTranscript) return;
+  let best = null;
+  walk.rawTranscript.forEach(function (t) { if (t.disposition === 'review' && t.text.indexOf(r.text) !== -1 && (!best || Math.abs(t.ts - r.ts) < Math.abs(best.ts - r.ts))) best = t; });
+  if (best) { best.disposition = disposition; best.reason = reason; persistWalks(); }
+}
+function renderReviewBucket() {
+  const n = reviewQueue.length;
+  const btn = document.getElementById('reviewBucketBtn');
+  if (btn) { btn.style.display = n ? '' : 'none'; btn.textContent = '🔎 ' + n + ' to review'; }
+  const wrap = document.getElementById('reviewBucket');
+  if (!wrap) return;
+  if (!n) { wrap.innerHTML = ''; return; }
+  let html = '<div class="w-review-card"><h3>Low confidence — review <span class="w-review-count">' + n + '</span></h3>'
+    + '<p class="w-review-hint">Heard during the walk but not clearly an item. Add it or dismiss it — the full transcript is kept either way.</p>';
+  reviewQueue.slice().sort(function (a, b) { return a.ts - b.ts; }).forEach(function (r) {
+    html += '<div class="w-review-item" data-review-id="' + escapeHtml(r.id) + '"><div class="w-review-text">“' + escapeHtml(r.text) + '”</div>'
+      + '<div class="meta">' + escapeHtml(r.trade) + ' · ' + escapeHtml(r.time) + ' · ' + escapeHtml(r.reason) + '</div>'
+      + '<div class="w-review-actions"><button type="button" class="w-review-add" data-review-action="promote">＋ Add as item</button>'
+      + '<button type="button" class="w-review-dismiss" data-review-action="dismiss">✕ Dismiss</button></div></div>';
+  });
+  wrap.innerHTML = html + '</div>';
 }
 
 function snapFromVideo(video) { if (!video || !video.videoWidth) return null; const max = 1280; const scale = Math.min(1, max / Math.max(video.videoWidth, video.videoHeight)); const c = document.createElement('canvas'); c.width = Math.round(video.videoWidth * scale); c.height = Math.round(video.videoHeight * scale); const ctx = c.getContext('2d'); if (!ctx) return null; ctx.drawImage(video, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.72); }
@@ -1300,10 +1483,10 @@ function setupRecognition() {
       if (event.results[i].isFinal) {
         if (transcript) {
           if (!isNoiseTranscript(transcript)) console.log('[SiteWalk] heard:', transcript);
+          const rawEntry = recordRawTranscript(transcript);
           const remainder = extractSnapTriggerRemainder(transcript);
-          if (remainder !== null) { voiceTriggeredSnap(transcript); if (remainder) fileVoiceUtterance(remainder); }
-          else fileVoiceUtterance(transcript);
-          processVoiceValue(transcript);
+          if (remainder !== null) { voiceTriggeredSnap(transcript); handleSpokenUtterance(remainder, { rawEntry: rawEntry, fromSnap: true }); }
+          else handleSpokenUtterance(transcript, { rawEntry: rawEntry });
         }
       }
       else if (!isNoiseTranscript(transcript)) interim += transcript;
@@ -1354,8 +1537,9 @@ function transcribeAndFile(blob) {
         const text = (data.text || '').trim();
         if (!text) { setWalkStatus('info', 'Heard nothing usable. Try again closer to the mic.'); return; }
         setWalkStatus('ok', 'Heard: "' + text + '"');
-        fileVoiceUtterance(text);
-        processVoiceValue(text);
+        // A push-to-talk note is a deliberate capture, so it skips the chatter
+        // filter — but it still goes into the walk's raw transcript.
+        handleSpokenUtterance(text, { rawEntry: recordRawTranscript(text), forced: true });
       })
       .catch(function (err) { setWalkStatus('err', 'Transcribe failed: ' + (err && err.message ? err.message : 'unknown')); });
   });
@@ -1514,7 +1698,7 @@ function openWalkCamera() { const video = document.getElementById('walkVideo'); 
 window.startWalk = function () {
   if (walkActive) return;
   walkActive = true;
-  currentWalk = { id: makeWalkId(), startedAt: new Date().toISOString(), endedAt: null, transcript: [], punches: [], costs: [], safety: [] };
+  currentWalk = { id: makeWalkId(), startedAt: new Date().toISOString(), endedAt: null, transcript: [], rawTranscript: [], punches: [], costs: [], safety: [] };
   walks.push(currentWalk);
   persistWalks();
   const btn = document.getElementById('walkBtn');
@@ -1574,6 +1758,13 @@ function takePhoto() { const fromLive = walkStream ? snapFromVideo(document.getE
 document.getElementById('shutterBtn').addEventListener('click', takePhoto);
 document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelectedPhotos);
 document.getElementById('generateSummaryBtn').addEventListener('click', function () { renderSummary(); showWalkTab('summary'); });
+document.getElementById('reviewBucketBtn').addEventListener('click', function () { renderSummary(); showWalkTab('summary'); });
+document.getElementById('reviewBucket').addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-review-action]');
+  if (!btn) return;
+  const id = btn.closest('[data-review-id]').getAttribute('data-review-id');
+  if (btn.getAttribute('data-review-action') === 'promote') promoteReviewItem(id); else dismissReviewItem(id);
+});
 document.getElementById('walkRecordBtn').addEventListener('click', toggleRecordingNote);
 document.getElementById('photoInput').addEventListener('change', function (e) { const files = e.target.files; if (!files || !files.length) return; for (let f of files) { const r = new FileReader(); r.onload = function (ev) { compressImage(ev.target.result, saveWalkPhoto); }; r.readAsDataURL(f); } e.target.value = ''; });
 document.getElementById('saveVideoToggle').addEventListener('change', function (e) { saveJson(LS.saveVideo, !!e.target.checked); });
@@ -1702,7 +1893,16 @@ function renderWalkLogSection() {
   }
   html += '<div class="punch-item"><strong>Started</strong> ' + escapeHtml(new Date(walkToShow.startedAt).toLocaleString())
     + (walkToShow.endedAt ? (' · <strong>Ended</strong> ' + escapeHtml(new Date(walkToShow.endedAt).toLocaleString())) : ' · <em>in progress</em>') + '</div>';
-  if (walkToShow.transcript.length) {
+  if (walkToShow.rawTranscript && walkToShow.rawTranscript.length) {
+    // The full, unfiltered record of what was said — each line tagged with
+    // what the filter did with it.
+    const TAG = { item: 'Item', review: 'Review', dismissed: 'Dismissed', drop: 'Chatter', photo: 'Photo', trigger: 'Note this' };
+    html += '<div class="punch-item"><strong>Full Transcript</strong></div>';
+    walkToShow.rawTranscript.forEach(function (t) {
+      html += '<div class="punch-item report-transcript-line report-transcript-' + escapeHtml(t.disposition || 'drop') + '">[' + escapeHtml(t.iso) + '] ' + escapeHtml(t.text)
+        + ' <span class="report-transcript-tag">' + escapeHtml(TAG[t.disposition] || 'Chatter') + '</span></div>';
+    });
+  } else if (walkToShow.transcript.length) {
     html += '<div class="punch-item"><strong>Transcript</strong></div>';
     walkToShow.transcript.forEach(function (t) { html += '<div class="punch-item">[' + escapeHtml(t.iso) + '] ' + escapeHtml(t.text) + '</div>'; });
   }
@@ -1728,6 +1928,14 @@ window.generateReport = function () {
   html += reportItemSection('Change Orders', changes, 'change');
   html += reportItemSection('RFIs', rfis, 'rfi');
   html += reportItemSection('Safety &amp; Quality Log', safetyLogs, 'safety');
+  if (reviewQueue.length) {
+    html += '<div class="report-section"><h3>Low Confidence — Awaiting Review (' + reviewQueue.length + ')</h3>';
+    reviewQueue.forEach(function (r) {
+      html += '<div class="report-item"><div class="report-item-head"><span class="report-type-badge">Review</span><span class="trade-tag">' + escapeHtml(r.trade) + '</span>' + escapeHtml(r.text) + '</div>'
+        + '<div class="report-item-meta">' + escapeHtml(r.reason) + ' · ' + escapeHtml(r.time) + '</div></div>';
+    });
+    html += '</div>';
+  }
   // Photos not attached to any item still belong in the report body — each
   // shows as its own entry (trade, time, what was being said), not a gallery.
   const attached = {};
@@ -1812,7 +2020,7 @@ document.getElementById('genBtn').addEventListener('click', window.generateRepor
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
-  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null;
+  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null; reviewQueue = [];
   properties = []; units = []; tenants = []; leases = []; payments = []; leaseWalkContext = null;
   selectedPhotos.clear();
   Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
@@ -1855,14 +2063,14 @@ document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
 window.addEventListener('load', function () {
   photos = loadJson(LS.photos, []); punch = loadJson(LS.punch, []); changes = loadJson(LS.changes, []); rfis = loadJson(LS.rfis, []); contacts = loadJson(LS.contacts, {});
   submittals = loadJson(LS.submittals, []); clockEvents = loadJson(LS.clockEvents, []); dailyLogs = loadJson(LS.dailyLogs, []); safetyLogs = loadJson(LS.safety, []); notesLog = loadJson(LS.notes, []);
-  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []); walks = loadJson(LS.walks, []);
+  wages = loadJson(LS.wages, {}); materials = loadJson(LS.materials, []); budget = loadJson(LS.budget, { labor: 0, materials: 0 }); drawings = loadJson(LS.drawings, []); walks = loadJson(LS.walks, []); reviewQueue = loadJson(LS.review, []);
   properties = loadJson(LS.properties, []); units = loadJson(LS.units, []); tenants = loadJson(LS.tenants, []); leases = loadJson(LS.leases, []); payments = loadJson(LS.payments, []);
   if (!Array.isArray(photos)) photos = []; if (!Array.isArray(punch)) punch = []; if (!Array.isArray(changes)) changes = []; if (!Array.isArray(rfis)) rfis = [];
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
   if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
-  if (!Array.isArray(walks)) walks = [];
+  if (!Array.isArray(walks)) walks = []; if (!Array.isArray(reviewQueue)) reviewQueue = [];
   if (!Array.isArray(properties)) properties = []; if (!Array.isArray(units)) units = []; if (!Array.isArray(tenants)) tenants = []; if (!Array.isArray(leases)) leases = []; if (!Array.isArray(payments)) payments = [];
-  walks.forEach(function (w) { ['transcript', 'punches', 'costs', 'safety'].forEach(function (k) { if (!Array.isArray(w[k])) w[k] = []; }); });
+  walks.forEach(function (w) { ['transcript', 'rawTranscript', 'punches', 'costs', 'safety'].forEach(function (k) { if (!Array.isArray(w[k])) w[k] = []; }); });
   currentWalk = walks.length ? walks[walks.length - 1] : null;
   const savedSiteName = loadJson(LS.siteName, null);
   const savedSiteAddress = loadJson(LS.siteAddress, null);

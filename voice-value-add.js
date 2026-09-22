@@ -1,8 +1,6 @@
 /* ---------- Voice value-add: punch, cost, safety from speech ---------- */
-// Hooks into the existing speech transcript. Call processVoiceValue(text)
-// from wherever the live transcript is handled (e.g. recognition.onresult).
-// Creates punch items, tallies rough cost, and flags safety hazards by
-// keyword — all stored in the same localStorage shape as the rest of the app.
+// Keyword tables and the rough cost tally used by the walk's transcript
+// filter. Punch items and safety entries are filed by walk.js, not here.
 
 const PUNCH_TRIGGER_RE = /\b(fix|repair|replace|patch|touch[- ]?up|needs? (?:to be )?(?:fixed|repaired|replaced|done)|punch (?:list|item)|add (?:a |this |that )?to (?:the )?punch)\b/i;
 const COST_RE = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(k|thousand)?/gi;
@@ -15,27 +13,6 @@ const SAFETY_SEVERITY = { high: 'High', medium: 'Medium', low: 'Low' };
 
 function currentTrade() {
   return (tradeSelect && tradeSelect.value) ? tradeSelect.value : 'General';
-}
-
-function addPunchFromVoice(text) {
-  const stamp = nowStamp();
-  const entry = {
-    text: text.replace(PUNCH_TRIGGER_RE, '').trim() || text,
-    trade: currentTrade(),
-    ts: stamp.ts,
-    time: stamp.time,
-    iso: stamp.iso,
-    resolved: false,
-    source: 'voice'
-  };
-  punch.push(entry);
-  persistLists();
-  if (typeof pushToCurrentWalk === 'function') pushToCurrentWalk('punches', entry);
-  if (typeof tryLinkItemToRecentPhoto === 'function') tryLinkItemToRecentPhoto(entry);
-  if (typeof renderAllItems === 'function') renderAllItems();
-  if (typeof renderSummary === 'function') renderSummary();
-  setWalkStatus('ok', 'Punch item added');
-  return entry;
 }
 
 function tallyCostFromVoice(text) {
@@ -57,46 +34,26 @@ function tallyCostFromVoice(text) {
   return total;
 }
 
-function flagSafetyFromVoice(text) {
-  const lower = text.toLowerCase();
-  let sev = null, matched = null;
+// Severity of a spoken hazard by keyword, or null. Used by the transcript
+// filter (walk.js assessUtterance) to decide whether a sentence is a real
+// safety observation, and by logSafetyFromVoice to stamp the severity on
+// the one Safety Log entry it creates.
+function safetySeverity(text) {
+  const lower = String(text || '').toLowerCase();
   for (const level of ['high', 'medium', 'low']) {
     for (const w of SAFETY_WORDS[level]) {
-      if (lower.indexOf(w) !== -1) { sev = level; matched = w; break; }
+      if (lower.indexOf(w) !== -1) return { level: level, severity: SAFETY_SEVERITY[level], matched: w };
     }
-    if (sev) break;
   }
-  if (!sev) return null;
-  const stamp = nowStamp();
-  const entry = {
-    text: text,
-    trade: currentTrade(),
-    ts: stamp.ts,
-    time: stamp.time,
-    iso: stamp.iso,
-    severity: SAFETY_SEVERITY[sev],
-    matched: matched,
-    source: 'voice'
-  };
-  safetyLogs.push(entry);
-  persistSafety();
-  if (typeof pushToCurrentWalk === 'function') pushToCurrentWalk('safety', entry);
-  if (typeof renderSafety === 'function') renderSafety();
-  if (typeof renderSummary === 'function') renderSummary();
-  setWalkStatus('err', 'Safety: ' + SAFETY_SEVERITY[sev] + ' — ' + matched);
-  return entry;
+  return null;
 }
 
+// Runs only for sentences the transcript filter has already accepted as
+// items (walk.js handleSpokenUtterance / promoteReviewItem), so a dollar
+// figure in small talk never lands in the job budget. Punch items and
+// safety entries are no longer created here — fileVoiceUtterance files
+// them once, in the shared punch/change-order and Safety Log shapes.
 function processVoiceValue(text) {
   if (!text) return;
-  if (PUNCH_TRIGGER_RE.test(text)) addPunchFromVoice(text);
   tallyCostFromVoice(text);
-  flagSafetyFromVoice(text);
 }
-
-// Example hook — wire this into your existing recognition.onresult:
-// recognition.onresult = function (e) {
-//   const t = e.results[e.results.length - 1][0].transcript;
-//   logNote(t, currentTrade());          // existing
-//   processVoiceValue(t);                // new
-// };

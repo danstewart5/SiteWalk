@@ -72,6 +72,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .report-item-change .report-type-badge { background: #fefcbf; color: #744210; }
 .report-item-rfi .report-type-badge { background: #e9d8fd; color: #44337a; }
 .report-item-safety .report-type-badge { background: #fed7d7; color: #822727; }
+.report-transcript-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: #718096; border: 1px solid #cbd5e0; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.report-transcript-drop, .report-transcript-dismissed { color: #a0aec0; }
 .report-item-meta { font-size: 12px; color: #4a5568; margin-top: 2px; }
 .report-section .report-photo-single img { display: block; width: auto; max-width: min(100%, 320px); margin: 8px 0 0; border-radius: 6px; cursor: zoom-in; }
 .report-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -172,6 +174,17 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .w-summary-item { padding: 9px 0; border-bottom: 1px dashed var(--w-border); font-size: 14px; }
 .w-summary-item:last-child { border-bottom: none; }
 .w-summary-item .meta { font-size: 11px; color: var(--w-text-soft); margin-top: 2px; }
+.w-review-btn { display: block; width: auto; margin: 8px auto 0; background: #fffbeb; border: 1.5px solid #d69e2e; color: #744210; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; padding: 9px 18px; border-radius: 999px; cursor: pointer; }
+.w-review-card { background: #fffbeb; border: 1px solid #f6e05e; border-radius: 18px; padding: 16px 18px; margin-bottom: 14px; }
+.w-review-card h3 { margin: 0 0 4px; font-size: 15px; color: #744210; display: flex; align-items: center; gap: 8px; }
+.w-review-count { background: #d69e2e; color: #fff; font-size: 12px; border-radius: 999px; padding: 1px 8px; }
+.w-review-hint { font-size: 12px; color: #975a16; margin: 0 0 8px; }
+.w-review-item { padding: 10px 0; border-top: 1px dashed #f6e05e; font-size: 14px; }
+.w-review-item .meta { font-size: 11px; color: var(--w-text-soft); margin-top: 2px; }
+.w-review-actions { display: flex; gap: 8px; margin-top: 8px; }
+.w-review-actions button { flex: 1; width: auto; margin: 0; padding: 9px 10px; font-size: 13px; font-weight: 600; border-radius: 10px; cursor: pointer; }
+.w-review-add { background: var(--w-primary); color: #fff; border: none; }
+.w-review-dismiss { background: #fff; color: #4a5568; border: 1px solid #cbd5e0; }
 .w-empty { text-align: center; color: var(--w-text-soft); padding: 50px 16px; font-size: 14px; }
 .w-empty .big { font-size: 30px; display: block; margin-bottom: 10px; }
 
@@ -645,6 +658,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
     <button id="generateSummaryBtn" type="button" class="w-generate-summary-btn">📋 Generate Summary</button>
+    <button id="reviewBucketBtn" type="button" class="w-review-btn" style="display:none">🔎 0 to review</button>
   </div>
 
   <select id="tradeSelect" aria-label="Current trade" aria-hidden="true">
@@ -668,6 +682,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
     <div class="w-overview-stat"><span class="num" id="statOpen">0</span><span class="label">Open Items</span></div>
     <div class="w-overview-stat"><span class="num" id="statTrades">0</span><span class="label">Trades</span></div>
   </div>
+  <div id="reviewBucket"></div>
   <div id="summaryContent"></div>
 </div>
 
