@@ -221,15 +221,27 @@ function photoTs(item) { return item.ts || Date.parse(item.time) || 0; }
 // (or vice versa), within a short time window, so tapping a punch list item
 // shows its related photo instead of keeping the two lists disconnected.
 function tryLinkPhotoToRecentItem(photo) {
-  const candidates = punch.concat(changes, rfis).filter(function (e) {
+  // An item that already has a photo can still pick up more — a second or
+  // third snap of the same issue lands in entry.photos and shows as a
+  // thumbnail row in the report. Safety log entries link the same way.
+  const candidates = punch.concat(changes, rfis, safetyLogs).filter(function (e) {
     const dt = photo.ts - (e.ts || 0);
-    return !e.photo && dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS;
+    return dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS;
   }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
   if (!candidates.length) return false;
-  candidates[0].photo = photo.src;
-  photo.linkedItemText = candidates[0].text;
-  persistLists(); persistPhotos(); renderAllItems();
+  const target = candidates[0];
+  if (!target.photo) target.photo = photo.src;
+  else if (itemPhotos(target).indexOf(photo.src) === -1) { target.photos = itemPhotos(target).concat(photo.src); }
+  photo.linkedItemText = target.text || target.desc;
+  persistLists(); persistSafety(); persistPhotos(); renderAllItems(); renderSafetyLogs();
   return true;
+}
+// Every photo attached to an item, first one included, de-duplicated —
+// entry.photo stays the primary photo so existing item cards keep working.
+function itemPhotos(entry) {
+  const out = [];
+  [entry.photo].concat(entry.photos || []).forEach(function (src) { if (src && out.indexOf(src) === -1) out.push(src); });
+  return out;
 }
 function tryLinkItemToRecentPhoto(entry) {
   const candidates = photos.filter(function (p) {
@@ -238,7 +250,7 @@ function tryLinkItemToRecentPhoto(entry) {
   }).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
   if (!candidates.length) return false;
   entry.photo = candidates[0].src;
-  candidates[0].linkedItemText = entry.text;
+  candidates[0].linkedItemText = entry.text || entry.desc;
   persistLists(); persistPhotos();
   return true;
 }
@@ -1539,9 +1551,9 @@ window.endWalk = function () {
   document.getElementById('stopWalkBtn').classList.remove('visible');
   document.getElementById('walkHero').style.display = '';
   document.getElementById('walkStage').classList.remove('active');
-  setWalkStatus('info', 'Walk ended. Generating report…');
-  showTab('report');
-  window.generateReport();
+  // The report is never built automatically — it only generates when the
+  // user presses Generate Report (Report tab or the Home quick action).
+  setWalkStatus('info', 'Walk ended. Tap Generate Report when you\'re ready.');
 };
 document.getElementById('walkBtn').addEventListener('click', function () { walkActive ? takePhoto() : window.startWalk(); });
 document.getElementById('stopWalkBtn').addEventListener('click', function () { window.endWalk(); });
@@ -1705,35 +1717,34 @@ function renderWalkLogSection() {
   }
   if (walkToShow.safety.length) {
     html += '<div class="punch-item"><strong>Safety Flags (this walk)</strong></div>';
-    walkToShow.safety.forEach(function (s) { html += '<div class="punch-item">[' + escapeHtml(s.iso) + '] ' + escapeHtml(s.text) + '</div>'; });
+    walkToShow.safety.forEach(function (s) { html += '<div class="punch-item">[' + escapeHtml(s.iso) + '] ' + escapeHtml(s.text || s.desc) + '</div>'; });
   }
   return html + '</div>';
 }
 window.generateReport = function () {
-  const trades = {};
-  photos.forEach(function (p) { if (!trades[p.trade]) trades[p.trade] = []; trades[p.trade].push(p); });
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + new Date().toLocaleString() + '</div>';
   html += renderWalkLogSection();
-  Object.keys(trades).forEach(function (t) {
-    html += '<div class="report-section"><h3>' + t + '</h3>';
-    trades[t].forEach(function (p) {
-      html += '<img src="' + p.src + '">';
-      html += '<div class="punch-item"><span class="trade-tag">' + escapeHtml(p.trade) + '</span> ' + escapeHtml(p.linkedItemText || '(no description)') + '</div>';
+  html += reportItemSection('Punch List', punch, 'punch');
+  html += reportItemSection('Change Orders', changes, 'change');
+  html += reportItemSection('RFIs', rfis, 'rfi');
+  html += reportItemSection('Safety &amp; Quality Log', safetyLogs, 'safety');
+  // Photos not attached to any item still belong in the report body — each
+  // shows as its own entry (trade, time, what was being said), not a gallery.
+  const attached = {};
+  punch.concat(changes, rfis, safetyLogs).forEach(function (e) { itemPhotos(e).forEach(function (src) { attached[src] = true; }); });
+  const loose = photos.filter(function (p) { return !attached[p.src]; });
+  if (loose.length) {
+    html += '<div class="report-section"><h3>Photos Without a Filed Item</h3>';
+    loose.forEach(function (p) {
+      html += '<div class="report-item"><div class="report-item-head"><span class="report-type-badge">Photo</span><span class="trade-tag">' + escapeHtml(p.trade || 'General') + '</span>'
+        + escapeHtml(p.transcriptText || p.linkedItemText || '(no description)') + '</div>'
+        + '<div class="report-item-meta">' + escapeHtml(p.time || '') + (p.source === 'voice' ? ' · Voice snap' : '') + '</div>'
+        + reportPhotosHtml([p.src]) + '</div>';
     });
     html += '</div>';
-  });
-  function sect(title, arr, extra) {
-    if (!arr.length) return '';
-    let h = '<div class="report-section"><h3>' + title + '</h3>';
-    arr.forEach(function (item) { h += '<div class="punch-item">[' + item.trade + '] ' + item.text + (extra ? extra(item) : '') + '</div>'; });
-    return h + '</div>';
   }
-  html += sect('Punch List', punch, function (i) { return i.resolved ? ' — Resolved' : ''; });
-  html += sect('Change Orders', changes, function (i) { return ' — $' + (i.costEstimate != null ? i.costEstimate : '?') + ' (' + (i.approval || 'Pending') + ')'; });
-  html += sect('RFIs', rfis, function (i) { return ' — ' + (i.status || 'Open'); });
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
   if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
-  if (safetyLogs.length) { html += '<div class="report-section"><h3>Safety Log</h3>'; safetyLogs.forEach(function (s) { html += '<div class="punch-item">[' + s.type + '] ' + s.desc + (s.action ? ' — Action: ' + s.action : '') + '</div>'; }); html += '</div>'; }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   const laborRows = laborCostByEmployee();
@@ -1760,6 +1771,43 @@ window.generateReport = function () {
   const walkSel = document.getElementById('walkLogSelect');
   if (walkSel) walkSel.addEventListener('change', function () { selectedWalkId = walkSel.value; window.generateReport(); });
 };
+// One report entry per item, with its photo(s) inline directly under it:
+// type (punch vs change order vs RFI vs safety), trade, location, cost
+// estimate, status, and the rest of the item detail.
+const REPORT_TYPE_LABEL = { punch: 'Punch', change: 'Change Order', rfi: 'RFI', safety: 'Safety' };
+function reportItemSection(title, arr, type) {
+  if (!arr.length) return '';
+  let h = '<div class="report-section"><h3>' + title + '</h3>';
+  arr.forEach(function (item) {
+    const text = type === 'safety' ? item.desc : item.text;
+    const tag = type === 'safety' ? item.type : (item.trade || 'General');
+    const meta = [];
+    if (item.location) meta.push('Location: ' + escapeHtml(item.location));
+    if (type === 'punch' || type === 'change') meta.push('Cost estimate: ' + (item.costEstimate != null ? '$' + Number(item.costEstimate).toLocaleString() : '—'));
+    if (type === 'punch') meta.push(item.resolved ? 'Resolved' : 'Open');
+    if (type === 'change') meta.push('Approval: ' + escapeHtml(item.approval || 'Pending'));
+    if (type === 'rfi') meta.push('Status: ' + escapeHtml(item.status || 'Open'));
+    if (item.drawingRef) meta.push('Drawing: ' + escapeHtml(item.drawingRef));
+    if (item.source === 'lease-walk') meta.push('Lease walk');
+    if (type === 'safety' && item.person) meta.push('Involved: ' + escapeHtml(item.person));
+    if (type === 'safety' && item.action) meta.push('Action: ' + escapeHtml(item.action));
+    if (item.time) meta.push(escapeHtml(item.time));
+    h += '<div class="report-item report-item-' + type + '"><div class="report-item-head"><span class="report-type-badge">' + REPORT_TYPE_LABEL[type] + '</span>'
+      + '<span class="trade-tag">' + escapeHtml(tag) + '</span>' + escapeHtml(text || '(no description)') + '</div>'
+      + '<div class="report-item-meta">' + meta.join(' · ') + '</div>'
+      + reportPhotosHtml(itemPhotos(item)) + '</div>';
+  });
+  return h + '</div>';
+}
+// One photo shows at a readable size; two or more become a thumbnail row.
+function reportPhotosHtml(srcs) {
+  if (!srcs.length) return '';
+  const cls = srcs.length > 1 ? 'report-thumbs' : 'report-photo-single';
+  return '<div class="' + cls + '">' + srcs.map(function (src) { return '<img class="report-photo" src="' + escapeHtml(src) + '" alt="">'; }).join('') + '</div>';
+}
+document.getElementById('report').addEventListener('click', function (e) {
+  if (e.target.classList && e.target.classList.contains('report-photo')) openLightbox(e.target.src);
+});
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
