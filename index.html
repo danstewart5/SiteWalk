@@ -27,7 +27,7 @@
 <meta name="twitter:image" content="https://danstewart5.github.io/SiteWalk/assets/photos/og-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
@@ -256,14 +256,52 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-window-mullion::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; background: #111; }
 .home-window-mullion::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; background: #111; }
 .home-stage { position: relative; z-index: 1; width: min(84vw, 360px); aspect-ratio: 1 / 1; margin: 0 auto; }
-.home-pillars { position: absolute; inset: 0; --radius: min(33vw, 132px); }
+.home-pillars { position: absolute; inset: 0; --radius: min(33vw, 132px); --spin: 0deg; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.home-pillars.spinning { cursor: grabbing; }
+/* Dial face under the pillars: turns with --spin; ticks line up with the 7 pillar slots */
+.home-dial {
+  position: absolute; top: 50%; left: 50%; width: min(100%, calc(2 * var(--radius) + 64px)); aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%) rotate(var(--spin)); border-radius: 50%; pointer-events: none;
+  background:
+    radial-gradient(circle closest-side, transparent calc(100% - 34px), rgba(185,138,96,0.55) calc(100% - 33px), transparent calc(100% - 31px)),
+    radial-gradient(circle closest-side, rgba(0,0,0,0.30) 0 calc(100% - 3px), transparent calc(100% - 2px));
+  border: 2px solid rgba(185,138,96,0.45);
+  box-shadow: inset 0 0 18px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.35);
+}
+.home-dial::before {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%;
+  background: repeating-conic-gradient(from -1.5deg, rgba(185,138,96,0.9) 0deg 3deg, transparent 3deg 51.4286deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent calc(100% - 12px), #000 calc(100% - 11px));
+  mask: radial-gradient(circle closest-side, transparent calc(100% - 12px), #000 calc(100% - 11px));
+}
+/* fixed marker just above the Start button, pointing up at whichever pillar the dial has settled on */
+.home-dial-pointer { position: absolute; top: calc(50% - 61px - 16px); left: 50%; margin-left: -7px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 10px solid #B98A60; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); z-index: 2; pointer-events: none; }
+.home-dial-arrow {
+  position: absolute; bottom: 2px; z-index: 3; width: 42px; height: 42px; margin: 0; padding: 0; border-radius: 50%;
+  background: rgba(43,29,14,0.75); color: #e9c9a6; border: 1.5px solid rgba(185,138,96,0.7); font-size: 16px; line-height: 1;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.45); -webkit-tap-highlight-color: transparent;
+}
+.home-dial-arrow:active { transform: scale(0.92); }
+.home-dial-left { left: 0; }
+.home-dial-right { right: 0; }
 .home-pillar {
-  position: absolute; top: 50%; left: 50%; width: 58px; margin: -29px 0 0 -29px;
+  position: absolute; top: 50%; left: 50%; width: 58px; margin: 0;
   background: none; border: none; padding: 0; cursor: pointer;
-  transform: rotate(var(--angle)) translate(0, calc(-1 * var(--radius))) rotate(calc(-1 * var(--angle)));
+  /* 0deg = 3 o'clock, so --angle:-90deg is 12 o'clock; the final translate centres the pillar box on its point whatever its label height */
+  transform: rotate(calc(var(--angle) + var(--spin))) translate(var(--radius), 0) rotate(calc(-1 * (var(--angle) + var(--spin)))) translate(-50%, -50%);
+  -webkit-tap-highlight-color: transparent;
 }
 .pillar-visual { display: flex; flex-direction: column; align-items: center; gap: 5px; transform: scale(1); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1); }
-.home-pillar:hover .pillar-visual, .home-pillar:active .pillar-visual, .home-pillar:focus-visible .pillar-visual { transform: scale(1.15); }
+/* :hover only where a real mouse exists — on phones it sticks to the last-touched pillar */
+@media (hover: hover) {
+  .home-pillars:not(.spinning) .home-pillar:hover .pillar-visual { transform: scale(1.15); }
+  .home-pillars:not(.spinning) .home-pillar:hover .pillar-column { box-shadow: 0 5px 10px rgba(0,0,0,0.45), 0 0 14px 3px rgba(185,138,96,0.75); }
+}
+.home-pillar:focus-visible .pillar-visual { transform: scale(1.15); }
+.home-pillar:focus-visible .pillar-column { box-shadow: 0 5px 10px rgba(0,0,0,0.45), 0 0 14px 3px rgba(185,138,96,0.75); }
+.home-pillar.pressed { z-index: 3; }
+.home-pillar.pressed .pillar-visual { transform: scale(1.45); }
+.home-pillar.pressed .pillar-column { box-shadow: 0 8px 14px rgba(0,0,0,0.5), 0 0 22px 6px rgba(185,138,96,0.9); }
 .pillar-column { width: 14px; height: 52px; border-radius: 2px; position: relative; background: linear-gradient(90deg, #7f6d50, #ecdfc5 42%, #d1c09a 56%, #7f6d50); box-shadow: 0 5px 10px rgba(0,0,0,0.45); }
 .pillar-column::before, .pillar-column::after { content: ''; position: absolute; left: -4px; right: -4px; height: 6px; border-radius: 2px; background: linear-gradient(90deg, #6d5c42, #f2e7d0 45%, #ddcca6 58%, #6d5c42); }
 .pillar-column::before { top: -5px; }
@@ -321,6 +359,13 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-admin-btn { width: auto; flex: 0 0 auto; background: #edf2f7; color: #4a5568; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
 .home-admin-btn:disabled { color: #cbd5e0; cursor: default; }
 
+/* ---------- Hartwig partner logo ---------- */
+/* dark band so the copper logo + its drop shadow read as on the Hartwig site, not muddy on the white card */
+.home-partner { text-align: center; margin: -4px 0 10px; padding: 10px 12px 12px; border-radius: 12px; background: radial-gradient(ellipse at 50% 40%, #3a2e24 0%, #221a13 100%); }
+.home-partner-label { display: block; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(185,138,96,0.7); margin-bottom: 4px; }
+.home-partner-logo { display: block; width: 180px; max-width: 100%; height: auto; margin: 0 auto; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5)); }
+@media (min-width: 768px) { .home-partner-logo { width: 240px; } }
+
 /* ---------- Build / Hold mode toggle + shared flag bar ---------- */
 .home-flag-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .home-flag-pill { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
@@ -329,7 +374,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-flag-pill.ok { background: #c6f6d5; color: #276749; }
 .home-mode-toggle { display: flex; gap: 6px; background: #edf2f7; border-radius: 999px; padding: 4px; margin: 0 0 10px; }
 .home-mode-btn { flex: 1; border: none; background: none; padding: 9px 4px; border-radius: 999px; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 700; color: #4a5568; cursor: pointer; margin: 0; width: auto; }
-.home-mode-btn.active { background: #1a365d; color: #fff; }
+.home-mode-btn.active { background: #B98A60; color: #fff; }
 #tab-home[data-home-mode="build"] .home-pillar-hold,
 #tab-home[data-home-mode="build"] .home-block-hold { display: none; }
 #tab-home[data-home-mode="hold"] .home-pillar-build,
@@ -340,7 +385,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-partner { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -357,6 +402,11 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="tab-panel active" id="tab-home" data-home-mode="build">
 
+<div class="home-partner">
+<span class="home-partner-label">In Partnership With</span>
+<img class="home-partner-logo" src="hartwig-logo.png" alt="Hartwig Industries" onerror="this.parentNode.style.display='none'">
+</div>
+
 <div class="home-flag-bar" id="homeFlagBar"></div>
 <div class="home-mode-toggle" id="homeModeToggle">
 <button type="button" class="home-mode-btn active" data-mode="build">🏗️ Build</button>
@@ -372,6 +422,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="home-stage">
 <div class="home-pillars">
+<div class="home-dial" aria-hidden="true"></div>
 <button class="home-pillar home-pillar-build" data-block="land" style="--angle:-90deg" type="button" aria-label="Land &amp; Acquisition">
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Land &amp; Acquisition</span></span>
 </button>
@@ -415,6 +466,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
   <span class="pillar-visual"><span class="pillar-column"></span><span class="pillar-label">Commercial Extras</span></span>
 </button>
 </div>
+<div class="home-dial-pointer" aria-hidden="true"></div>
+<button type="button" class="home-dial-arrow home-dial-left" id="homeDialLeft" aria-label="Rotate dial left">◀</button>
+<button type="button" class="home-dial-arrow home-dial-right" id="homeDialRight" aria-label="Rotate dial right">▶</button>
 <button id="homeStartWalkBtn" type="button" class="home-start-btn">Start<br>Walk-Around</button>
 </div>
 
