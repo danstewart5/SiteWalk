@@ -27,7 +27,7 @@
 <meta name="twitter:image" content="https://danstewart5.github.io/SiteWalk/assets/photos/og-preview.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 0 auto; padding: 12px; background: #f0f2f5; color: #1a1a1a; }
@@ -264,6 +264,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 }
 .pillar-visual { display: flex; flex-direction: column; align-items: center; gap: 5px; transform: scale(1); transition: transform 0.22s cubic-bezier(.34,1.56,.64,1); }
 .home-pillar:hover .pillar-visual, .home-pillar:active .pillar-visual, .home-pillar:focus-visible .pillar-visual { transform: scale(1.15); }
+.home-pillar:hover .pillar-column, .home-pillar:active .pillar-column, .home-pillar:focus-visible .pillar-column { box-shadow: 0 5px 10px rgba(0,0,0,0.45), 0 0 14px 3px rgba(185,138,96,0.75); }
 .pillar-column { width: 14px; height: 52px; border-radius: 2px; position: relative; background: linear-gradient(90deg, #7f6d50, #ecdfc5 42%, #d1c09a 56%, #7f6d50); box-shadow: 0 5px 10px rgba(0,0,0,0.45); }
 .pillar-column::before, .pillar-column::after { content: ''; position: absolute; left: -4px; right: -4px; height: 6px; border-radius: 2px; background: linear-gradient(90deg, #6d5c42, #f2e7d0 45%, #ddcca6 58%, #6d5c42); }
 .pillar-column::before { top: -5px; }
@@ -321,6 +322,12 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-admin-btn { width: auto; flex: 0 0 auto; background: #edf2f7; color: #4a5568; font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
 .home-admin-btn:disabled { color: #cbd5e0; cursor: default; }
 
+/* ---------- Hartwig partner logo ---------- */
+.home-partner { text-align: center; margin: -4px 0 10px; }
+.home-partner-label { display: block; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.2em; color: rgba(185,138,96,0.7); margin-bottom: 4px; }
+.home-partner-logo { display: block; width: 180px; max-width: 100%; height: auto; margin: 0 auto; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5)); }
+@media (min-width: 768px) { .home-partner-logo { width: 240px; } }
+
 /* ---------- Build / Hold mode toggle + shared flag bar ---------- */
 .home-flag-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .home-flag-pill { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
@@ -329,7 +336,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-flag-pill.ok { background: #c6f6d5; color: #276749; }
 .home-mode-toggle { display: flex; gap: 6px; background: #edf2f7; border-radius: 999px; padding: 4px; margin: 0 0 10px; }
 .home-mode-btn { flex: 1; border: none; background: none; padding: 9px 4px; border-radius: 999px; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; font-weight: 700; color: #4a5568; cursor: pointer; margin: 0; width: auto; }
-.home-mode-btn.active { background: #1a365d; color: #fff; }
+.home-mode-btn.active { background: #B98A60; color: #fff; }
 #tab-home[data-home-mode="build"] .home-pillar-hold,
 #tab-home[data-home-mode="build"] .home-block-hold { display: none; }
 #tab-home[data-home-mode="hold"] .home-pillar-build,
@@ -340,7 +347,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-partner { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -356,6 +363,11 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 </nav>
 
 <div class="tab-panel active" id="tab-home" data-home-mode="build">
+
+<div class="home-partner">
+<span class="home-partner-label">In Partnership With</span>
+<img class="home-partner-logo" src="hartwig-logo.png" alt="Hartwig Industries" onerror="this.parentNode.style.display='none'">
+</div>
 
 <div class="home-flag-bar" id="homeFlagBar"></div>
 <div class="home-mode-toggle" id="homeModeToggle">

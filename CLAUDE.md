@@ -85,6 +85,10 @@ New LS keys: `swProperties`, `swUnits`, `swTenants`, `swLeases`, `swPayments`, `
 
 **Phone-tested:** no — this session tested with headless Chromium + Playwright against a local static server (mode toggle, drilldown, full CRUD flow, rent-roll/arrears math, CSV download, and the Start Lease Walk → Chapter 1 handoff all verified with zero console errors). Real-device verification (especially the radial pillar layout on Hold mode, and that CSV download/share behaves the same as the existing video-save flow) is still outstanding.
 
+## Hartwig partner logo (2026-09-22, cache `sitewalk-v55`)
+
+`.home-partner` block at the top of `#tab-home` (above the flag bar and Build/Hold toggle): an "In Partnership With" label (IBM Plex Mono) + `<img src="hartwig-logo.png">` (relative path, repo root, 180px mobile / 240px at ≥768px, not a link). If the PNG is missing, an inline `onerror` hides the whole block rather than showing a broken image. Copper `#B98A60` is also the active Build/Hold toggle colour and the pillar hover glow.
+
 ## Known issues
 
 **Rear-camera fix confirmed working on phone** (2026-09-16) — `getWalkStream()`'s `exact: 'environment'` → soft `'environment'` → `video: true` fallback chain in `walk.js` (commit `0f17af1`) now correctly opens the rear camera on the user's phone.
