@@ -85,9 +85,11 @@ New LS keys: `swProperties`, `swUnits`, `swTenants`, `swLeases`, `swPayments`, `
 
 **Phone-tested:** no — this session tested with headless Chromium + Playwright against a local static server (mode toggle, drilldown, full CRUD flow, rent-roll/arrears math, CSV download, and the Start Lease Walk → Chapter 1 handoff all verified with zero console errors). Real-device verification (especially the radial pillar layout on Hold mode, and that CSV download/share behaves the same as the existing video-save flow) is still outstanding.
 
-## Hartwig partner logo (2026-09-22, cache `sitewalk-v55`)
+## Hartwig partner logo (2026-09-22, cache `sitewalk-v59`)
 
-`.home-partner` block at the top of `#tab-home` (above the flag bar and Build/Hold toggle): an "In Partnership With" label (IBM Plex Mono) + `<img src="hartwig-logo.png">` (relative path, repo root, 180px mobile / 240px at ≥768px, not a link). The block sits on its own dark band so the copper logo and its drop shadow read properly against the white card. **`hartwig-logo.png` is a stand-in**: it was cut out of a JPEG screenshot of the Hartwig landing page (alpha keyed on copper-ness, filled flat `#B98A60`), because no original file was ever supplied — swap in the original transparent PNG when there is one (same filename, no code change). If the PNG is missing, an inline `onerror` hides the whole block rather than showing a broken image. Copper `#B98A60` is also the active Build/Hold toggle colour and the pillar hover glow.
+The logo is a faded watermark built into the pillar dial: `<img class="home-watermark" src="hartwig-logo.png">` inside `.home-stage`, full stage width, `opacity: 0.55` + `mix-blend-mode: soft-light`. It is layered **on top** of the dial and Start button (z-index 4), not literally behind them — behind, the Start button hid the middle of "hartwig". `pointer-events: none` keeps it out of every tap and drag, and it stays still while the dial turns. (It briefly sat in an "In Partnership With" band above the Build/Hold toggle, cache v55–v58; the user asked for it to move into the dial instead — don't bring the top band back.) Copper `#B98A60` is also the active Build/Hold toggle colour and the pillar glow.
+
+**`hartwig-logo.png` is a stand-in**: it was cut out of a JPEG screenshot of the Hartwig landing page (alpha keyed on copper-ness, filled flat `#B98A60`), because no original file was ever supplied — swap in the original transparent PNG when there is one (same filename, no code change).
 
 ## Known issues
 
