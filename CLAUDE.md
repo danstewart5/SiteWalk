@@ -85,9 +85,9 @@ New LS keys: `swProperties`, `swUnits`, `swTenants`, `swLeases`, `swPayments`, `
 
 **Phone-tested:** no — this session tested with headless Chromium + Playwright against a local static server (mode toggle, drilldown, full CRUD flow, rent-roll/arrears math, CSV download, and the Start Lease Walk → Chapter 1 handoff all verified with zero console errors). Real-device verification (especially the radial pillar layout on Hold mode, and that CSV download/share behaves the same as the existing video-save flow) is still outstanding.
 
-## Hartwig partner logo (2026-09-22, cache `sitewalk-v59`)
+## Hartwig partner logo (2026-09-22, cache `sitewalk-v60`)
 
-The logo is a faded watermark built into the pillar dial: `<img class="home-watermark" src="hartwig-logo.png">` inside `.home-stage`, full stage width, `opacity: 0.55` + `mix-blend-mode: soft-light`. It is layered **on top** of the dial and Start button (z-index 4), not literally behind them — behind, the Start button hid the middle of "hartwig". `pointer-events: none` keeps it out of every tap and drag, and it stays still while the dial turns. (It briefly sat in an "In Partnership With" band above the Build/Hold toggle, cache v55–v58; the user asked for it to move into the dial instead — don't bring the top band back.) Copper `#B98A60` is also the active Build/Hold toggle colour and the pillar glow.
+The logo sits just below the framed window photos in the home scene: `<img class="home-logo" src="hartwig-logo.png">` right after `.home-window`, `width: min(64%, 230px)`, `opacity: 0.85` with a drop shadow, so it's softened into the wood but clearly readable. Placement history, all same day, each superseding the last at the user's request: an "In Partnership With" band above the Build/Hold toggle (v55–v58), then a faint soft-light watermark across the pillar dial (v59, too faint to see), then here — don't bring either earlier version back. Copper `#B98A60` is also the active Build/Hold toggle colour and the pillar glow.
 
 **`hartwig-logo.png` is a stand-in**: it was cut out of a JPEG screenshot of the Hartwig landing page (alpha keyed on copper-ness, filled flat `#B98A60`), because no original file was ever supplied — swap in the original transparent PNG when there is one (same filename, no code change).
 

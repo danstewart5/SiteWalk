@@ -256,8 +256,8 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .home-window-mullion::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; background: #111; }
 .home-window-mullion::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; background: #111; }
 .home-stage { position: relative; z-index: 1; width: min(84vw, 360px); aspect-ratio: 1 / 1; margin: 0 auto; }
-/* Hartwig logo, faded into the dial: layered on top with soft-light blending (not literally behind) so the Start button can't hide the middle of the wordmark; stays static while the dial turns, and pointer-events: none keeps it out of drags and taps */
-.home-watermark { position: absolute; left: 50%; top: 50%; z-index: 4; width: 100%; height: auto; transform: translate(-50%, -50%); opacity: 0.55; mix-blend-mode: soft-light; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+/* Hartwig logo just under the window photos: softened into the wood, but readable */
+.home-logo { position: relative; z-index: 1; display: block; width: min(64%, 230px); height: auto; margin: -6px auto 10px; opacity: 0.85; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5)); pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .home-pillars { position: absolute; inset: 0; --radius: min(33vw, 132px); --spin: 0deg; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .home-pillars.spinning { cursor: grabbing; }
 /* Dial face under the pillars: turns with --spin; ticks line up with the 7 pillar slots */
@@ -410,9 +410,9 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <div class="home-window">
 <div class="home-window-mullion"></div>
 </div>
+<img class="home-logo" src="hartwig-logo.png" alt="Hartwig Industries" onerror="this.remove()">
 
 <div class="home-stage">
-<img class="home-watermark" src="hartwig-logo.png" alt="Hartwig Industries" onerror="this.remove()">
 <div class="home-pillars">
 <div class="home-dial" aria-hidden="true"></div>
 <button class="home-pillar home-pillar-build" data-block="land" style="--angle:-90deg" type="button" aria-label="Land &amp; Acquisition">
