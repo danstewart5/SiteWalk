@@ -122,6 +122,8 @@ document.getElementById('homeDrilldownBack').addEventListener('click', function 
   document.getElementById('tab-home').classList.remove('showing-drilldown');
 });
 document.getElementById('homeStartWalkBtn').addEventListener('click', function () {
+  const dial = currentDial();
+  if (dial) { runHomeAction(dial.center); return; }
   // Fade the wood-panel scene (background, pillars, framed photo, Generate
   // Report button all live inside .home-scene) out before handing off to the
   // Walk tab, instead of the scene just vanishing under an instant tab swap.
@@ -134,8 +136,7 @@ document.getElementById('homeStartWalkBtn').addEventListener('click', function (
   }, 320);
 });
 document.getElementById('homeGenerateReportBtn').addEventListener('click', function () {
-  showTab('report');
-  window.generateReport();
+  runHomeAction(currentDial() ? currentDial().report : DEFAULT_REPORT);
 });
 
 // Build / Hold mode toggle — organizes which seven chapters the pillars and
@@ -146,6 +147,8 @@ function setHomeMode(mode) {
   document.getElementById('tab-home').setAttribute('data-home-mode', mode);
   document.querySelectorAll('.home-mode-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === mode); });
   saveJson(LS.homeMode, mode);
+  document.getElementById('tab-home').classList.remove('showing-drilldown');
+  if (typeof renderRoleDial === 'function') renderRoleDial();
 }
 document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { setHomeMode(btn.getAttribute('data-mode')); });
@@ -894,29 +897,161 @@ function renderFlagBar() {
   renderRoleView();
 }
 
-// Role views — "View as" on Home. Admin ('all') is the full dial scene;
-// Manager / Bookkeeper / Developer each get a focused dashboard of live
-// numbers off the same in-app arrays plus shortcuts to their tabs. This is a
-// lens, not access control: there's no login, and data is still per-device
-// localStorage, so a bookkeeper on their own phone sees their own (empty)
-// data until cross-device sync exists.
+// Role views — "View as" on Home. Every role gets the same wood dial scene
+// (background, window, Hartwig logo, Build/Hold). Admin and Manager use the
+// standard seven pillars. Bookkeeper and Developer get their own seven per
+// mode from ROLE_DIALS, plus their own centre button. A non-Admin role's live
+// numbers (roleKpis) show below the drilldown blocks. This is a lens, not
+// access control: there's no login, and data is still per-device
+// localStorage until cross-device sync exists.
 const ROLES = {
-  manager: {
-    title: 'Manager', intro: 'Run the site: what\'s open, who\'s on the clock, what needs chasing today.', actions: true,
-    links: [['walk', 'Ch. 1 · Walk-Around'], ['punch', 'Punch List'], ['rfis', 'RFIs'], ['submittals', 'Submittals'], ['changes', 'Change Orders'], ['safety', 'Safety Log'], ['dailylog', 'Daily Log'], ['clock', 'Clock In/Out'], ['contacts', 'Trade Contacts'], ['drawings', 'Drawings & Plans'], ['drawingrefs', 'Drawing References'], ['leasewalk', 'Maintenance & Walk-throughs'], ['dashboard', 'Open Items Dashboard'], ['report', 'Report']],
-    soon: []
-  },
+  manager: { title: 'Manager', intro: 'Run the site: what\'s open, who\'s on the clock, what needs chasing today.' },
+  bookkeeper: { title: 'Bookkeeper', intro: 'Money in and out: job cost vs budget, change-order dollars, hours for payroll, rent collected and owed.' },
+  developer: { title: 'Developer', intro: 'The big picture: is the build on budget, what\'s the change-order exposure, and how is the rental portfolio performing.' }
+};
+// Each pillar: id, icon, label, tabs ([tab, label, scrollToId?]), soon
+// (placeholder labels), badge() → [text, warn] or null. center: the middle
+// button's label + action for that role/mode; report: the gold button's.
+function activeLeaseList() {
+  const today = new Date().toISOString().slice(0, 10);
+  return leases.filter(function (l) { return l.startDate <= today && (!l.endDate || l.endDate >= today); });
+}
+function occupiedUnitCount() {
+  const active = activeLeaseList();
+  return units.filter(function (u) { return active.some(function (l) { return l.unitId === u.id; }); }).length;
+}
+function budgetPctBadge() {
+  const total = (budget.labor || 0) + (budget.materials || 0);
+  if (!total) return null;
+  const spent = totalLaborCost() + totalMaterialsCost();
+  return [Math.round(spent / total * 100) + '%', spent > total];
+}
+function countBadge(n, warn) { return n ? [String(n), !!warn] : null; }
+const REPORT_PILLAR = { id: 'reports', icon: '📋', label: 'Reports', tabs: [['report', 'Report'], ['dashboard', 'Open Items Dashboard']] };
+const ROLE_DIALS = {
   bookkeeper: {
-    title: 'Bookkeeper', intro: 'Money in and out: job cost vs budget, change-order dollars, hours for payroll, rent collected and owed.',
-    links: [['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['clock', 'Clock In/Out (hours for payroll)'], ['rentroll', 'Rent & Payments (CSV export)'], ['arrears', 'Arrears & Collections'], ['leases', 'Leases'], ['tenants', 'Tenants'], ['report', 'Report']],
-    soon: ['Ch. 5 · Invoicing']
+    build: {
+      center: { label: 'Log Sub<br>Payment', tab: 'jobcost', scroll: 'subContractList' },
+      report: { label: 'Generate Report', tab: 'report', run: 'report' },
+      pillars: [
+        { id: 'jobcost', icon: '💰', label: 'Job Cost', tabs: [['jobcost', 'Job Cost Dashboard'], ['jobcost', 'Budget vs Actual', 'budgetSummary']], badge: budgetPctBadge },
+        { id: 'payroll', icon: '⏱', label: 'Payroll Hours', tabs: [['clock', 'Clock In/Out'], ['jobcost', 'Hourly Labor Cost', 'laborCostList']], badge: function () { return countBadge(clockEvents.filter(function (e) { return e.flagged; }).length, true); } },
+        { id: 'subs', icon: '🤝', label: 'Flat-Contract Subs', tabs: [['jobcost', 'Flat-Contract Subs', 'subContractList']], badge: function () { const o = totalContractOwed(); return o > 0.005 ? [money(o), true] : null; } },
+        { id: 'materials', icon: '🧱', label: 'Materials', tabs: [['jobcost', 'Supplies & Materials', 'materialsList']], badge: function () { return countBadge(materials.length); } },
+        { id: 'cobill', icon: '📝', label: 'Change Orders to Bill', tabs: [['changes', 'Change Orders']], badge: function () { return countBadge(changes.filter(function (c) { return c.approval === 'Approved'; }).length); } },
+        { id: 'invoicing', icon: '🧾', label: 'Invoicing', tabs: [], soon: ['Ch. 5 · Invoicing'] },
+        REPORT_PILLAR
+      ]
+    },
+    hold: {
+      center: { label: 'Log Rent<br>Payment', tab: 'rentroll', scroll: 'paymentLeaseSelect' },
+      report: { label: 'Export Rent Roll (CSV)', run: 'csv' },
+      pillars: [
+        { id: 'rent', icon: '💳', label: 'Rent & Payments', tabs: [['rentroll', 'Rent & Payments']] },
+        { id: 'arrears', icon: '🚩', label: 'Arrears', tabs: [['arrears', 'Arrears & Collections']], badge: function () { return countBadge(computeLeaseFlags().arrears.length, true); } },
+        { id: 'leases', icon: '📃', label: 'Leases', tabs: [['leases', 'Leases']], badge: function () { return countBadge(computeLeaseFlags().renewalsSoon.length); } },
+        { id: 'tenants', icon: '🧑‍🤝‍🧑', label: 'Tenants', tabs: [['tenants', 'Tenants']], badge: function () { return countBadge(tenants.length); } },
+        { id: 'csv', icon: '📤', label: 'CSV Export', tabs: [['rentroll', 'Rent Roll & CSV Export', 'exportRentRollBtn']] },
+        { id: 'deposits', icon: '🏦', label: 'Deposits', tabs: [], soon: ['Security Deposits'] },
+        REPORT_PILLAR
+      ]
+    }
   },
   developer: {
-    title: 'Developer', intro: 'The big picture: is the build on budget, what\'s the change-order exposure, and how is the rental portfolio performing.',
-    links: [['dashboard', 'Open Items Dashboard'], ['jobcost', 'Job Cost Dashboard'], ['changes', 'Change Orders'], ['units', 'Units & Properties'], ['leases', 'Leases'], ['rentroll', 'Rent & Payments'], ['arrears', 'Arrears & Collections'], ['report', 'Report']],
-    soon: ['Ch. 6 · Land-to-Contract Pipeline (Victoria Land)', 'Ch. 9 · Price-the-House']
+    build: {
+      center: { label: 'Generate<br>Report', tab: 'report', run: 'report' },
+      report: { label: 'Open Items Dashboard', tab: 'dashboard' },
+      pillars: [
+        { id: 'overview', icon: '🏙️', label: 'All Jobs Overview', tabs: [['dashboard', 'Open Items Dashboard']], soon: ['Multi-job rollup (next phase)'] },
+        { id: 'budget', icon: '💰', label: 'Budget vs Actual', tabs: [['jobcost', 'Budget vs Actual', 'budgetSummary'], ['jobcost', 'Job Cost Dashboard']], badge: budgetPctBadge },
+        { id: 'coexposure', icon: '📝', label: 'Change-Order Exposure', tabs: [['changes', 'Change Orders']], badge: function () { const t = changes.filter(function (c) { return c.approval === 'Pending'; }).reduce(function (s, c) { return s + (c.costEstimate || 0); }, 0); return t ? [money(t), true] : null; } },
+        { id: 'progress', icon: '📈', label: 'Progress', tabs: [['dailylog', 'Daily Log'], ['punch', 'Punch List'], ['rfis', 'RFIs']], badge: function () { return countBadge(punch.filter(function (p) { return !p.resolved; }).length + rfis.filter(function (r) { return r.status !== 'Answered'; }).length); } },
+        { id: 'land', icon: '🗺️', label: 'Land Pipeline', tabs: [], soon: ['Ch. 6 · Land-to-Contract Pipeline (Victoria Land)'] },
+        { id: 'price', icon: '🏷️', label: 'Price-the-House', tabs: [], soon: ['Ch. 9 · Price-the-House'] },
+        REPORT_PILLAR
+      ]
+    },
+    hold: {
+      center: { label: 'Generate<br>Report', tab: 'report', run: 'report' },
+      report: { label: 'Rent Roll', tab: 'rentroll' },
+      pillars: [
+        { id: 'properties', icon: '🏢', label: 'Properties & Units', tabs: [['units', 'Units & Properties']], badge: function () { return countBadge(units.length); } },
+        { id: 'occupancy', icon: '🔑', label: 'Occupancy', tabs: [['units', 'Units'], ['leases', 'Leases']], badge: function () { return units.length ? [Math.round(occupiedUnitCount() / units.length * 100) + '%', false] : null; } },
+        { id: 'rentroll', icon: '💳', label: 'Rent Roll', tabs: [['rentroll', 'Rent & Payments']], badge: function () { const t = activeLeaseList().reduce(function (s, l) { return s + (l.rentAmount || 0); }, 0); return t ? [money(t) + '/mo', false] : null; } },
+        { id: 'arrears', icon: '🚩', label: 'Arrears', tabs: [['arrears', 'Arrears & Collections']], badge: function () { return countBadge(computeLeaseFlags().arrears.length, true); } },
+        { id: 'renewals', icon: '📅', label: 'Renewals', tabs: [['leases', 'Leases']], badge: function () { return countBadge(computeLeaseFlags().renewalsSoon.length); } },
+        { id: 'maintenance', icon: '🧰', label: 'Maintenance Walks', tabs: [['leasewalk', 'Maintenance & Walk-throughs']] },
+        { id: 'commercial', icon: '🏬', label: 'Commercial', tabs: [], soon: ['Commercial Extras'] }
+      ]
+    }
   }
 };
+const DEFAULT_CENTER = { label: 'Start<br>Walk-Around', walk: true };
+const DEFAULT_REPORT = { label: 'Generate Report', tab: 'report', run: 'report' };
+function currentDial() {
+  const home = document.getElementById('tab-home');
+  const cfg = ROLE_DIALS[home.getAttribute('data-role')];
+  return cfg ? cfg[home.getAttribute('data-home-mode') === 'hold' ? 'hold' : 'build'] : null;
+}
+function goToTab(tab, scrollId) {
+  showTab(tab);
+  if (!scrollId) return;
+  const el = document.getElementById(scrollId);
+  if (el) setTimeout(function () { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+}
+function runHomeAction(a) {
+  if (a.run === 'csv') { exportRentRollCsv(); return; }
+  goToTab(a.tab, a.scroll);
+  if (a.run === 'report') window.generateReport();
+}
+// Rebuilt on role or mode change only. Badge values refresh in place via
+// updateRoleBadges(), so a data change never swaps out a pillar mid-drag.
+function renderRoleDial() {
+  const home = document.getElementById('tab-home');
+  const ring = document.querySelector('.home-pillars');
+  const blocks = document.querySelector('.home-blocks');
+  home.querySelectorAll('.home-pillar-role, .home-block-role').forEach(function (el) { el.remove(); });
+  const dial = currentDial();
+  if (dial) home.setAttribute('data-custom-dial', ''); else home.removeAttribute('data-custom-dial');
+  const center = dial ? dial.center : DEFAULT_CENTER, report = dial ? dial.report : DEFAULT_REPORT;
+  document.getElementById('homeStartWalkBtn').innerHTML = center.label;
+  document.getElementById('homeGenerateReportBtn').textContent = report.label;
+  document.getElementById('homeMoreLink').textContent = home.getAttribute('data-role') === 'all' ? '⋯ More (Dashboard, Report, Setup)' : '⋯ Your numbers & all tools';
+  if (!dial) return;
+  dial.pillars.forEach(function (p, i) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'home-pillar home-pillar-role';
+    btn.setAttribute('data-block', 'role-' + p.id); btn.setAttribute('aria-label', p.label);
+    btn.style.setProperty('--angle', (-90 + i * 360 / 7).toFixed(2) + 'deg');
+    btn.innerHTML = '<span class="pillar-visual"><span class="pillar-badge" data-badge="' + p.id + '"></span><span class="pillar-column"></span><span class="pillar-label">' + escapeHtml(p.label) + '</span></span>';
+    btn.addEventListener('click', function () { openHomeDrilldown('role-' + p.id); });
+    ring.appendChild(btn);
+
+    const block = document.createElement('div');
+    block.className = 'home-block home-block-role' + (home.getAttribute('data-home-mode') === 'hold' ? ' home-block-role-hold' : '');
+    block.setAttribute('data-block', 'role-' + p.id);
+    block.innerHTML = '<button class="home-block-header" type="button"><span class="home-block-icon">' + p.icon + '</span><span class="home-block-title">' + escapeHtml(p.label) + '</span><span class="home-block-chevron">›</span></button>'
+      + '<div class="home-block-chapters">'
+      + p.tabs.map(function (t) { return '<button class="home-chapter-btn" type="button" data-go="' + t[0] + '"' + (t[2] ? ' data-scroll="' + t[2] + '"' : '') + '>' + escapeHtml(t[1]) + '</button>'; }).join('')
+      + (p.soon || []).map(function (t) { return '<button class="home-chapter-btn" disabled>' + escapeHtml(t) + ' <em>Coming soon</em></button>'; }).join('')
+      + '</div>';
+    block.querySelector('.home-block-header').addEventListener('click', function () { block.classList.toggle('expanded'); });
+    block.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { goToTab(b.getAttribute('data-go'), b.getAttribute('data-scroll')); }); });
+    blocks.appendChild(block);
+  });
+  updateRoleBadges();
+}
+function updateRoleBadges() {
+  const dial = currentDial();
+  if (!dial) return;
+  dial.pillars.forEach(function (p) {
+    const el = document.querySelector('.pillar-badge[data-badge="' + p.id + '"]');
+    if (!el) return;
+    const b = p.badge ? p.badge() : null;
+    el.textContent = b ? b[0] : '';
+    el.classList.toggle('warn', !!(b && b[1]));
+  });
+}
 function money(n) { return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 function roleKpis(role) {
   const openPunch = punch.filter(function (p) { return !p.resolved; }).length;
@@ -966,28 +1101,14 @@ function roleKpis(role) {
 function renderRoleView() {
   const home = document.getElementById('tab-home'), wrap = document.getElementById('homeRoleView');
   if (!home || !wrap) return;
+  updateRoleBadges();
   const cfg = ROLES[home.getAttribute('data-role')];
   if (!cfg) { wrap.innerHTML = ''; return; }
-  let html = '<p class="role-intro"><strong>' + cfg.title + ' view</strong>' + cfg.intro + '</p>';
-  if (cfg.actions) html += '<div class="role-actions"><button type="button" class="role-walk" data-role-action="walk">▶ Start Walk-Around</button><button type="button" class="role-report" data-role-action="report">Generate Report</button></div>';
-  html += '<div class="role-kpis">' + roleKpis(home.getAttribute('data-role')).map(function (k) {
-    return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>';
-  }).join('') + '</div>';
-  html += '<span class="role-section-label">Your tools</span><div class="role-links">'
-    + cfg.links.map(function (l) { return '<button type="button" class="home-chapter-btn" data-tab="' + l[0] + '">' + escapeHtml(l[1]) + '</button>'; }).join('')
-    + cfg.soon.map(function (t) { return '<button type="button" class="home-chapter-btn" disabled>' + escapeHtml(t) + ' <em>Coming soon</em></button>'; }).join('')
-    + '</div>';
-  wrap.innerHTML = html;
+  wrap.innerHTML = '<p class="role-intro"><strong>' + cfg.title + ' view</strong>' + cfg.intro + '</p>'
+    + '<div class="role-kpis">' + roleKpis(home.getAttribute('data-role')).map(function (k) {
+      return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>';
+    }).join('') + '</div>';
 }
-document.getElementById('homeRoleView').addEventListener('click', function (e) {
-  const btn = e.target.closest('button');
-  if (!btn || btn.disabled) return;
-  const action = btn.getAttribute('data-role-action');
-  if (action === 'walk') { showTab('walk'); if (!walkActive) window.startWalk(); return; }
-  if (action === 'report') { showTab('report'); window.generateReport(); return; }
-  const tab = btn.getAttribute('data-tab');
-  if (tab) showTab(tab);
-});
 function setRole(role) {
   if (!ROLES[role]) role = 'all';
   const home = document.getElementById('tab-home');
@@ -995,6 +1116,7 @@ function setRole(role) {
   home.classList.remove('showing-drilldown');
   document.querySelectorAll('.home-role-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-role') === role); });
   saveJson(LS.role, role);
+  renderRoleDial();
   renderRoleView();
 }
 document.querySelectorAll('.home-role-btn').forEach(function (btn) {
