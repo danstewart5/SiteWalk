@@ -17,7 +17,9 @@
  * Deploy: see /AI_BACKEND_SETUP.md and /PHONE_SETUP.md
  */
 
-const MODEL = 'claude-sonnet-4-5';
+// Haiku: built for classification/extraction, ~1/3 the cost of Sonnet, near-identical
+// accuracy on bounded tasks. Switch back to claude-sonnet-4-5 if you need heavier reasoning.
+const MODEL = 'claude-haiku-4-5-20251001';
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
 
 // Netlify is the live front door; the GitHub Pages origin is kept alongside it
@@ -25,6 +27,17 @@ const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roof
 // origins change — an origin not in this list gets a silent CORS failure.
 // To revert to open CORS for local/dev testing, add '*' as the sole entry.
 const ALLOWED_ORIGINS = ['https://sitewalk-app.netlify.app', 'https://danstewart5.github.io'];
+
+// Few-shot examples: the single biggest accuracy lever. The model mirrors these
+// patterns instead of guessing from a bare description.
+const EXAMPLES = [
+  { in: 'Drywall is cracked above the window in unit three.', out: { type: 'punch', trade: 'Drywall', text: 'Cracked drywall above the window in unit 3.', costImpact: null } },
+  { in: 'Add a second outlet on the east wall, that is extra work.', out: { type: 'change_order', trade: 'Electrical', text: 'Add a second outlet on the east wall (extra work).', costImpact: null } },
+  { in: 'Do we move the electrical panel left or right of the door?', out: { type: 'rfi', trade: 'Electrical', text: 'Confirm electrical panel location: left or right of the door?', costImpact: null } },
+  { in: 'Roof leak over the hallway, water coming through the ceiling.', out: { type: 'punch', trade: 'Roofing', text: 'Roof leak over the hallway — water through the ceiling.', costImpact: null } },
+  { in: 'Client wants the concrete stamped instead of broom finish, add fifteen hundred dollars.', out: { type: 'change_order', trade: 'Concrete', text: 'Change concrete finish from broom to stamped (client request).', costImpact: 1500 } },
+  { in: 'Is the stair stringer supposed to be pressure treated or regular lumber?', out: { type: 'rfi', trade: 'Framing', text: 'Confirm stair stringer material: pressure treated or regular lumber?', costImpact: null } },
+];
 
 function corsHeadersFor(request) {
   const origin = request.headers.get('Origin') || '';
@@ -222,14 +235,24 @@ async function handleClassify(request, env, json) {
   const text = (payload && payload.text || '').trim();
   if (!text) return json({ error: 'Missing text.' }, 400);
 
+  // Build the few-shot block from EXAMPLES.
+  const exampleBlock = EXAMPLES.map(function (ex, i) {
+    return 'Example ' + (i + 1) + ':\n' +
+      '  Input: "' + ex.in.replace(/"/g, '\\"') + '"\n' +
+      '  Output: ' + JSON.stringify(ex.out);
+  }).join('\n\n');
+
   const prompt =
-    'Classify this single spoken sentence from a construction site supervisor\'s walk-around.\n\n' +
-    'Sentence: "' + text.replace(/"/g, '\\"') + '"\n\n' +
+    'You classify single spoken sentences from a construction site supervisor\'s walk-around.\n\n' +
     'Valid trades: ' + TRADES.join(', ') + '\n\n' +
     'type is one of:\n' +
     '- "punch": a deficiency or defect to fix (default if unsure)\n' +
     '- "change_order": extra work or cost beyond original scope, billable to the client\n' +
     '- "rfi": a question that needs an answer from architect/engineer/owner before work can proceed\n\n' +
+    'Here are labeled examples. Match their style and judgment:\n\n' +
+    exampleBlock + '\n\n' +
+    'Now classify this sentence:\n' +
+    'Sentence: "' + text.replace(/"/g, '\\"') + '"\n\n' +
     'Pick the single most relevant trade from the valid trades list. Use "General" only if truly unclear.\n' +
     'If type is "change_order" and a dollar amount is stated or clearly implied, extract it as a plain number ' +
     '(e.g. "add three hundred dollars" -> 300). Otherwise costImpact is null.\n\n' +
