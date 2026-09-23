@@ -402,6 +402,15 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .auto-clock-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 10px 0; }
 .auto-clock-toggle input { width: auto; margin: 2px 0 0; }
 .pay-type-select { width: auto; display: inline-block; padding: 4px; margin: 0 4px; }
+.home-job-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 10px; padding-bottom: 2px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.home-job-tabs::-webkit-scrollbar { display: none; }
+.home-job-tab { flex: 0 0 auto; width: auto; max-width: 62vw; margin: 0; padding: 7px 12px; border-radius: 16px; border: 1px solid #cbd5e0; background: #fff; color: #2d3748; font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-job-tab.active { background: #1a365d; border-color: #1a365d; color: #fff; }
+.home-job-tab.all { background: #fdf3e0; border-color: #e0a94a; color: #7a4f12; }
+.home-job-tab.new { border-style: dashed; color: #4a5568; }
+.job-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
+.job-bar span { display: block; height: 100%; background: #4CAF6E; }
+.job-bar span.over { background: #c53030; }
 .role-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; }
 .role-kpi { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; min-width: 0; }
 .role-kpi b { display: block; font-size: 20px; color: #1a365d; overflow-wrap: anywhere; }
@@ -413,7 +422,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-role-toggle, .home-role-view { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-role-toggle, .home-role-view, .home-job-tabs { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 }
@@ -436,6 +445,8 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <button type="button" class="home-role-btn" data-role="bookkeeper"><span>🧾</span>Bookkeeper</button>
 <button type="button" class="home-role-btn" data-role="developer"><span>🏙️</span>Developer</button>
 </div>
+
+<div class="home-job-tabs" id="homeJobTabs" role="group" aria-label="Jobs"></div>
 
 <div class="home-flag-bar" id="homeFlagBar"></div>
 
@@ -628,6 +639,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <div class="home-admin-links">
 <button class="home-admin-btn" disabled>Ch. 7 · Consulting Business Rollout</button>
 <button class="home-admin-btn" disabled>Ch. 8 · Developer Dashboard</button>
+<button class="home-admin-btn" data-tab="jobs" type="button">All Jobs Overview</button>
 <button class="home-admin-btn" data-tab="dashboard" type="button">Open Items Dashboard</button>
 <button class="home-admin-btn" data-tab="report" type="button">Report</button>
 <button class="home-admin-btn" data-tab="setup" type="button">Setup</button>
@@ -851,6 +863,15 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 <input type="number" id="budgetMaterials" step="0.01" min="0" placeholder="Materials budget ($)">
 <button id="saveBudgetBtn" class="gray">Save Budget</button>
 <div id="budgetSummary"></div>
+</div>
+</div>
+
+<div class="tab-panel" id="tab-jobs">
+<div class="section">
+<h2>📊 All Jobs</h2>
+<p class="hint">Every job on this phone side by side. Tap a job's tab on Home (or Open this job below) to work in it; everything you capture then goes to that job. Trade contacts, wage rates and LeaseFlow rentals are shared across jobs.</p>
+<button id="jobsNewBtn" type="button" class="orange">+ New Job</button>
+<div id="jobsOverview"></div>
 </div>
 </div>
 

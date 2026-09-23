@@ -101,11 +101,34 @@ A four-button bar at the top of Home (`.home-role-btn[data-role]`, persisted `sw
 - Drilldown shortcuts can scroll to a section of a tab (`goToTab(tab, scrollId)`), e.g. Flat-Contract Subs inside Job Cost.
 - The live KPI tiles (`roleKpis()`, `#homeRoleView`) for any non-Admin role now sit in the drilldown, below the blocks. "⋯ Your numbers & all tools" opens it. `.home-admin` (Setup) stays hidden for non-Admin roles.
 
-**Next phase (planned, not built): multiple jobs.** The app still knows one job site. Job tabs (`All Jobs` · per-job · `+ New Job`) need a job id stamped on every record, with existing data migrated into a first job.
+**Multiple jobs are live** as of cache `sitewalk-v64`, see the Jobs section below. The Developer "All Jobs Overview" pillar opens that rollup.
 
 **A lens, not access control:** there's no login, and anyone can tap any role. Data is per-device `localStorage`, so role views only become truly useful once cross-device sync (parked Firebase) exists. The Setup backup file is the stopgap.
 
 Tested with headless Chromium at 390px: all four role/mode dials, centre and gold button actions (including the CSV download), pillar → drilldown → tab shortcut, dial stepping on role pillars, persistence across reload, and Admin unchanged. No page errors, no horizontal scroll. Not phone-tested.
+
+## Jobs: job tabs + All Jobs overview (2026-09-23, cache `sitewalk-v64`)
+
+- **Tabs on Home.** A row of job tabs (`#homeJobTabs`, `renderJobTabs()`) sits under the View-as bar: `📊 All Jobs` · one tab per job (current one highlighted) · `+ New Job`. Tapping a job tab saves `swCurrentJob` and **reloads the page** (`switchJob()`). This is blocked while a walk is running. `+ New Job` prompts for a name and optional address.
+- **Storage model.** `JOB_SCOPED` in `walk.js` lists the keys that belong to a job: photos, punch, changes, RFIs, submittals, clock events, daily logs, safety, notes, site name/address, materials, budget, drawings, walks, sub contracts, GPS sites. Each job stores them as `key@jobId`. The original job (`id: 'default'`) keeps the plain keys, so upgrading copies nothing; an existing install simply becomes that first job, named from its saved site name.
+  - Right after `LS` is defined, the bootstrap rewrites those `LS` entries to the current job's keys. Every existing `persist*`/`loadJson(LS.x)` call therefore works per job without changes.
+  - `LS_BASE` keeps the original key names. `jobKey(base, id)` builds a key for any job. `isAppKey(key)` recognizes every app key, including other jobs' copies.
+  - Job list: `swJobs` (`[{id, name, address, created}]`). Editing the site name/address in the Walk header renames the job (`persistSiteInfo()`). Clock's site box defaults to the job name.
+- **Shared across jobs, not job-scoped:** trade contacts, wage rates (per person), AI Worker setup, role/mode, auto-clock settings and all LeaseFlow data.
+- **All Jobs overview** (`tab-jobs`, `renderJobsOverview()`). It shows combined tiles (budget % spent, open punch + RFIs, pending CO $, owed to subs, on the clock) plus one card per job: spend vs budget bar, open items, pending COs, owed to subs, last daily log, and Open / Delete buttons. `jobSummary(job)` reads a job's numbers straight from its stored keys and skips photos. `laborCostByEmployee(events)`/`totalHourlyLaborCost(events)` take an optional event list for this.
+  - Reachable from the All Jobs tab, the Developer Build pillar, and Admin's drilldown.
+  - Delete removes that job's keys. You can't delete the job you're in.
+- **Clear All Data** now wipes every job's keys (any `isAppKey`) and reloads. **Backup** (format 2) now includes every job. Format-1 backups still restore, as the default job.
+- Reports, the flag bar, role dials/badges and the Open Items Dashboard all show the **current job**. Only the All Jobs view rolls up across jobs.
+
+Tested with headless Chromium at 390px:
+- Upgrade from a pre-jobs install (data lands in the first job, named from its site name)
+- New job, rename, switching back and forth (each job's data stays separate; contacts shared)
+- Rollup math, Developer pillar badge, delete (no leftover keys)
+- Backup with two jobs restored into a fresh browser
+- Clear All
+
+No page errors and no horizontal scroll. Not phone-tested.
 
 ## Hartwig partner logo (2026-09-22, cache `sitewalk-v60`)
 
