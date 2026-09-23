@@ -1,6 +1,7 @@
 const TABS = ['home', 'jobs', 'invoices', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
 function showTab(name) {
   if (TABS.indexOf(name) === -1) name = 'home';
+  document.body.classList.remove('printing-invoice');
   TABS.forEach(function (t) {
     const panel = document.getElementById('tab-' + t);
     if (panel) panel.classList.toggle('active', t === name);
@@ -2529,7 +2530,10 @@ function printInvoice(inv) {
   document.body.classList.add('printing-invoice');
   window.print();
 }
-window.addEventListener('afterprint', function () { document.body.classList.remove('printing-invoice'); });
+// No afterprint cleanup: iOS Safari's print() doesn't block and afterprint can
+// fire before the page is captured, which would print the whole app. The class
+// only matters under @media print, so it's cleared on the next showTab() or
+// Report print instead.
 // mailto can't attach a file, so this sends a plain-text summary; Print /
 // Save PDF is the way to send the invoice itself. Emailing marks it sent.
 function emailInvoice(inv) {

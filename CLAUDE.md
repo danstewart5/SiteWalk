@@ -139,7 +139,7 @@ No page errors and no horizontal scroll. Not phone-tested.
 - **Status** (`invoiceStatus()`): Draft (no `sentAt`) → Sent → Part paid / Overdue (sent, balance owing, past due date) → Paid. Drafts are excluded from every outstanding/invoiced total (`invoiceOutstanding()`).
 - **Change orders.** "+ Approved COs" pulls every approved, not-yet-invoiced CO in as a line and stamps `invoiceId` on the CO. COs have no id, so the line links back by `coTs` = the CO's `ts`. Removing the line or deleting the invoice clears `invoiceId`, making the CO billable again. `unbilledChangeOrders()` drives the Bookkeeper "Change Orders to Bill" badge and its KPI tile.
 - **Output.**
-  - Print / Save PDF renders `invoicePrintHtml()` into `#invoicePrint` (outside `.container`) and adds `body.printing-invoice`. Print CSS then shows only that; `afterprint` removes the class, and the Report print button clears it too.
+  - Print / Save PDF renders `invoicePrintHtml()` into `#invoicePrint` (outside `.container`) and adds `body.printing-invoice`. Print CSS then shows only that. The class is cleared by the next `showTab()` or the Report print button, **not** on `afterprint` (changed 2026-09-23, cache `sitewalk-v66`): on iOS Safari `window.print()` doesn't block, and `afterprint` can fire before the page is captured, which would print the whole app. The class only matters under `@media print`, so leaving it on while you stay on the Invoices tab is harmless.
   - Email Summary opens a `mailto:` with a plain-text summary (mailto can't attach the PDF) and marks the invoice Sent.
 - **Editor behaviour.** Typing updates the invoice object and the totals in place, with no re-render, so focus is kept. On `change`, the list and flag bar refresh.
 - **Hooks elsewhere:**
@@ -148,7 +148,11 @@ No page errors and no horizontal scroll. Not phone-tested.
   - All Jobs: invoiced-to-date and outstanding tiles, plus a per-job invoiced/outstanding line
   - Report: an Invoices section
 
-Tested with headless Chromium at 390px: business details, new invoice, CO import (the CO is marked, then freed on delete), manual line, tax + 10% holdback math, print layout, mark sent, overdue flag, partial payment, Bookkeeper badge/KPIs, All Jobs summary. No page errors, no horizontal scroll. Not phone-tested; iOS Safari's `window.print()` → Save as PDF path in particular should be checked on a device.
+Tested with headless Chromium at 390px: business details, new invoice, CO import (the CO is marked, then freed on delete), manual line, tax + 10% holdback math, print layout, mark sent, overdue flag, partial payment, Bookkeeper badge/KPIs, All Jobs summary. No page errors, no horizontal scroll. **Still not phone-tested. No agent session can test on a real iPhone** (cloud container, headless Chromium only, no WebKit). When someone has an iPhone, check:
+1. In Safari: Invoices → Print / Save PDF. The preview should show only the invoice, not the app.
+2. Save as PDF on iOS: in the print sheet, tap Share (or pinch out on the preview), then Save to Files.
+3. The same from the **home-screen app** (`manifest.json` is `display: standalone`, plus `apple-mobile-web-app-capable`). Older iOS versions were reported to ignore `window.print()` in standalone web apps. If nothing happens there, open the page in Safari instead, or add a fallback.
+4. Two things to look at: long invoices breaking across pages, and whether the gold/grey backgrounds print (iOS drops backgrounds by default).
 
 ## Hartwig partner logo (2026-09-22, cache `sitewalk-v60`)
 
