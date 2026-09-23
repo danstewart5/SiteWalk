@@ -1,4 +1,4 @@
-const TABS = ['home', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
+const TABS = ['home', 'jobs', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
 function showTab(name) {
   if (TABS.indexOf(name) === -1) name = 'home';
   TABS.forEach(function (t) {
@@ -9,6 +9,7 @@ function showTab(name) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === name);
   });
   if (name === 'home' && typeof renderRoleView === 'function') renderRoleView();
+  if (name === 'jobs' && typeof renderJobsOverview === 'function') renderJobsOverview();
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
@@ -156,6 +157,33 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
 const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock' };
+// Jobs. Each job keeps its own copy of the job-scoped keys, stored as
+// key + '@' + jobId. The original job ('default') keeps the plain keys, so
+// upgrading copies nothing (photos can be most of the storage quota). The LS
+// entries are rewritten here, before anything loads, so every existing
+// persist/load call reads and writes the current job without knowing jobs
+// exist. Switching jobs saves the choice and reloads the page. Trade
+// contacts, wage rates, AI setup, role/mode, auto-clock and all LeaseFlow
+// data stay shared across jobs.
+const JOB_SCOPED = ['photos', 'punch', 'changes', 'rfis', 'submittals', 'clockEvents', 'dailyLogs', 'safety', 'notes', 'siteName', 'siteAddress', 'materials', 'budget', 'drawings', 'walks', 'subContracts', 'geoSites'];
+const LS_BASE = Object.assign({}, LS);
+LS.jobs = 'swJobs'; LS.currentJob = 'swCurrentJob';
+function jobKey(base, jobId) { return jobId === 'default' ? base : base + '@' + jobId; }
+let jobs = loadJson(LS.jobs, null);
+if (!Array.isArray(jobs) || !jobs.length) {
+  jobs = [{ id: 'default', name: loadJson(LS.siteName, null) || 'Job 1', address: loadJson(LS.siteAddress, null) || '', created: new Date().toISOString() }];
+  saveJson(LS.jobs, jobs);
+}
+let currentJobId = loadJson(LS.currentJob, jobs[0].id);
+if (!jobs.some(function (j) { return j.id === currentJobId; })) currentJobId = jobs[0].id;
+JOB_SCOPED.forEach(function (k) { LS[k] = jobKey(LS_BASE[k], currentJobId); });
+function currentJob() { return jobs.find(function (j) { return j.id === currentJobId; }); }
+function persistJobs() { saveJson(LS.jobs, jobs); }
+// True for any localStorage key this app owns, including other jobs' copies.
+function isAppKey(key) {
+  return Object.keys(LS_BASE).some(function (k) { return key === LS_BASE[k]; }) || key === LS.jobs || key === LS.currentJob
+    || JOB_SCOPED.some(function (k) { return key.indexOf(LS_BASE[k] + '@') === 0; });
+}
 let photos = [], punch = [], changes = [], rfis = [], contacts = {}, submittals = [], clockEvents = [], dailyLogs = [], safetyLogs = [], notesLog = [], wages = {}, materials = [], budget = { labor: 0, materials: 0 }, drawings = [], walks = [], currentWalk = null, selectedWalkId = null;
 // Flat-contract subs (labor cost) and GPS job-site geofences (auto clock).
 let subContracts = [], geoSites = [], autoClock = { enabled: false, employee: '' };
@@ -962,7 +990,7 @@ const ROLE_DIALS = {
       center: { label: 'Generate<br>Report', tab: 'report', run: 'report' },
       report: { label: 'Open Items Dashboard', tab: 'dashboard' },
       pillars: [
-        { id: 'overview', icon: '🏙️', label: 'All Jobs Overview', tabs: [['dashboard', 'Open Items Dashboard']], soon: ['Multi-job rollup (next phase)'] },
+        { id: 'overview', icon: '🏙️', label: 'All Jobs Overview', tabs: [['jobs', 'All Jobs Overview'], ['dashboard', 'Open Items Dashboard (this job)']], badge: function () { return jobs.length > 1 ? [String(jobs.length) + ' jobs', false] : null; } },
         { id: 'budget', icon: '💰', label: 'Budget vs Actual', tabs: [['jobcost', 'Budget vs Actual', 'budgetSummary'], ['jobcost', 'Job Cost Dashboard']], badge: budgetPctBadge },
         { id: 'coexposure', icon: '📝', label: 'Change-Order Exposure', tabs: [['changes', 'Change Orders']], badge: function () { const t = changes.filter(function (c) { return c.approval === 'Pending'; }).reduce(function (s, c) { return s + (c.costEstimate || 0); }, 0); return t ? [money(t), true] : null; } },
         { id: 'progress', icon: '📈', label: 'Progress', tabs: [['dailylog', 'Daily Log'], ['punch', 'Punch List'], ['rfis', 'RFIs']], badge: function () { return countBadge(punch.filter(function (p) { return !p.resolved; }).length + rfis.filter(function (r) { return r.status !== 'Answered'; }).length); } },
@@ -1218,9 +1246,9 @@ function wageFor(name) {
   if (w && typeof w === 'object') return { type: w.type === 'contract' ? 'contract' : 'hourly', rate: w.rate || 0 };
   return { type: 'hourly', rate: 0 };
 }
-function laborCostByEmployee() {
+function laborCostByEmployee(events) {
   const byEmployee = {};
-  clockEvents.forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
+  (events || clockEvents).forEach(function (e) { (byEmployee[e.employee] = byEmployee[e.employee] || []).push(e); });
   return Object.keys(byEmployee).sort().map(function (name) {
     const events = byEmployee[name].slice().sort(function (a, b) { return clockMs(a) - clockMs(b); });
     let hours = 0, active = false, lastIn = null;
@@ -1233,7 +1261,7 @@ function laborCostByEmployee() {
     return { name: name, hours: hours, active: active, payType: w.type, rate: w.rate, cost: w.type === 'hourly' ? hours * w.rate : 0 };
   });
 }
-function totalHourlyLaborCost() { return laborCostByEmployee().reduce(function (sum, r) { return sum + r.cost; }, 0); }
+function totalHourlyLaborCost(events) { return laborCostByEmployee(events).reduce(function (sum, r) { return sum + r.cost; }, 0); }
 
 // Flat contract: cost to date is the larger of earned (% complete × amount)
 // and paid — a deposit is money out the door even before work starts.
@@ -1887,7 +1915,12 @@ document.getElementById('photoInput').addEventListener('change', function (e) { 
 document.getElementById('saveVideoToggle').addEventListener('change', function (e) { saveJson(LS.saveVideo, !!e.target.checked); });
 document.getElementById('lightboxClose').addEventListener('click', function () { document.getElementById('lightbox').classList.remove('open'); });
 document.getElementById('lightbox').addEventListener('click', function (e) { if (e.target.id === 'lightbox') document.getElementById('lightbox').classList.remove('open'); });
-function persistSiteInfo() { saveJson(LS.siteName, document.getElementById('siteName').textContent.trim()); saveJson(LS.siteAddress, document.getElementById('siteAddress').textContent.trim()); }
+function persistSiteInfo() {
+  const name = document.getElementById('siteName').textContent.trim(), address = document.getElementById('siteAddress').textContent.trim();
+  saveJson(LS.siteName, name); saveJson(LS.siteAddress, address);
+  const job = currentJob();
+  if (job) { if (name && name !== 'Job Site') job.name = name; job.address = address === 'Tap to add address' ? '' : address; persistJobs(); renderJobTabs(); }
+}
 document.getElementById('siteName').addEventListener('blur', persistSiteInfo);
 document.getElementById('siteAddress').addEventListener('blur', persistSiteInfo);
 document.getElementById('addPunchBtn').addEventListener('click', function () {
@@ -2255,50 +2288,109 @@ window.generateReport = function () {
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
 document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
-  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, flat sub contract, GPS site location, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
-  photos = []; punch = []; changes = []; rfis = []; contacts = {}; submittals = []; clockEvents = []; dailyLogs = []; safetyLogs = []; notesLog = []; wages = {}; materials = []; budget = { labor: 0, materials: 0 }; drawings = []; walks = []; currentWalk = null; selectedWalkId = null;
-  properties = []; units = []; tenants = []; leases = []; payments = []; leaseWalkContext = null;
-  subContracts = []; geoSites = []; autoClock = { enabled: false, employee: '' }; stopAutoClock();
-  selectedPhotos.clear();
-  Object.keys(LS).forEach(function (k) { try { localStorage.removeItem(LS[k]); } catch (e) { } });
-  document.getElementById('siteName').textContent = 'Job Site';
-  document.getElementById('siteAddress').textContent = 'Tap to add address';
-  document.getElementById('saveVideoToggle').checked = false;
-  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
-  document.getElementById('report').innerHTML = '';
-  renderPhotosTab();
-  updateSelectionBar();
-  renderAllNotes();
-  renderAllItems();
-  renderContacts();
-  renderSubmittals();
-  checkMissedClockOuts();
-  renderClockFlagged();
-  renderClockLog();
-  renderGeoSites();
-  renderDailyLogs();
-  renderSafetyLogs();
-  renderDashboard();
-  renderLaborCost();
-  renderMaterials();
-  renderBudgetSummary();
-  renderDrawings();
-  renderDrawingRefs();
-  refreshAiStatus();
-  renderSummary();
-  renderProperties();
-  renderUnits();
-  renderTenants();
-  renderLeases();
-  renderRentRoll();
-  renderArrears();
-  renderFlagBar();
-  setHomeMode('build');
-  setRole('all');
-  setWalkStatus('info', 'Ready. Tap to begin.');
-  alert('All SiteWalk data cleared.');
+  if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every job and every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, flat sub contract, GPS site location, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
+  // Every job's keys go, then a reload rebuilds a fresh default job; no
+  // in-memory reset needed.
+  stopAutoClock();
+  const doomed = [];
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && isAppKey(k)) doomed.push(k); }
+  doomed.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) { } });
+  alert('All SiteWalk data cleared, including every job.');
+  location.reload();
 }
 document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
+
+/* ---------- Jobs: tabs on Home + All Jobs overview ---------- */
+function renderJobTabs() {
+  const wrap = document.getElementById('homeJobTabs');
+  if (!wrap) return;
+  wrap.innerHTML = '<button type="button" class="home-job-tab all" data-job="__all">📊 All Jobs</button>'
+    + jobs.map(function (j) { return '<button type="button" class="home-job-tab' + (j.id === currentJobId ? ' active' : '') + '" data-job="' + escapeHtml(j.id) + '">' + escapeHtml(j.name) + '</button>'; }).join('')
+    + '<button type="button" class="home-job-tab new" data-job="__new">+ New Job</button>';
+}
+function switchJob(id) {
+  if (id === currentJobId) return;
+  if (walkActive) { alert('End the walk before switching jobs.'); return; }
+  saveJson(LS.currentJob, id);
+  location.reload();
+}
+function newJob() {
+  if (walkActive) { alert('End the walk before starting a new job.'); return; }
+  const name = (prompt('New job name, e.g. 45 Oak Ridge Rd') || '').trim();
+  if (!name) return;
+  const address = (prompt('Address for ' + name + ' (optional)') || '').trim();
+  const id = 'j_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  jobs.push({ id: id, name: name, address: address, created: new Date().toISOString() });
+  persistJobs();
+  saveJson(jobKey(LS_BASE.siteName, id), name);
+  if (address) saveJson(jobKey(LS_BASE.siteAddress, id), address);
+  switchJob(id);
+}
+function deleteJob(id) {
+  const job = jobs.find(function (j) { return j.id === id; });
+  if (!job || id === currentJobId) return;
+  if (!confirm('Delete the job "' + job.name + '" and ALL of its photos, items, clock entries and costs from this phone? This can\'t be undone.')) return;
+  JOB_SCOPED.forEach(function (k) { try { localStorage.removeItem(jobKey(LS_BASE[k], id)); } catch (e) { } });
+  jobs = jobs.filter(function (j) { return j.id !== id; });
+  persistJobs(); renderJobTabs(); renderJobsOverview();
+}
+document.getElementById('homeJobTabs').addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-job]');
+  if (!btn) return;
+  const id = btn.getAttribute('data-job');
+  if (id === '__all') showTab('jobs');
+  else if (id === '__new') newJob();
+  else switchJob(id);
+});
+// Reads a job's numbers straight from its stored keys (photos skipped:
+// they're the heavy part and nothing here needs them).
+function jobSummary(job) {
+  const get = function (k, fb) { const v = loadJson(jobKey(LS_BASE[k], job.id), fb); return Array.isArray(fb) && !Array.isArray(v) ? fb : v; };
+  const jp = get('punch', []), jr = get('rfis', []), jc = get('changes', []), jm = get('materials', []), js = get('subContracts', []), je = get('clockEvents', []), jl = get('dailyLogs', []);
+  const jb = get('budget', {}) || {};
+  const labor = totalHourlyLaborCost(je) + js.reduce(function (t, c) { return t + contractCostToDate(c); }, 0);
+  const mats = jm.reduce(function (t, m) { return t + (m.cost || 0); }, 0);
+  const pending = jc.filter(function (c) { return c.approval === 'Pending'; });
+  return {
+    job: job, budget: (jb.labor || 0) + (jb.materials || 0), spent: labor + mats,
+    openPunch: jp.filter(function (x) { return !x.resolved; }).length, openRfis: jr.filter(function (x) { return x.status !== 'Answered'; }).length,
+    pendingCo: pending.reduce(function (t, c) { return t + (c.costEstimate || 0); }, 0), pendingCoCount: pending.length,
+    onClock: laborCostByEmployee(je).filter(function (r) { return r.active; }).length,
+    owed: js.reduce(function (t, c) { return t + contractOwed(c); }, 0),
+    lastLog: jl.length ? jl[jl.length - 1].date : null
+  };
+}
+function renderJobsOverview() {
+  const wrap = document.getElementById('jobsOverview');
+  if (!wrap) return;
+  const rows = jobs.map(jobSummary);
+  const sum = function (f) { return rows.reduce(function (t, r) { return t + r[f]; }, 0); };
+  const budgetAll = sum('budget'), spentAll = sum('spent');
+  let html = '<div class="role-kpis">'
+    + [[String(jobs.length), 'job' + (jobs.length === 1 ? '' : 's') + ' on this phone', false],
+      [budgetAll ? Math.round(spentAll / budgetAll * 100) + '%' : money(spentAll), budgetAll ? 'of combined budget spent (' + money(spentAll) + ' / ' + money(budgetAll) + ')' : 'spent across all jobs (no budgets set)', budgetAll > 0 && spentAll > budgetAll],
+      [String(sum('openPunch') + sum('openRfis')), 'open punch items + RFIs', false],
+      [money(sum('pendingCo')), 'pending change-order exposure', sum('pendingCo') > 0],
+      [money(sum('owed')), 'owed to flat-contract subs', sum('owed') > 0.005],
+      [String(sum('onClock')), 'on the clock now', false]
+    ].map(function (k) { return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>'; }).join('') + '</div>';
+  rows.forEach(function (r) {
+    const pct = r.budget ? Math.round(r.spent / r.budget * 100) : null;
+    const current = r.job.id === currentJobId;
+    html += '<div class="item-card job-card" data-job-id="' + escapeHtml(r.job.id) + '"><strong>' + escapeHtml(r.job.name) + '</strong>' + (current ? ' <span class="type-tag change">Open now</span>' : '')
+      + (r.job.address ? '<div class="meta">' + escapeHtml(r.job.address) + '</div>' : '')
+      + '<div class="meta">' + (r.budget ? 'Spent ' + money(r.spent) + ' of ' + money(r.budget) + ' (' + pct + '%)' : 'Spent ' + money(r.spent) + ' · no budget set') + '</div>'
+      + (r.budget ? '<div class="job-bar"><span class="' + (r.spent > r.budget ? 'over' : '') + '" style="width:' + Math.min(100, pct) + '%"></span></div>' : '')
+      + '<div class="meta">' + r.openPunch + ' open punch · ' + r.openRfis + ' open RFIs · ' + r.pendingCoCount + ' CO pending (' + money(r.pendingCo) + ')'
+      + (r.owed > 0.005 ? ' · ' + money(r.owed) + ' owed to subs' : '') + (r.onClock ? ' · ' + r.onClock + ' on the clock' : '') + (r.lastLog ? ' · last daily log ' + escapeHtml(r.lastLog) : '') + '</div>'
+      + (current ? '' : '<button type="button" class="small green job-open-btn">Open this job</button> <button type="button" class="small gray job-delete-btn">Delete</button>')
+      + '</div>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.job-open-btn').forEach(function (b) { b.addEventListener('click', function () { switchJob(b.closest('[data-job-id]').getAttribute('data-job-id')); }); });
+  wrap.querySelectorAll('.job-delete-btn').forEach(function (b) { b.addEventListener('click', function () { deleteJob(b.closest('[data-job-id]').getAttribute('data-job-id')); }); });
+}
+document.getElementById('jobsNewBtn').addEventListener('click', newJob);
 
 /* ---------- Backup & restore (no account needed) ---------- */
 // One JSON file holding every LS key, so data can move to another phone
@@ -2308,12 +2400,12 @@ const BACKUP_SKIP = [LS.aiKey];
 function setBackupStatus(cls, msg) { const el = document.getElementById('backupStatus'); el.style.display = 'block'; el.className = 'status ' + cls; el.textContent = msg; }
 function exportBackup() {
   const data = {};
-  Object.keys(LS).forEach(function (k) {
-    const key = LS[k];
-    if (BACKUP_SKIP.indexOf(key) !== -1) return;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !isAppKey(key) || BACKUP_SKIP.indexOf(key) !== -1) continue;
     try { const raw = localStorage.getItem(key); if (raw != null) data[key] = JSON.parse(raw); } catch (e) { }
-  });
-  const json = JSON.stringify({ app: 'SiteWalk', format: 1, exportedAt: new Date().toISOString(), data: data });
+  }
+  const json = JSON.stringify({ app: 'SiteWalk', format: 2, exportedAt: new Date().toISOString(), data: data });
   const filename = 'sitewalk-backup-' + new Date().toISOString().slice(0, 10) + '.json';
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2330,10 +2422,11 @@ function importBackup(file) {
     try { parsed = JSON.parse(reader.result); } catch (e) { setBackupStatus('err', 'That file isn\'t a SiteWalk backup.'); return; }
     if (!parsed || parsed.app !== 'SiteWalk' || !parsed.data || typeof parsed.data !== 'object') { setBackupStatus('err', 'That file isn\'t a SiteWalk backup.'); return; }
     if (!confirm('Replace ALL data on this phone with the backup from ' + (parsed.exportedAt || 'unknown date').slice(0, 10) + '?\n\nAnything on this phone that isn\'t in the backup will be lost.')) return;
-    const known = Object.keys(LS).map(function (k) { return LS[k]; });
-    known.forEach(function (key) { if (BACKUP_SKIP.indexOf(key) === -1) { try { localStorage.removeItem(key); } catch (e) { } } });
+    const existing = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && isAppKey(k) && BACKUP_SKIP.indexOf(k) === -1) existing.push(k); }
+    existing.forEach(function (key) { try { localStorage.removeItem(key); } catch (e) { } });
     let failed = false;
-    Object.keys(parsed.data).forEach(function (key) { if (known.indexOf(key) !== -1 && BACKUP_SKIP.indexOf(key) === -1 && !saveJson(key, parsed.data[key])) failed = true; });
+    Object.keys(parsed.data).forEach(function (key) { if (isAppKey(key) && BACKUP_SKIP.indexOf(key) === -1 && !saveJson(key, parsed.data[key])) failed = true; });
     if (failed) { setBackupStatus('err', 'Phone storage filled up partway through the restore — some data (likely photos) didn\'t fit.'); return; }
     location.reload();
   };
@@ -2359,6 +2452,11 @@ window.addEventListener('load', function () {
   const savedSiteName = loadJson(LS.siteName, null);
   const savedSiteAddress = loadJson(LS.siteAddress, null);
   if (savedSiteName) document.getElementById('siteName').textContent = savedSiteName;
+  else if (currentJob()) document.getElementById('siteName').textContent = currentJob().name;
+  if (!savedSiteAddress && currentJob() && currentJob().address) document.getElementById('siteAddress').textContent = currentJob().address;
+  const clockSiteEl = document.getElementById('clockSite');
+  if (clockSiteEl && !clockSiteEl.value && currentJob()) clockSiteEl.value = currentJob().name;
+  renderJobTabs();
   if (savedSiteAddress) document.getElementById('siteAddress').textContent = savedSiteAddress;
   document.getElementById('saveVideoToggle').checked = !!loadJson(LS.saveVideo, false);
   renderPhotosTab();
