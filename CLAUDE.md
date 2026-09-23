@@ -85,15 +85,27 @@ New LS keys: `swProperties`, `swUnits`, `swTenants`, `swLeases`, `swPayments`, `
 
 **Phone-tested:** no — this session tested with headless Chromium + Playwright against a local static server (mode toggle, drilldown, full CRUD flow, rent-roll/arrears math, CSV download, and the Start Lease Walk → Chapter 1 handoff all verified with zero console errors). Real-device verification (especially the radial pillar layout on Hold mode, and that CSV download/share behaves the same as the existing video-save flow) is still outstanding.
 
-## Role views — "View as" (2026-09-22, cache `sitewalk-v61`)
+## Role views — "View as" (2026-09-22, cache `sitewalk-v61`; reworked 2026-09-23, cache `sitewalk-v63`)
 
-A four-button bar at the top of Home (`.home-role-btn[data-role]`, persisted `swRole`, applied as `data-role` on `#tab-home`): **Admin** (`all`, default — the unchanged Build/Hold dial scene), **Manager**, **Bookkeeper**, **Developer**. Any non-Admin role hides the mode toggle, dial scene and drilldown and shows `#homeRoleView`, rendered by `renderRoleView()` in `walk.js` from the `ROLES` config: live KPI tiles (`roleKpis()`, computed off the same in-app arrays; red tile = needs attention) + shortcut buttons into existing `tab-*` panels + disabled "Coming soon" placeholders. Re-renders on every `renderFlagBar()` and whenever Home is shown. The split is this session's judgment call, meant to be revised:
+A four-button bar at the top of Home (`.home-role-btn[data-role]`, persisted `swRole`, applied as `data-role` on `#tab-home`): **Admin** (`all`, default), **Manager**, **Bookkeeper**, **Developer**.
 
-- **Manager** — Start Walk-Around / Generate Report buttons; open punch, open RFIs, pending submittals, COs awaiting client, on the clock now, missed clock-outs, safety entries, last daily log. Tools: Walk, Punch, RFIs, Submittals, COs, Safety, Daily Log, Clock, Contacts, Drawings, Drawing Refs, Maintenance walks, Dashboard, Report.
-- **Bookkeeper** — job budget % spent, labor/materials to date, approved CO $ to bill, pending CO $, rent collected, rent past due, units in arrears. Tools: Job Cost, COs, Clock (payroll hours), Rent & Payments (CSV), Arrears, Leases, Tenants, Report. Placeholder: Ch.5 Invoicing.
-- **Developer** — job budget % spent, pending CO exposure, open items, properties/units, occupancy, monthly rent roll, rent past due, renewals in 60 days. Tools: Dashboard, Job Cost, COs, Units, Leases, Rent, Arrears, Report. Placeholders: Ch.6 Pipeline, Ch.9 Price-the-House. (This is effectively a first cut of the Ch.8 Developer Dashboard; the disabled Ch.8 button in the Admin drilldown is still there.)
+**Every role now gets the same wood dial scene**: background, window, Hartwig logo, Build/Hold toggle, dial. This replaced the v61 tile-only dashboard at the user's request.
+- **Admin and Manager** use the standard seven Build/Hold pillars, with Start Walk-Around in the centre.
+- **Bookkeeper and Developer** get their own seven pillars per mode from `ROLE_DIALS` in `walk.js`. `renderRoleDial()` builds `.home-pillar-role` buttons into `.home-pillars`, at the same seven angles so the dial IIFE works unchanged, plus matching `.home-block-role` drilldown accordions. It sets `data-custom-dial` on `#tab-home`, and CSS then hides the standard pillars and blocks.
+- The role dial rebuilds only on a role or mode change. Pillar badges (`.pillar-badge`, red = needs attention) refresh in place via `updateRoleBadges()`, called from `renderRoleView()`/`renderFlagBar()`, so a data change never swaps out a pillar mid-drag.
+- Each role/mode also sets the centre button and the gold button (`center`/`report` in the config, run by `runHomeAction()`):
+  - **Bookkeeper Build:** Job Cost, Payroll Hours, Flat-Contract Subs, Materials, Change Orders to Bill, Invoicing (placeholder), Reports. Centre button: Log Sub Payment (Job Cost → subs). Gold button: Generate Report.
+  - **Bookkeeper Hold:** Rent & Payments, Arrears, Leases, Tenants, CSV Export, Deposits (placeholder), Reports. Centre button: Log Rent Payment. Gold button: Export Rent Roll (CSV).
+  - **Developer Build:** All Jobs Overview (dashboard; multi-job rollup is the next phase), Budget vs Actual, Change-Order Exposure, Progress, Land Pipeline (Ch.6 placeholder), Price-the-House (Ch.9 placeholder), Reports. Centre button: Generate Report. Gold button: Open Items Dashboard.
+  - **Developer Hold:** Properties & Units, Occupancy, Rent Roll, Arrears, Renewals, Maintenance Walks, Commercial (placeholder). Centre button: Generate Report. Gold button: Rent Roll.
+- Drilldown shortcuts can scroll to a section of a tab (`goToTab(tab, scrollId)`), e.g. Flat-Contract Subs inside Job Cost.
+- The live KPI tiles (`roleKpis()`, `#homeRoleView`) for any non-Admin role now sit in the drilldown, below the blocks. "⋯ Your numbers & all tools" opens it. `.home-admin` (Setup) stays hidden for non-Admin roles.
 
-**A lens, not access control** — no login, anyone can tap any role; Setup is only reachable from Admin. And because everything is still per-device `localStorage`, a bookkeeper on their own phone sees their own empty data — role views only become truly useful once cross-device sync (parked Firebase) exists. Tested with headless Chromium at 390px width (all three views, persistence across reload, tab shortcuts, no horizontal scroll); not phone-tested.
+**Next phase (planned, not built): multiple jobs.** The app still knows one job site. Job tabs (`All Jobs` · per-job · `+ New Job`) need a job id stamped on every record, with existing data migrated into a first job.
+
+**A lens, not access control:** there's no login, and anyone can tap any role. Data is per-device `localStorage`, so role views only become truly useful once cross-device sync (parked Firebase) exists. The Setup backup file is the stopgap.
+
+Tested with headless Chromium at 390px: all four role/mode dials, centre and gold button actions (including the CSV download), pillar → drilldown → tab shortcut, dial stepping on role pillars, persistence across reload, and Admin unchanged. No page errors, no horizontal scroll. Not phone-tested.
 
 ## Hartwig partner logo (2026-09-22, cache `sitewalk-v60`)
 

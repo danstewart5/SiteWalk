@@ -374,27 +374,31 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 #tab-home[data-home-mode="build"] .home-block-hold { display: none; }
 #tab-home[data-home-mode="hold"] .home-pillar-build,
 #tab-home[data-home-mode="hold"] .home-block-build { display: none; }
-.home-block-hold { border-top: 4px solid #b98430; }
+.home-block-hold, .home-block-role-hold { border-top: 4px solid #b98430; }
 .home-block-hold .home-block-icon { background: #fdf3e0; }
 
 /* ---------- Role views (View as: Admin / Manager / Bookkeeper / Developer) ---------- */
-/* A lens, not access control: no login, anyone can switch. "all" is the
-   untouched Admin dial scene; any other role swaps it for #homeRoleView. */
+/* A lens, not access control: no login, anyone can switch. Every role gets
+   the same wood dial scene. Bookkeeper/Developer swap in their own seven
+   pillars per Build/Hold mode (JS sets data-custom-dial and renders
+   .home-pillar-role/.home-block-role). Manager keeps the Admin pillars. A
+   non-Admin role's numbers (#homeRoleView) sit below the drilldown blocks,
+   and Setup (.home-admin) stays Admin-only. */
 .home-role-toggle { display: flex; gap: 4px; background: #1a365d; border-radius: 12px; padding: 4px; margin: 0 0 10px; }
 .home-role-btn { flex: 1; border: none; background: none; padding: 8px 2px; border-radius: 9px; font-size: 11.5px; font-weight: 700; color: #cbd5e0; cursor: pointer; margin: 0; width: auto; line-height: 1.2; }
 .home-role-btn span { display: block; font-size: 16px; margin-bottom: 2px; }
 .home-role-btn.active { background: #fff; color: #1a365d; }
 .home-role-view { display: none; }
-#tab-home:not([data-role="all"]) .home-role-view { display: block; }
-#tab-home:not([data-role="all"]) .home-mode-toggle,
-#tab-home:not([data-role="all"]) .home-scene,
-#tab-home:not([data-role="all"]) .home-drilldown { display: none; }
+#tab-home:not([data-role="all"]) .home-role-view { display: block; margin: 18px 0 6px; }
+#tab-home:not([data-role="all"]) .home-admin { display: none; }
+#tab-home[data-custom-dial] .home-pillar-build, #tab-home[data-custom-dial] .home-pillar-hold,
+#tab-home[data-custom-dial] .home-block-build, #tab-home[data-custom-dial] .home-block-hold { display: none; }
+.pillar-visual { position: relative; }
+.pillar-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: #e0a94a; color: #2b1d0e; font-size: 9px; font-weight: 800; line-height: 1; border-radius: 8px; padding: 2px 5px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.pillar-badge.warn { background: #c53030; color: #fff; }
+.pillar-badge:empty { display: none; }
 .role-intro { font-size: 13px; color: #4a5568; margin: 0 0 12px; }
 .role-intro strong { display: block; font-size: 17px; color: #1a365d; margin-bottom: 2px; }
-.role-actions { display: flex; gap: 8px; margin: 0 0 12px; }
-.role-actions button { flex: 1; margin: 0; padding: 12px 8px; font-size: 14px; font-weight: 800; border-radius: 10px; }
-.role-actions .role-walk { background: #4CAF6E; color: #fff; }
-.role-actions .role-report { background: #e0a94a; color: #2b1d0e; }
 .auto-clock-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 10px 0; }
 .auto-clock-toggle input { width: auto; margin: 2px 0 0; }
 .pay-type-select { width: auto; display: inline-block; padding: 4px; margin: 0 4px; }
@@ -405,8 +409,6 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .role-kpi.warn { background: #fff5f5; border-color: #fed7d7; }
 .role-kpi.warn b { color: #c53030; }
 .role-section-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #a0aec0; margin: 0 0 6px; }
-.role-links { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
-.role-links .home-chapter-btn:disabled { background: #fafafa; color: #a0aec0; opacity: 1; }
 
 @media print {
 body { background: white; padding: 0; }
@@ -437,7 +439,6 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 <div class="home-flag-bar" id="homeFlagBar"></div>
 
-<div class="home-role-view" id="homeRoleView"></div>
 <div class="home-mode-toggle" id="homeModeToggle">
 <button type="button" class="home-mode-btn active" data-mode="build">🏗️ Build</button>
 <button type="button" class="home-mode-btn" data-mode="hold">🔑 Hold</button>
@@ -621,6 +622,7 @@ button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-sce
 
 </div>
 
+<div class="home-role-view" id="homeRoleView"></div>
 <div class="home-admin">
 <span class="home-admin-label">Admin &amp; Overview</span>
 <div class="home-admin-links">
