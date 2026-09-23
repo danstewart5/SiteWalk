@@ -1,4 +1,4 @@
-const TABS = ['home', 'jobs', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
+const TABS = ['home', 'jobs', 'invoices', 'walk', 'punch', 'changes', 'rfis', 'submittals', 'safety', 'clock', 'dailylog', 'jobcost', 'drawingrefs', 'drawings', 'dashboard', 'contacts', 'units', 'tenants', 'leases', 'rentroll', 'arrears', 'leasewalk', 'commercial', 'setup', 'report'];
 function showTab(name) {
   if (TABS.indexOf(name) === -1) name = 'home';
   TABS.forEach(function (t) {
@@ -10,6 +10,7 @@ function showTab(name) {
   });
   if (name === 'home' && typeof renderRoleView === 'function') renderRoleView();
   if (name === 'jobs' && typeof renderJobsOverview === 'function') renderJobsOverview();
+  if (name === 'invoices' && typeof renderInvoices === 'function') renderInvoices();
 }
 document.querySelectorAll('.top-tab-btn').forEach(function (btn) {
   btn.addEventListener('click', function () { showTab(btn.getAttribute('data-tab')); });
@@ -156,7 +157,7 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock', invoices: 'swInvoices', business: 'swBusiness', invoiceSeq: 'swInvoiceSeq' };
 // Jobs. Each job keeps its own copy of the job-scoped keys, stored as
 // key + '@' + jobId. The original job ('default') keeps the plain keys, so
 // upgrading copies nothing (photos can be most of the storage quota). The LS
@@ -165,7 +166,7 @@ const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: '
 // exist. Switching jobs saves the choice and reloads the page. Trade
 // contacts, wage rates, AI setup, role/mode, auto-clock and all LeaseFlow
 // data stay shared across jobs.
-const JOB_SCOPED = ['photos', 'punch', 'changes', 'rfis', 'submittals', 'clockEvents', 'dailyLogs', 'safety', 'notes', 'siteName', 'siteAddress', 'materials', 'budget', 'drawings', 'walks', 'subContracts', 'geoSites'];
+const JOB_SCOPED = ['photos', 'punch', 'changes', 'rfis', 'submittals', 'clockEvents', 'dailyLogs', 'safety', 'notes', 'siteName', 'siteAddress', 'materials', 'budget', 'drawings', 'walks', 'subContracts', 'geoSites', 'invoices'];
 const LS_BASE = Object.assign({}, LS);
 LS.jobs = 'swJobs'; LS.currentJob = 'swCurrentJob';
 function jobKey(base, jobId) { return jobId === 'default' ? base : base + '@' + jobId; }
@@ -919,6 +920,8 @@ function renderFlagBar() {
   const pills = [];
   if (openPunch) pills.push({ cls: 'red', text: openPunch + ' Open Punch Item' + (openPunch === 1 ? '' : 's') });
   if (missedClockOuts) pills.push({ cls: 'red', text: missedClockOuts + ' Missed Clock-Out' + (missedClockOuts === 1 ? '' : 's') });
+  const overdueInv = invoiceOutstanding(invoices).overdue;
+  if (overdueInv) pills.push({ cls: 'red', text: overdueInv + ' Overdue Invoice' + (overdueInv === 1 ? '' : 's') });
   if (flags.arrears.length) pills.push({ cls: 'red', text: flags.arrears.length + ' Unit' + (flags.arrears.length === 1 ? '' : 's') + ' in Arrears' });
   if (flags.renewalsSoon.length) pills.push({ cls: 'yellow', text: flags.renewalsSoon.length + ' Lease Renewal' + (flags.renewalsSoon.length === 1 ? '' : 's') + ' Due Soon' });
   wrap.innerHTML = pills.length ? pills.map(function (f) { return '<span class="home-flag-pill ' + f.cls + '">' + f.text + '</span>'; }).join('') : '<span class="home-flag-pill ok">All clear</span>';
@@ -966,8 +969,8 @@ const ROLE_DIALS = {
         { id: 'payroll', icon: '⏱', label: 'Payroll Hours', tabs: [['clock', 'Clock In/Out'], ['jobcost', 'Hourly Labor Cost', 'laborCostList']], badge: function () { return countBadge(clockEvents.filter(function (e) { return e.flagged; }).length, true); } },
         { id: 'subs', icon: '🤝', label: 'Flat-Contract Subs', tabs: [['jobcost', 'Flat-Contract Subs', 'subContractList']], badge: function () { const o = totalContractOwed(); return o > 0.005 ? [money(o), true] : null; } },
         { id: 'materials', icon: '🧱', label: 'Materials', tabs: [['jobcost', 'Supplies & Materials', 'materialsList']], badge: function () { return countBadge(materials.length); } },
-        { id: 'cobill', icon: '📝', label: 'Change Orders to Bill', tabs: [['changes', 'Change Orders']], badge: function () { return countBadge(changes.filter(function (c) { return c.approval === 'Approved'; }).length); } },
-        { id: 'invoicing', icon: '🧾', label: 'Invoicing', tabs: [], soon: ['Ch. 5 · Invoicing'] },
+        { id: 'cobill', icon: '📝', label: 'Change Orders to Bill', tabs: [['changes', 'Change Orders'], ['invoices', 'Bill them on an invoice']], badge: function () { return countBadge(unbilledChangeOrders().length); } },
+        { id: 'invoicing', icon: '🧾', label: 'Invoicing', tabs: [['invoices', 'Ch. 5 · Invoices']], badge: function () { const o = invoiceOutstanding(invoices); return o.balance > 0.005 ? [money(o.balance), o.overdue > 0] : null; } },
         REPORT_PILLAR
       ]
     },
@@ -1108,12 +1111,14 @@ function roleKpis(role) {
     ];
   }
   if (role === 'bookkeeper') {
-    const approved = changes.filter(function (c) { return c.approval === 'Approved'; });
+    const approved = unbilledChangeOrders();
+    const inv = invoiceOutstanding(invoices);
     const collected = payments.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
     return [
       budgetKpi, [money(labor), 'labor to date (hourly ' + money(totalHourlyLaborCost()) + ' + contracts ' + money(totalContractLaborCost()) + ')', false],
       [money(totalContractOwed()), 'owed to flat-contract subs for work done', totalContractOwed() > 0.005], [money(totalContractCommitted()), subContracts.length + ' flat contract' + (subContracts.length === 1 ? '' : 's') + ' committed', false],
-      [money(mats), 'materials to date', false], [money(coSum(approved)), approved.length + ' approved change order' + (approved.length === 1 ? '' : 's') + ' to bill', false],
+      [money(mats), 'materials to date', false], [money(coSum(approved)), approved.length + ' approved change order' + (approved.length === 1 ? '' : 's') + ' not invoiced yet', approved.length > 0],
+      [money(inv.balance), 'outstanding on invoices' + (inv.overdue ? ' (' + inv.overdue + ' overdue)' : ''), inv.overdue > 0], [money(inv.paid), 'collected on invoices', false],
       [money(coSum(pendingCo)), pendingCo.length + ' change order' + (pendingCo.length === 1 ? '' : 's') + ' pending', false], [money(collected), 'rent collected (all time)', false],
       [money(pastDue), 'rent past due', pastDue > 0.005], [flags.arrears.length, 'units in arrears', flags.arrears.length > 0]
     ];
@@ -2255,6 +2260,12 @@ window.generateReport = function () {
   if (submittals.length) { html += '<div class="report-section"><h3>Submittals</h3>'; submittals.forEach(function (s) { html += '<div class="punch-item">[' + (s.trade || 'General') + '] ' + s.item + ' — ' + s.status + '</div>'; }); html += '</div>'; }
   if (dailyLogs.length) { html += '<div class="report-section"><h3>Daily Logs</h3>'; dailyLogs.forEach(function (l) { html += '<div class="punch-item">' + l.date + ' — ' + l.weather + ' — Crew: ' + (l.crewCount || 'N/A') + (l.trades ? ' — ' + l.trades : '') + (l.delays ? ' — Delays: ' + l.delays : '') + '</div>'; }); html += '</div>'; }
   if (safetyLogs.length) { html += '<div class="report-section"><h3>Safety Log</h3>'; safetyLogs.forEach(function (s) { html += '<div class="punch-item">[' + s.type + '] ' + s.desc + (s.action ? ' — Action: ' + s.action : '') + '</div>'; }); html += '</div>'; }
+  if (invoices.length) {
+    html += '<div class="report-section"><h3>Invoices</h3>';
+    invoices.forEach(function (inv) { const t = invoiceTotals(inv); html += '<div class="punch-item">' + escapeHtml(inv.number) + ' — ' + escapeHtml(inv.client.name || 'No client') + ' — ' + money2(t.due) + ' due, ' + money2(t.paid) + ' paid (' + invoiceStatus(inv).label + ')</div>'; });
+    const o = invoiceOutstanding(invoices);
+    html += '<div class="punch-item">Invoiced ' + money2(o.invoiced) + ' · Collected ' + money2(o.paid) + ' · Outstanding ' + money2(o.balance) + '</div></div>';
+  }
   const missedClockOuts = clockEvents.filter(function (e) { return e.flagged; });
   if (missedClockOuts.length) { html += '<div class="report-section"><h3>Missed Clock-Outs</h3>'; missedClockOuts.forEach(function (e) { html += '<div class="punch-item">' + e.employee + ' — ' + e.site + ' (in ' + e.time + ')</div>'; }); html += '</div>'; }
   const laborRows = laborCostByEmployee();
@@ -2286,7 +2297,7 @@ window.generateReport = function () {
   if (walkSel) walkSel.addEventListener('change', function () { selectedWalkId = walkSel.value; window.generateReport(); });
 };
 document.getElementById('genBtn').addEventListener('click', window.generateReport);
-document.getElementById('printBtn').addEventListener('click', function () { window.generateReport(); setTimeout(function () { window.print(); }, 300); });
+document.getElementById('printBtn').addEventListener('click', function () { document.body.classList.remove('printing-invoice'); window.generateReport(); setTimeout(function () { window.print(); }, 300); });
 function clearAllData() {
   if (!confirm('Clear ALL SiteWalk data on this phone?\n\nThis permanently deletes every job and every photo, note, punch item, change order, RFI, submittal, safety log, clock/daily log entry, trade contact, wage rate, flat sub contract, GPS site location, material expense, job budget, uploaded drawing, and your AI Worker setup. This can\'t be undone.')) return;
   // Every job's keys go, then a reload rebuilds a fresh default job; no
@@ -2299,6 +2310,237 @@ function clearAllData() {
   location.reload();
 }
 document.getElementById('clearAllBtn').addEventListener('click', clearAllData);
+
+/* ---------- Ch. 5 Invoicing ---------- */
+// Invoices belong to the current job (swInvoices is job-scoped). Business
+// details and the invoice number sequence are shared, so numbers never
+// repeat across jobs. Money math: subtotal = Σ qty × rate; tax = subtotal ×
+// tax%; total = subtotal + tax; holdback (e.g. a lien holdback) = subtotal ×
+// holdback%, kept back by the client until later; due now = total − holdback.
+// An approved change order pulled onto an invoice is marked with invoiceId
+// (linked back by its ts) so it isn't billed twice. Deleting the line or the
+// invoice frees it again.
+let invoices = [], business = {}, editingInvoiceId = null;
+function persistInvoices() { saveJson(LS.invoices, invoices); }
+function money2(n) { return '$' + (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function isoToday() { return new Date().toISOString().slice(0, 10); }
+function isoPlusDays(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function unbilledChangeOrders() { return changes.filter(function (c) { return c.approval === 'Approved' && !c.invoiceId; }); }
+function invoiceTotals(inv) {
+  const subtotal = (inv.lines || []).reduce(function (t, l) { return t + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0); }, 0);
+  const tax = subtotal * (parseFloat(inv.taxPct) || 0) / 100;
+  const holdback = subtotal * (parseFloat(inv.holdbackPct) || 0) / 100;
+  const total = subtotal + tax, due = total - holdback;
+  const paid = (inv.payments || []).reduce(function (t, p) { return t + (p.amount || 0); }, 0);
+  return { subtotal: subtotal, tax: tax, holdback: holdback, total: total, due: due, paid: paid, balance: Math.max(0, due - paid) };
+}
+function invoiceStatus(inv) {
+  const t = invoiceTotals(inv);
+  if (!inv.sentAt) return { key: 'draft', label: 'Draft' };
+  if (t.due > 0 && t.balance <= 0.005) return { key: 'paid', label: 'Paid' };
+  if (inv.dueDate && inv.dueDate < isoToday()) return { key: 'overdue', label: 'Overdue' };
+  if (t.paid > 0) return { key: 'partial', label: 'Part paid' };
+  return { key: 'sent', label: 'Sent' };
+}
+// Drafts don't count as money owed yet.
+function invoiceOutstanding(list) {
+  const out = { invoiced: 0, paid: 0, balance: 0, overdue: 0 };
+  (list || []).forEach(function (inv) {
+    if (!inv.sentAt) return;
+    const t = invoiceTotals(inv);
+    out.invoiced += t.due; out.paid += t.paid; out.balance += t.balance;
+    if (invoiceStatus(inv).key === 'overdue') out.overdue++;
+  });
+  return out;
+}
+function fillBusinessForm() {
+  [['bizName', 'name'], ['bizAddress', 'address'], ['bizContact', 'contact'], ['bizTaxNo', 'taxNo'], ['bizTerms', 'terms']].forEach(function (f) {
+    const el = document.getElementById(f[0]); if (el) el.value = business[f[1]] || '';
+  });
+}
+document.getElementById('saveBizBtn').addEventListener('click', function () {
+  business = { name: document.getElementById('bizName').value.trim(), address: document.getElementById('bizAddress').value.trim(), contact: document.getElementById('bizContact').value.trim(), taxNo: document.getElementById('bizTaxNo').value.trim(), terms: document.getElementById('bizTerms').value.trim() };
+  saveJson(LS.business, business);
+  document.querySelector('.invoice-business').open = false;
+});
+function editingInvoice() { return invoices.find(function (i) { return i.id === editingInvoiceId; }) || null; }
+document.getElementById('newInvoiceBtn').addEventListener('click', function () {
+  const seq = (loadJson(LS.invoiceSeq, 0) || 0) + 1;
+  saveJson(LS.invoiceSeq, seq);
+  const last = invoices[invoices.length - 1];
+  const today = isoToday();
+  const inv = {
+    id: 'inv_' + Date.now().toString(36), number: 'INV-' + String(seq).padStart(4, '0'), date: today, dueDate: isoPlusDays(today, 30),
+    client: last ? Object.assign({}, last.client) : { name: '', email: '', address: '' },
+    lines: [], taxPct: last ? last.taxPct : 5, holdbackPct: last ? last.holdbackPct : 0, notes: '', payments: [], sentAt: null, created: new Date().toISOString()
+  };
+  invoices.push(inv); persistInvoices();
+  editingInvoiceId = inv.id;
+  renderInvoices();
+  document.getElementById('invoiceEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+function renderInvoiceEditor() {
+  const wrap = document.getElementById('invoiceEditor');
+  const inv = editingInvoice();
+  if (!inv) { wrap.innerHTML = ''; return; }
+  const esc = function (v) { return escapeHtml(v == null ? '' : v); };
+  const unbilled = unbilledChangeOrders();
+  let html = '<div class="inv-editor"><h3>' + esc(inv.number) + ' <span class="type-tag inv-' + invoiceStatus(inv).key + '">' + invoiceStatus(inv).label + '</span></h3>'
+    + '<input type="text" data-f="client.name" placeholder="Client name" value="' + esc(inv.client.name) + '">'
+    + '<input type="email" data-f="client.email" placeholder="Client email" value="' + esc(inv.client.email) + '">'
+    + '<textarea data-f="client.address" placeholder="Client address">' + esc(inv.client.address) + '</textarea>'
+    + '<div class="inv-row"><label class="hint">Invoice date<input type="date" data-f="date" value="' + esc(inv.date) + '"></label><label class="hint">Due date<input type="date" data-f="dueDate" value="' + esc(inv.dueDate) + '"></label></div>'
+    + '<h3>Lines</h3>';
+  inv.lines.forEach(function (l, i) {
+    html += '<div class="inv-line"><input type="text" class="inv-line-desc" data-line="' + i + '" data-lf="desc" placeholder="Description" value="' + esc(l.desc) + '">'
+      + '<div class="inv-row"><input type="number" step="any" min="0" data-line="' + i + '" data-lf="qty" placeholder="Qty" value="' + esc(l.qty) + '">'
+      + '<input type="number" step="0.01" data-line="' + i + '" data-lf="rate" placeholder="Rate $" value="' + esc(l.rate) + '">'
+      + '<button type="button" class="small gray inv-line-del" data-act="del-line" data-i="' + i + '" aria-label="Remove line">✕</button></div>'
+      + '<div class="inv-line-amt" data-amt="' + i + '">' + money2((parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0)) + '</div></div>';
+  });
+  if (!inv.lines.length) html += '<p class="hint">No lines yet.</p>';
+  html += '<div class="inv-actions"><button type="button" class="gray" data-act="add-line">+ Add Line</button>'
+    + '<button type="button" class="gray" data-act="add-cos"' + (unbilled.length ? '' : ' disabled') + '>+ Approved COs (' + unbilled.length + ')</button></div>'
+    + '<div class="inv-row"><label class="hint">Tax % (GST/HST)<input type="number" step="0.01" min="0" data-f="taxPct" value="' + esc(inv.taxPct) + '"></label>'
+    + '<label class="hint">Holdback %<input type="number" step="0.01" min="0" data-f="holdbackPct" value="' + esc(inv.holdbackPct) + '"></label></div>'
+    + '<textarea data-f="notes" placeholder="Notes printed on the invoice (optional)">' + esc(inv.notes) + '</textarea>'
+    + '<div class="inv-totals" id="invTotals"></div>'
+    + '<div class="inv-actions">'
+    + (inv.sentAt ? '' : '<button type="button" class="green" data-act="sent">Mark as Sent</button>')
+    + '<button type="button" class="orange" data-act="print">Print / Save PDF</button>'
+    + '<button type="button" class="gray" data-act="email">Email Summary</button>'
+    + '<button type="button" class="gray" data-act="close">Done</button>'
+    + '<button type="button" class="red" data-act="delete">Delete Invoice</button></div></div>';
+  wrap.innerHTML = html;
+  renderInvoiceTotals();
+}
+function renderInvoiceTotals() {
+  const el = document.getElementById('invTotals'), inv = editingInvoice();
+  if (!el || !inv) return;
+  const t = invoiceTotals(inv);
+  el.innerHTML = '<div><span>Subtotal</span><span>' + money2(t.subtotal) + '</span></div>'
+    + '<div><span>Tax (' + (parseFloat(inv.taxPct) || 0) + '%)</span><span>' + money2(t.tax) + '</span></div>'
+    + '<div><span>Total</span><span>' + money2(t.total) + '</span></div>'
+    + (t.holdback ? '<div><span>Less holdback (' + (parseFloat(inv.holdbackPct) || 0) + '%, released later)</span><span>−' + money2(t.holdback) + '</span></div>' : '')
+    + '<div class="grand"><span>Amount due</span><span>' + money2(t.due) + '</span></div>'
+    + (t.paid ? '<div><span>Paid</span><span>' + money2(t.paid) + '</span></div><div class="grand"><span>Balance</span><span>' + money2(t.balance) + '</span></div>' : '');
+}
+// Typing updates the invoice and the totals in place. No re-render, so the
+// field being typed in keeps focus.
+document.getElementById('invoiceEditor').addEventListener('input', function (e) {
+  const inv = editingInvoice(), el = e.target;
+  if (!inv) return;
+  const f = el.getAttribute('data-f');
+  if (f) {
+    const parts = f.split('.');
+    if (parts.length === 2) inv[parts[0]][parts[1]] = el.value; else inv[f] = el.value;
+  } else if (el.hasAttribute('data-line')) {
+    const i = +el.getAttribute('data-line'), l = inv.lines[i];
+    l[el.getAttribute('data-lf')] = el.value;
+    const amt = document.querySelector('[data-amt="' + i + '"]');
+    if (amt) amt.textContent = money2((parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0));
+  } else return;
+  persistInvoices(); renderInvoiceTotals();
+});
+// When a field is committed, refresh the list below (and the flag bar) so it
+// matches what's in the editor.
+document.getElementById('invoiceEditor').addEventListener('change', function () { if (editingInvoice()) { renderInvoiceList(); renderFlagBar(); } });
+function releaseChangeOrder(inv, line) {
+  if (!line.coTs) return;
+  const c = changes.find(function (x) { return x.ts === line.coTs && x.invoiceId === inv.id; });
+  if (c) { delete c.invoiceId; persistLists(); }
+}
+document.getElementById('invoiceEditor').addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-act]'), inv = editingInvoice();
+  if (!btn || !inv || btn.disabled) return;
+  const act = btn.getAttribute('data-act');
+  if (act === 'add-line') { inv.lines.push({ desc: '', qty: 1, rate: '' }); }
+  else if (act === 'del-line') { const i = +btn.getAttribute('data-i'); releaseChangeOrder(inv, inv.lines[i]); inv.lines.splice(i, 1); }
+  else if (act === 'add-cos') {
+    unbilledChangeOrders().forEach(function (c) {
+      inv.lines.push({ desc: 'Change order: ' + c.text + (c.location ? ' (' + c.location + ')' : ''), qty: 1, rate: c.costEstimate || 0, coTs: c.ts });
+      c.invoiceId = inv.id;
+    });
+    persistLists();
+  }
+  else if (act === 'sent') { inv.sentAt = new Date().toISOString(); }
+  else if (act === 'print') { printInvoice(inv); return; }
+  else if (act === 'email') { emailInvoice(inv); }
+  else if (act === 'close') { editingInvoiceId = null; }
+  else if (act === 'delete') {
+    if (!confirm('Delete ' + inv.number + '? Any change orders on it become billable again.')) return;
+    inv.lines.forEach(function (l) { releaseChangeOrder(inv, l); });
+    invoices = invoices.filter(function (x) { return x !== inv; }); editingInvoiceId = null;
+  }
+  persistInvoices(); renderInvoices(); renderFlagBar();
+});
+function renderInvoices() {
+  renderInvoiceEditor();
+  renderInvoiceList();
+}
+function renderInvoiceList() {
+  const wrap = document.getElementById('invoiceList');
+  if (!wrap) return;
+  if (!invoices.length) { wrap.innerHTML = '<p class="hint">No invoices for this job yet.</p>'; return; }
+  const o = invoiceOutstanding(invoices);
+  let html = '<div class="item-card"><strong>Invoiced ' + money2(o.invoiced) + '</strong><div class="meta">Collected ' + money2(o.paid) + ' · Outstanding ' + money2(o.balance) + (o.overdue ? ' · ' + o.overdue + ' overdue' : '') + ' (drafts not counted)</div></div>';
+  invoices.slice().reverse().forEach(function (inv) {
+    const t = invoiceTotals(inv), st = invoiceStatus(inv);
+    html += '<div class="item-card" data-inv-id="' + inv.id + '"><strong>' + escapeHtml(inv.number) + '</strong> <span class="type-tag inv-' + st.key + '">' + st.label + '</span>'
+      + '<div>' + escapeHtml(inv.client.name || 'No client yet') + '</div>'
+      + '<div class="meta">' + escapeHtml(inv.date) + ' · due ' + escapeHtml(inv.dueDate || '—') + ' · ' + money2(t.due) + ' due · ' + money2(t.paid) + ' paid' + (t.balance > 0.005 && inv.sentAt ? ' · <strong>' + money2(t.balance) + ' owing</strong>' : '') + '</div>'
+      + ((inv.payments || []).length ? '<div class="meta">Payments: ' + inv.payments.map(function (p) { return money2(p.amount) + ' (' + escapeHtml(p.date) + ')'; }).join(', ') + '</div>' : '')
+      + '<button type="button" class="small gray inv-edit-btn">Open</button>'
+      + (inv.sentAt && t.balance > 0.005 ? ' <button type="button" class="small green inv-pay-btn">Record Payment</button>' : '') + '</div>';
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-inv-id]').forEach(function (card) {
+    const inv = invoices.find(function (x) { return x.id === card.getAttribute('data-inv-id'); });
+    card.querySelector('.inv-edit-btn').addEventListener('click', function () { editingInvoiceId = inv.id; renderInvoices(); document.getElementById('invoiceEditor').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    const pay = card.querySelector('.inv-pay-btn');
+    if (pay) pay.addEventListener('click', function () {
+      const bal = invoiceTotals(inv).balance;
+      const amt = parseFloat(prompt('Payment received on ' + inv.number + ' ($)?', bal.toFixed(2)) || '');
+      if (isNaN(amt) || amt <= 0) return;
+      (inv.payments = inv.payments || []).push({ amount: amt, date: isoToday() });
+      persistInvoices(); renderInvoices(); renderFlagBar();
+    });
+  });
+}
+function invoicePrintHtml(inv) {
+  const t = invoiceTotals(inv), b = business, esc = function (v) { return escapeHtml(v || '').replace(/\n/g, '<br>'); };
+  const job = currentJob();
+  return '<div class="invp"><div class="invp-head"><div><h1>INVOICE</h1><strong>' + esc(inv.number) + '</strong><br><small>Date: ' + esc(inv.date) + '<br>Due: ' + esc(inv.dueDate) + '</small></div>'
+    + '<div style="text-align:right"><strong>' + esc(b.name || 'Your business name') + '</strong><br><small>' + esc(b.address) + (b.contact ? '<br>' + esc(b.contact) : '') + (b.taxNo ? '<br>GST/HST #: ' + esc(b.taxNo) : '') + '</small></div></div>'
+    + '<div class="invp-head"><div><small>BILL TO</small><br><strong>' + esc(inv.client.name) + '</strong><br><small>' + esc(inv.client.address) + (inv.client.email ? '<br>' + esc(inv.client.email) : '') + '</small></div>'
+    + '<div style="text-align:right"><small>JOB</small><br><strong>' + esc(job ? job.name : '') + '</strong><br><small>' + esc(job ? job.address : '') + '</small></div></div>'
+    + '<table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>'
+    + inv.lines.map(function (l) { const q = parseFloat(l.qty) || 0, r = parseFloat(l.rate) || 0; return '<tr><td>' + esc(l.desc) + '</td><td class="num">' + q + '</td><td class="num">' + money2(r) + '</td><td class="num">' + money2(q * r) + '</td></tr>'; }).join('')
+    + '</tbody></table><div class="invp-totals">'
+    + '<div><span>Subtotal</span><span>' + money2(t.subtotal) + '</span></div><div><span>Tax (' + (parseFloat(inv.taxPct) || 0) + '%)</span><span>' + money2(t.tax) + '</span></div>'
+    + '<div><span>Total</span><span>' + money2(t.total) + '</span></div>'
+    + (t.holdback ? '<div><span>Less holdback (' + (parseFloat(inv.holdbackPct) || 0) + '%)</span><span>−' + money2(t.holdback) + '</span></div>' : '')
+    + '<div class="grand"><span>Amount due</span><span>' + money2(t.due) + '</span></div>'
+    + (t.paid ? '<div><span>Paid to date</span><span>' + money2(t.paid) + '</span></div><div class="grand"><span>Balance</span><span>' + money2(t.balance) + '</span></div>' : '')
+    + '</div>' + (inv.notes ? '<p>' + esc(inv.notes) + '</p>' : '') + (b.terms ? '<p><small>' + esc(b.terms) + '</small></p>' : '') + '</div>';
+}
+function printInvoice(inv) {
+  document.getElementById('invoicePrint').innerHTML = invoicePrintHtml(inv);
+  document.body.classList.add('printing-invoice');
+  window.print();
+}
+window.addEventListener('afterprint', function () { document.body.classList.remove('printing-invoice'); });
+// mailto can't attach a file, so this sends a plain-text summary; Print /
+// Save PDF is the way to send the invoice itself. Emailing marks it sent.
+function emailInvoice(inv) {
+  const t = invoiceTotals(inv);
+  const lines = inv.lines.map(function (l) { return '- ' + (l.desc || 'Item') + ': ' + money2((parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0)); }).join('\n');
+  const body = 'Hi ' + (inv.client.name || '') + ',\n\nInvoice ' + inv.number + (currentJob() ? ' for ' + currentJob().name : '') + ', dated ' + inv.date + ', due ' + inv.dueDate + '.\n\n' + lines
+    + '\n\nSubtotal: ' + money2(t.subtotal) + '\nTax: ' + money2(t.tax) + (t.holdback ? '\nHoldback retained: ' + money2(t.holdback) : '') + '\nAmount due: ' + money2(t.due)
+    + (business.terms ? '\n\n' + business.terms : '') + '\n\nThanks,\n' + (business.name || '');
+  window.location.href = 'mailto:' + encodeURIComponent(inv.client.email || '') + '?subject=' + encodeURIComponent('Invoice ' + inv.number + (business.name ? ' from ' + business.name : '')) + '&body=' + encodeURIComponent(body);
+  if (!inv.sentAt) inv.sentAt = new Date().toISOString();
+}
 
 /* ---------- Jobs: tabs on Home + All Jobs overview ---------- */
 function renderJobTabs() {
@@ -2348,6 +2590,7 @@ function jobSummary(job) {
   const get = function (k, fb) { const v = loadJson(jobKey(LS_BASE[k], job.id), fb); return Array.isArray(fb) && !Array.isArray(v) ? fb : v; };
   const jp = get('punch', []), jr = get('rfis', []), jc = get('changes', []), jm = get('materials', []), js = get('subContracts', []), je = get('clockEvents', []), jl = get('dailyLogs', []);
   const jb = get('budget', {}) || {};
+  const inv = invoiceOutstanding(get('invoices', []));
   const labor = totalHourlyLaborCost(je) + js.reduce(function (t, c) { return t + contractCostToDate(c); }, 0);
   const mats = jm.reduce(function (t, m) { return t + (m.cost || 0); }, 0);
   const pending = jc.filter(function (c) { return c.approval === 'Pending'; });
@@ -2357,7 +2600,8 @@ function jobSummary(job) {
     pendingCo: pending.reduce(function (t, c) { return t + (c.costEstimate || 0); }, 0), pendingCoCount: pending.length,
     onClock: laborCostByEmployee(je).filter(function (r) { return r.active; }).length,
     owed: js.reduce(function (t, c) { return t + contractOwed(c); }, 0),
-    lastLog: jl.length ? jl[jl.length - 1].date : null
+    lastLog: jl.length ? jl[jl.length - 1].date : null,
+    invoiced: inv.invoiced, outstanding: inv.balance, overdue: inv.overdue
   };
 }
 function renderJobsOverview() {
@@ -2372,7 +2616,9 @@ function renderJobsOverview() {
       [String(sum('openPunch') + sum('openRfis')), 'open punch items + RFIs', false],
       [money(sum('pendingCo')), 'pending change-order exposure', sum('pendingCo') > 0],
       [money(sum('owed')), 'owed to flat-contract subs', sum('owed') > 0.005],
-      [String(sum('onClock')), 'on the clock now', false]
+      [String(sum('onClock')), 'on the clock now', false],
+      [money(sum('invoiced')), 'invoiced to date', false],
+      [money(sum('outstanding')), 'outstanding on invoices' + (sum('overdue') ? ' (' + sum('overdue') + ' overdue)' : ''), sum('overdue') > 0]
     ].map(function (k) { return '<div class="role-kpi' + (k[2] ? ' warn' : '') + '"><b>' + escapeHtml(k[0]) + '</b><small>' + escapeHtml(k[1]) + '</small></div>'; }).join('') + '</div>';
   rows.forEach(function (r) {
     const pct = r.budget ? Math.round(r.spent / r.budget * 100) : null;
@@ -2383,6 +2629,7 @@ function renderJobsOverview() {
       + (r.budget ? '<div class="job-bar"><span class="' + (r.spent > r.budget ? 'over' : '') + '" style="width:' + Math.min(100, pct) + '%"></span></div>' : '')
       + '<div class="meta">' + r.openPunch + ' open punch · ' + r.openRfis + ' open RFIs · ' + r.pendingCoCount + ' CO pending (' + money(r.pendingCo) + ')'
       + (r.owed > 0.005 ? ' · ' + money(r.owed) + ' owed to subs' : '') + (r.onClock ? ' · ' + r.onClock + ' on the clock' : '') + (r.lastLog ? ' · last daily log ' + escapeHtml(r.lastLog) : '') + '</div>'
+      + (r.invoiced ? '<div class="meta">Invoiced ' + money(r.invoiced) + ' · outstanding ' + money(r.outstanding) + (r.overdue ? ' · <strong>' + r.overdue + ' overdue</strong>' : '') + '</div>' : '')
       + (current ? '' : '<button type="button" class="small green job-open-btn">Open this job</button> <button type="button" class="small gray job-delete-btn">Delete</button>')
       + '</div>';
   });
@@ -2444,6 +2691,9 @@ window.addEventListener('load', function () {
   if (!Array.isArray(submittals)) submittals = []; if (!Array.isArray(clockEvents)) clockEvents = []; if (!Array.isArray(dailyLogs)) dailyLogs = []; if (!Array.isArray(safetyLogs)) safetyLogs = []; if (!Array.isArray(notesLog)) notesLog = [];
   if (!wages || typeof wages !== 'object') wages = {}; if (!Array.isArray(materials)) materials = []; if (!budget || typeof budget !== 'object') budget = { labor: 0, materials: 0 }; if (!Array.isArray(drawings)) drawings = [];
   if (!Array.isArray(walks)) walks = [];
+  invoices = loadJson(LS.invoices, []); if (!Array.isArray(invoices)) invoices = [];
+  business = loadJson(LS.business, {}); if (!business || typeof business !== 'object') business = {};
+  fillBusinessForm();
   subContracts = loadJson(LS.subContracts, []); geoSites = loadJson(LS.geoSites, []); autoClock = loadJson(LS.autoClock, { enabled: false, employee: '' });
   if (!Array.isArray(subContracts)) subContracts = []; if (!Array.isArray(geoSites)) geoSites = []; if (!autoClock || typeof autoClock !== 'object') autoClock = { enabled: false, employee: '' };
   if (!Array.isArray(properties)) properties = []; if (!Array.isArray(units)) units = []; if (!Array.isArray(tenants)) tenants = []; if (!Array.isArray(leases)) leases = []; if (!Array.isArray(payments)) payments = [];
