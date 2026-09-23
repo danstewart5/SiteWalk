@@ -4,7 +4,7 @@
  * Three routes, all POST, all behind the same CORS + shared-key gate:
  *   /            (or /photo-check) — existing AI code-check photo flow
  *   /classify    — voice-to-punch-list: classify one spoken sentence into
- *                  {type, trade, text, costImpact}
+ *                  {isItem, confidence, type, trade, text, location, costImpact, reason}
  *   /transcribe  — speech-to-text for phones without SpeechRecognition
  *                  (iOS Safari), via Workers AI Whisper. Needs the `AI`
  *                  binding in wrangler.toml — no separate API key.
@@ -31,12 +31,17 @@ const ALLOWED_ORIGINS = ['https://sitewalk-app.netlify.app', 'https://danstewart
 // Few-shot examples: the single biggest accuracy lever. The model mirrors these
 // patterns instead of guessing from a bare description.
 const EXAMPLES = [
-  { in: 'Drywall is cracked above the window in unit three.', out: { type: 'punch', trade: 'Drywall', text: 'Cracked drywall above the window in unit 3.', costImpact: null } },
-  { in: 'Add a second outlet on the east wall, that is extra work.', out: { type: 'change_order', trade: 'Electrical', text: 'Add a second outlet on the east wall (extra work).', costImpact: null } },
-  { in: 'Do we move the electrical panel left or right of the door?', out: { type: 'rfi', trade: 'Electrical', text: 'Confirm electrical panel location: left or right of the door?', costImpact: null } },
-  { in: 'Roof leak over the hallway, water coming through the ceiling.', out: { type: 'punch', trade: 'Roofing', text: 'Roof leak over the hallway — water through the ceiling.', costImpact: null } },
-  { in: 'Client wants the concrete stamped instead of broom finish, add fifteen hundred dollars.', out: { type: 'change_order', trade: 'Concrete', text: 'Change concrete finish from broom to stamped (client request).', costImpact: 1500 } },
-  { in: 'Is the stair stringer supposed to be pressure treated or regular lumber?', out: { type: 'rfi', trade: 'Framing', text: 'Confirm stair stringer material: pressure treated or regular lumber?', costImpact: null } },
+  { in: 'Drywall is cracked above the window in unit three.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Drywall', text: 'Cracked drywall above the window in unit 3.', location: 'Unit 3', costImpact: null } },
+  { in: 'Add a second outlet on the east wall, that is extra work.', out: { isItem: true, confidence: 0.9, type: 'change_order', trade: 'Electrical', text: 'Add a second outlet on the east wall (extra work).', location: 'East wall', costImpact: null } },
+  { in: 'Do we move the electrical panel left or right of the door?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Electrical', text: 'Confirm electrical panel location: left or right of the door?', location: '', costImpact: null } },
+  { in: 'Roof leak over the hallway, water coming through the ceiling.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Roofing', text: 'Roof leak over the hallway — water through the ceiling.', location: 'Hallway', costImpact: null } },
+  { in: 'Client wants the concrete stamped instead of broom finish, add fifteen hundred dollars.', out: { isItem: true, confidence: 0.95, type: 'change_order', trade: 'Concrete', text: 'Change concrete finish from broom to stamped (client request).', location: '', costImpact: 1500 } },
+  { in: 'Is the stair stringer supposed to be pressure treated or regular lumber?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Framing', text: 'Confirm stair stringer material: pressure treated or regular lumber?', location: 'Stairs', costImpact: null } },
+  { in: 'Guy on the second floor deck has no harness on.', out: { isItem: true, confidence: 0.9, type: 'safety', trade: 'General', text: 'Worker on second floor deck without a harness.', location: 'Second floor deck', costImpact: null } },
+  { in: 'Patch the nail pops in the master bedroom, maybe two hundred bucks.', out: { isItem: true, confidence: 0.9, type: 'punch', trade: 'Drywall', text: 'Patch nail pops in the master bedroom.', location: 'Master bedroom', costImpact: 200 } },
+  { in: 'Okay we are heading upstairs now.', out: { isItem: false, confidence: 0.95, type: 'punch', trade: 'General', text: 'Heading upstairs.', location: '', costImpact: null } },
+  { in: 'Framing in the kitchen looks good.', out: { isItem: false, confidence: 0.85, type: 'punch', trade: 'Framing', text: 'Kitchen framing looks good.', location: 'Kitchen', costImpact: null } },
+  { in: 'The trim around the back door, I don\'t know.', out: { isItem: true, confidence: 0.4, type: 'punch', trade: 'Other', text: 'Check trim around the back door.', location: 'Back door', costImpact: null, reason: 'Mentions trim but no clear problem.' } },
 ];
 
 function corsHeadersFor(request) {
@@ -219,9 +224,14 @@ async function callAnthropic(env, { maxTokens, content, prefill }) {
   return blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
 }
 
-// Voice-to-punch-list: classify one spoken sentence into a structured item.
+// Voice-to-punch-list: decide whether one spoken sentence is an item at all,
+// and if so classify it. Most of a walk is narration and chatter; only real
+// issues should reach the punch list.
 // Body: { text: string, trade?: string }
-// Reply: { type: 'punch'|'change_order'|'rfi', trade: string, text: string, costImpact: number|null }
+// Reply: { isItem: boolean, confidence: 0..1, type: 'punch'|'change_order'|'rfi'|'safety'|'quality',
+//          trade: string, text: string, location: string, costImpact: number|null, reason: string }
+// The app files isItem + confidence >= 0.6, sends lower confidence to its Review bucket,
+// and keeps every sentence in the transcript regardless.
 async function handleClassify(request, env, json) {
   if (!env.ANTHROPIC_API_KEY) {
     return json({ error: 'ANTHROPIC_API_KEY secret is not set on this Worker.' }, 500);
@@ -243,26 +253,35 @@ async function handleClassify(request, env, json) {
   }).join('\n\n');
 
   const prompt =
-    'You classify single spoken sentences from a construction site supervisor\'s walk-around.\n\n' +
+    'You filter and classify single spoken sentences from a construction site supervisor\'s walk-around.\n' +
+    'Most sentences are narration or chatter ("heading upstairs", "looks good", talking to someone). ' +
+    'Only real issues are items.\n\n' +
+    'isItem: true only if the sentence describes something to fix, extra/changed work, a question needing an answer, ' +
+    'a safety hazard, or a quality/code problem. false for narration, sign-offs ("looks good"), greetings and small talk.\n' +
+    'confidence: 0 to 1, how sure you are about isItem. Use below 0.6 when it is borderline.\n\n' +
     'Valid trades: ' + TRADES.join(', ') + '\n\n' +
     'type is one of:\n' +
     '- "punch": a deficiency or defect to fix (default if unsure)\n' +
     '- "change_order": extra work or cost beyond original scope, billable to the client\n' +
-    '- "rfi": a question that needs an answer from architect/engineer/owner before work can proceed\n\n' +
+    '- "rfi": a question that needs an answer from architect/engineer/owner before work can proceed\n' +
+    '- "safety": a hazard or safety violation\n' +
+    '- "quality": work that fails code, spec or inspection\n\n' +
     'Here are labeled examples. Match their style and judgment:\n\n' +
     exampleBlock + '\n\n' +
     'Now classify this sentence:\n' +
     'Sentence: "' + text.replace(/"/g, '\\"') + '"\n\n' +
     'Pick the single most relevant trade from the valid trades list. Use "General" only if truly unclear.\n' +
-    'If type is "change_order" and a dollar amount is stated or clearly implied, extract it as a plain number ' +
-    '(e.g. "add three hundred dollars" -> 300). Otherwise costImpact is null.\n\n' +
+    'location: where on site, if said (unit, floor, room, wall), else "".\n' +
+    'costImpact: if a dollar amount is stated or clearly implied (any type), a plain number ' +
+    '(e.g. "add three hundred dollars" -> 300). Otherwise null.\n' +
+    'reason: a few words, only when confidence is below 0.6.\n\n' +
     'Reply with ONLY a JSON object, no other text, in exactly this shape:\n' +
-    '{"type":"punch|change_order|rfi","trade":"<one of the valid trades>","text":"<cleaned-up concise version of the sentence>","costImpact":<number or null>}';
+    '{"isItem":true|false,"confidence":<0-1>,"type":"punch|change_order|rfi|safety|quality","trade":"<one of the valid trades>","text":"<cleaned-up concise version of the sentence>","location":"<string>","costImpact":<number or null>,"reason":"<string>"}';
 
   let raw;
   try {
     raw = await callAnthropic(env, {
-      maxTokens: 300,
+      maxTokens: 400,
       content: [{ type: 'text', text: prompt }],
       prefill: '{',
     });
@@ -276,11 +295,15 @@ async function handleClassify(request, env, json) {
   } catch (e) {
     return json({ error: 'Model returned non-JSON.', detail: raw.slice(0, 300) }, 502);
   }
-  const type = ['punch', 'change_order', 'rfi'].includes(parsed.type) ? parsed.type : 'punch';
+  const type = ['punch', 'change_order', 'rfi', 'safety', 'quality'].includes(parsed.type) ? parsed.type : 'punch';
   const trade = TRADES.includes(parsed.trade) ? parsed.trade : 'General';
   const cleanText = (typeof parsed.text === 'string' && parsed.text.trim()) || text;
   const costImpact = typeof parsed.costImpact === 'number' && isFinite(parsed.costImpact) ? parsed.costImpact : null;
-  return json({ type, trade, text: cleanText, costImpact });
+  const isItem = typeof parsed.isItem === 'boolean' ? parsed.isItem : true;
+  const confidence = typeof parsed.confidence === 'number' && isFinite(parsed.confidence) ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
+  const location = typeof parsed.location === 'string' ? parsed.location.trim() : '';
+  const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
+  return json({ isItem, confidence, type, trade, text: cleanText, location, costImpact, reason });
 }
 
 // Speech-to-text for phones without SpeechRecognition (iOS Safari), via Workers AI Whisper.

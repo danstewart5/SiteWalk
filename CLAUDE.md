@@ -2,8 +2,8 @@
 
 Two public links (no login):
 
-- **App (phone):** https://danstewart5.github.io/SiteWalk/
-- **Source:** this repo (GitHub Pages deploys straight from `main`, no build step).
+- **App (phone):** Netlify, https://sitewalk-app.netlify.app (per `ALLOWED_ORIGINS` in `ai-backend/worker.js`). The GitHub Pages copy at https://danstewart5.github.io/SiteWalk/ also serves `main` while the repo is public.
+- **Source:** this repo (no build step; both hosts serve `main` as-is).
 
 **Live phone app** is root `index.html` + `walk.js` + `sw.js`, plus `ai-backend/worker.js` (Cloudflare Worker). That's it — the whole app is one HTML file and one JS file, no framework, no build.
 
@@ -68,6 +68,20 @@ Not done / worth knowing:
 - No haptic/beep/flash acknowledgment on a voice snap yet (status-line text only, via `setWalkStatus`).
 - No dedicated on-device keyword spotter — still riding the browser's own continuous Web Speech transcript, which is inherently the noisier/higher-latency option the earlier review note warned about. If false-triggers turn out to be a real field problem, that's the next lever to pull.
 - iOS Safari's `navigator.share`/download-blob support for video files specifically hasn't been phone-verified in this session (browser automation wasn't available) — confirm on an actual iPhone before relying on it.
+
+## Transcript filter, review bucket, inline-photo report (2026-09-23, cache `sitewalk-v68`)
+
+**walk.js was restored first.** Commit `85db471` replaced `walk.js` with a 27-line stub that loaded the real file from jsDelivr (`cdn.jsdelivr.net/gh/danstewart5/SiteWalk@7e9d633/walk.js`) and patched `endWalk`. That breaks the moment the repo goes private, and it depends on a third-party CDN. The full file is back (from `a0d24b5`). Don't reintroduce a CDN loader for app code.
+
+- **One capture path.** Every final sentence (continuous recognition and the push-to-talk fallback) goes through `handleFinalUtterance()`: it is logged word for word with `logTranscript()` (notes log + the walk's `transcript`, each line has an `id` and an `outcome`), then the snap trigger is handled, then `fileVoiceUtterance()` classifies the rest.
+- **Filter.** `scoreUtterance()` (local) returns `high` (file it), `low` (Review bucket) or `none` (transcript only). Safety keywords → Safety & Quality log (`Hazard Observed`); code/spec/inspection keywords → same log as `Quality Issue`. With a Worker URL set, `/classify` now returns `isItem`, `confidence`, `location`, `costImpact` (any type) and `type` can be `safety`/`quality`; `mergeAiClassification()` files at confidence ≥ 0.6, sends lower confidence to Review, and sends AI-vs-keyword disagreements to Review. An older Worker without `isItem` still works (local filter decides). **The Worker must be redeployed** to get the new fields.
+- **Review bucket.** `reviewItems`, job-scoped LS `swReview`, shown on the Walk → Review sub-tab (count badge). Each card: Punch / Change Order / RFI / Safety / Quality / Not an item. Filing keeps the original timestamp and photos and updates the transcript line's outcome.
+- **Shared item schema** (`fileEntry()`): `trade`, `location` (AI or `extractLocation()`), `costEstimate` (AI or `parseSpokenCost()`, punch and CO), `drawingRef`, `itemType` (`punch`/`change_order`/`rfi`) + `isChangeOrder`, `photos[]` (`photo` = first, kept for old data), `via` (`voice`/`manual`/`review`), `transcriptId`. Spoken costs no longer go into `budget.materials`.
+- **voice-value-add.js deleted.** It ran on every sentence after `fileVoiceUtterance` and created a second punch item, added spoken dollar amounts to the materials *budget*, and wrote safety entries in a shape the Safety tab couldn't render. Its jobs are now done once, inside the pipeline above.
+- **Photos.** Items hold several photos. A photo links to the most recent item (punch/CO/RFI/safety/review) filed in the last 60 s, even if it already has photos; an item links all unlinked photos from the 60 s before it. "Take a photo" inside an issue sentence holds the photo (`holdForId`) for the item from that same sentence.
+- **Report is manual only.** `endWalk()` no longer switches tabs or generates the report; it stays on the Walk tab. Generate Report buttons: Walk screen (new), Report tab, Home gold button. The report lists Punch / COs / RFIs / Safety & Quality / Needs Review with photos inline (one photo beside the item, several as a row of 64px photos), then "Other Photos" (unlinked, captioned with what was being said), the existing submittal/log/invoice/cost sections, and the full walk transcript with each line's outcome at the end.
+
+Tested with headless Chromium at 390px (fake camera): chatter → transcript only, borderline → Review, punch/CO/RFI/safety/quality routing, location + cost at capture, multi-photo linking, voice snap inside an issue sentence, Review → Punch, endWalk stays on Walk, manual report layout, mocked Worker replies (new and old response shapes). No page errors, no horizontal scroll. **Not phone-tested**, and the new Worker prompt hasn't been run against the real API.
 
 ## LeaseFlow — Hold mode (shipped 2026-09-22)
 

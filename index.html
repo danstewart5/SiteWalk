@@ -419,6 +419,29 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .role-kpi.warn b { color: #c53030; }
 .role-section-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #a0aec0; margin: 0 0 6px; }
 
+/* Report: photos inline with each item */
+.rpt-item { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed #e2e8f0; break-inside: avoid; page-break-inside: avoid; }
+.rpt-item-body { flex: 1 1 0; min-width: 0; }
+.rpt-item-text { font-size: 14px; }
+.rpt-item-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+.report-section img.rpt-photo-single { width: 110px; height: 82px; object-fit: cover; border-radius: 6px; margin: 0; flex: 0 0 auto; }
+.rpt-photo-row { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+.report-section .rpt-photo-row img { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; margin: 0; }
+.rpt-loose-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.rpt-loose { margin: 0; break-inside: avoid; page-break-inside: avoid; }
+.report-section .rpt-loose img { width: 100%; height: 110px; object-fit: cover; margin: 0; }
+.rpt-loose figcaption { font-size: 11px; color: #64748b; margin-top: 2px; }
+.rpt-outcome { color: #64748b; font-size: 12px; }
+/* Item cards: one photo at card size, several as small thumbs */
+.item-photo-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.item-photo-row img { max-width: 140px; border-radius: 6px; cursor: pointer; display: block; }
+.item-photo-row.multi img { width: 64px; height: 64px; object-fit: cover; }
+.review-count { display: inline-block; min-width: 16px; padding: 0 5px; border-radius: 999px; background: #e0a94a; color: #fff; font-size: 10px; line-height: 16px; }
+.review-card button { margin-top: 6px; }
+.w-note-outcome { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 6px; background: #edf2f7; color: #4a5568; }
+.w-note-outcome.outcome-transcript, .w-note-outcome.outcome-dismissed { background: #f1f5f9; color: #94a3b8; }
+.w-note-outcome.outcome-review { background: #fdf3e1; color: #9a6a12; }
+.w-note-outcome.outcome-safety, .w-note-outcome.outcome-quality { background: #fde8e8; color: #b42318; }
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
@@ -692,7 +715,8 @@ body.printing-invoice #invoicePrint { display: block !important; }
 <nav class="walk-subnav">
   <button class="walk-tab-btn active" data-walktab="main" type="button">Walk</button>
   <button class="walk-tab-btn" data-walktab="summary" type="button">Summary</button>
-  <button class="walk-tab-btn" data-walktab="notes" type="button">Notes</button>
+  <button class="walk-tab-btn" data-walktab="review" type="button">Review <span id="reviewCount" class="review-count" style="display:none"></span></button>
+  <button class="walk-tab-btn" data-walktab="notes" type="button">Transcript</button>
   <button class="walk-tab-btn" data-walktab="photos" type="button">Photos</button>
 </nav>
 
@@ -724,6 +748,7 @@ body.printing-invoice #invoicePrint { display: block !important; }
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
     <button id="generateSummaryBtn" type="button" class="w-generate-summary-btn">📋 Generate Summary</button>
+    <button id="walkGenerateReportBtn" type="button" class="w-generate-summary-btn">📄 Generate Report</button>
   </div>
 
   <select id="tradeSelect" aria-label="Current trade" aria-hidden="true">
@@ -748,6 +773,11 @@ body.printing-invoice #invoicePrint { display: block !important; }
     <div class="w-overview-stat"><span class="num" id="statTrades">0</span><span class="label">Trades</span></div>
   </div>
   <div id="summaryContent"></div>
+</div>
+
+<div class="walk-view" id="walkview-review">
+  <p class="hint">Sentences the AI wasn't sure about. File each one or mark it "Not an item"; it stays in the transcript either way.</p>
+  <div id="reviewList"></div>
 </div>
 
 <div class="walk-view" id="walkview-notes">
@@ -824,10 +854,10 @@ body.printing-invoice #invoicePrint { display: block !important; }
 
 <div class="tab-panel" id="tab-safety">
 <div class="section">
-<h2>⚠️ Safety Log</h2>
+<h2>⚠️ Safety &amp; Quality Log</h2>
 <select id="safetyType">
 <option>Near-Miss</option><option>Minor Incident</option><option>Injury</option>
-<option>Equipment/Property Damage</option><option>Hazard Observed</option>
+<option>Equipment/Property Damage</option><option>Hazard Observed</option><option>Quality Issue</option>
 </select>
 <textarea id="safetyDesc" placeholder="What happened..."></textarea>
 <input type="text" id="safetyPerson" placeholder="Person(s) involved (optional)">
@@ -1086,7 +1116,6 @@ body.printing-invoice #invoicePrint { display: block !important; }
 <div id="invoicePrint"></div>
 <script src="./clean-speech.js"></script>
 <script src="./walk.js"></script>
-<script src="./voice-value-add.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(function () {});
