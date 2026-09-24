@@ -206,7 +206,7 @@ Tested with headless Chromium at 390px: simulated GPS arrive/leave/buffer-expiry
 
 ## Deploy notes
 
-- No build step. Push to `main` → GitHub Pages serves it directly, usually within a minute or two.
+- No build step. Push to `main` → Netlify (and GitHub Pages, while the repo is public) serves it directly, usually within a minute or two. Link-preview tags in `index.html` (`og:url`, `og:image`, `twitter:image`) point at the Netlify URL (2026-09-24, cache `sitewalk-v70`), so previews survive the repo going private.
 - **Always bump `const CACHE = 'sitewalk-vNN'` in `sw.js`** on any change to `index.html`/`walk.js` — the service worker caches JS assets cache-first, so without a bump, phones can keep serving stale JS indefinitely even after the HTML updates (HTML itself is network-first, so it always looks current, which makes stale-JS bugs confusing — the page *looks* updated but doesn't *behave* updated).
 - `index.html` registers the service worker itself now (commit `6da2120` fixed a real gap — it never used to) and auto-reloads once on `controllerchange`, so new deploys should now self-apply without a manual cache clear. If someone reports "nothing happens when I tap X" right after a deploy, suspect stale client-side SW/cache before suspecting new code — verify what the *server* is actually serving with `curl` against the live URL before changing anything.
 - `v1.0` is tagged at commit `6da2120` as the first stable baseline (one-button walk flow + tabbed nav + live Submittals/Clock-In-Out/Dashboard/Daily-Log/Safety + working SW registration).
