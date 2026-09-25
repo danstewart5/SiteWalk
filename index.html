@@ -438,6 +438,23 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 .item-photo-row.multi img { width: 64px; height: 64px; object-fit: cover; }
 .review-count { display: inline-block; min-width: 16px; padding: 0 5px; border-radius: 999px; background: #e0a94a; color: #fff; font-size: 10px; line-height: 16px; }
 .review-card button { margin-top: 6px; }
+/* Urgency */
+.sev-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; vertical-align: 1px; color: #fff; letter-spacing: 0.02em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sev-tag.sev-critical { background: #9b1c1c; }
+.sev-tag.sev-high { background: #dd6b20; }
+.sev-tag.sev-medium { background: #a0aec0; }
+.sev-tag.sev-low { background: #cbd5e0; color: #4a5568; }
+.rpt-urgent { border-left: 4px solid #9b1c1c; padding-left: 10px; }
+/* Photo tag suggestions */
+.photo-tag-card { border-color: #e0a94a; background: #fffaf0; }
+.photo-tag-head { display: flex; gap: 10px; align-items: flex-start; }
+.photo-tag-head img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; flex: 0 0 auto; }
+.photo-tag-head > div { min-width: 0; overflow-wrap: anywhere; }
+.photo-tag-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.photo-tag-controls select { flex: 1 1 110px; min-width: 0; width: auto; margin: 0; }
+.photo-tag-title { font-size: 14px; margin: 4px 0; }
+.w-thumb-tag { position: absolute; bottom: 5px; right: 5px; font-size: 12px; background: rgba(255,255,255,0.85); border-radius: 999px; padding: 0 4px; }
+#photoTagQueue { text-align: left; }
 .w-note-outcome { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-right: 6px; background: #edf2f7; color: #4a5568; }
 .w-note-outcome.outcome-transcript, .w-note-outcome.outcome-dismissed { background: #f1f5f9; color: #94a3b8; }
 .w-note-outcome.outcome-review { background: #fdf3e1; color: #9a6a12; }
@@ -445,7 +462,7 @@ select, input[type=text], input[type=password], input[type=email], input[type=te
 @media print {
 body { background: white; padding: 0; }
 .container { box-shadow: none; }
-button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-role-toggle, .home-role-view, .home-job-tabs { display: none !important; }
+button, .section:not(#reportSection), #walkStatus, .subtitle, #topNav, .home-scene, .home-drilldown, .home-flag-bar, .home-mode-toggle, .home-role-toggle, .home-role-view, .home-job-tabs, #photoTagQueue, #photoTagReviewList { display: none !important; }
 .tab-panel { display: block !important; }
 #reportSection { display: block !important; border: none; }
 body.printing-invoice .container, body.printing-invoice #lightbox { display: none !important; }
@@ -746,6 +763,7 @@ body.printing-invoice #invoicePrint { display: block !important; }
     <label class="w-video-toggle"><input type="checkbox" id="saveVideoToggle"> Also save a video of this walk</label>
     <p id="videoStatusLabel"></p>
     <div id="walkStatus" class="w-walk-status">Ready. Tap to begin.</div>
+    <div id="photoTagQueue"></div>
     <button id="walkRecordBtn" type="button" class="w-fallback-record">🎤 Tap to Record a Note</button>
     <button id="generateSummaryBtn" type="button" class="w-generate-summary-btn">📋 Generate Summary</button>
     <button id="walkGenerateReportBtn" type="button" class="w-generate-summary-btn">📄 Generate Report</button>
@@ -776,6 +794,7 @@ body.printing-invoice #invoicePrint { display: block !important; }
 </div>
 
 <div class="walk-view" id="walkview-review">
+  <div id="photoTagReviewList"></div>
   <p class="hint">Sentences the AI wasn't sure about. File each one or mark it "Not an item"; it stays in the transcript either way.</p>
   <div id="reviewList"></div>
 </div>
@@ -1077,6 +1096,7 @@ body.printing-invoice #invoicePrint { display: block !important; }
 <button id="saveEndpointBtn" class="gray">Save Worker URL & key</button>
 <button id="aiPhotoBtn">AI Code-Check Photo</button>
 <input type="file" id="aiPhotoInput" accept="image/*" capture="environment" style="display:none">
+<label class="w-video-toggle photo-tag-toggle"><input type="checkbox" id="photoTagToggle" checked> Suggest trade / safety / quality tags from walk photos (one AI call per photo; you confirm each one)</label>
 <div id="aiStatus" class="status info">Worker URL not set. Photo check is inert until setup.</div>
 <div id="aiResult" class="ai-result" style="display:none"></div>
 </div>
