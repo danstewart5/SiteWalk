@@ -158,7 +158,7 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock', invoices: 'swInvoices', business: 'swBusiness', invoiceSeq: 'swInvoiceSeq', review: 'swReview', photoTag: 'swPhotoTagEnabled' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock', invoices: 'swInvoices', business: 'swBusiness', invoiceSeq: 'swInvoiceSeq', review: 'swReview', photoTag: 'swPhotoTagEnabled', photoTagStats: 'swPhotoTagStats' };
 // Jobs. Each job keeps its own copy of the job-scoped keys, stored as
 // key + '@' + jobId. The original job ('default') keeps the plain keys, so
 // upgrading copies nothing (photos can be most of the storage quota). The LS
@@ -288,6 +288,7 @@ function tryLinkPhotoToRecentItem(photo) {
   photo.linkedItemText = itemDesc(candidates[0]);
   photo.linkedItemTs = candidates[0].ts;
   if (photo.tag) applyPhotoTagToItem(photo, candidates[0]);
+  gatePhotoTag(photo);
   persistLinkable(); persistPhotos(); renderAllItems(); renderSafetyLogs(); renderReview();
   return true;
 }
@@ -299,7 +300,7 @@ function tryLinkItemToRecentPhoto(entry) {
     return !p.linkedItemText && dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS && (!p.holdForId || p.holdForId === entry.transcriptId);
   }).sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
   if (!candidates.length) return false;
-  candidates.forEach(function (p) { addPhotoToItem(entry, p.src); p.linkedItemText = itemDesc(entry); p.linkedItemTs = entry.ts; if (p.tag) applyPhotoTagToItem(p, entry); });
+  candidates.forEach(function (p) { addPhotoToItem(entry, p.src); p.linkedItemText = itemDesc(entry); p.linkedItemTs = entry.ts; if (p.tag) applyPhotoTagToItem(p, entry); gatePhotoTag(p); });
   persistPhotos();
   return true;
 }
@@ -1865,7 +1866,12 @@ function routeClassified(c, rawText, transcriptId, voiceApproval) {
   // A photo held for this sentence is released (linked above, or left
   // unlinked if the sentence wasn't an item).
   if (transcriptId && photos.some(function (p) { return p.holdForId === transcriptId; })) {
-    photos.forEach(function (p) { if (p.holdForId === transcriptId) delete p.holdForId; });
+    photos.forEach(function (p) {
+      if (p.holdForId !== transcriptId) return;
+      delete p.holdForId;
+      // Neutral sentence: this photo is never sent for a tag.
+      if (c.level === 'none' && !p.linkedItemText) skipPhotoTag(p, 'neutral sentence');
+    });
     persistPhotos();
   }
 }
@@ -1874,7 +1880,7 @@ function snapFromVideo(video) { if (!video || !video.videoWidth) return null; co
 // meta carries structured, timestamped provenance (how the shot was taken and
 // the transcript that triggered it, if any) so a still can be matched back
 // to both the spoken record and whatever punch/change/RFI item it links to.
-function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); if (!item.holdForId) tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); requestPhotoTag(item); return item; }
+function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); if (!item.holdForId) tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); if (!item.holdForId && !item.linkedItemText) waitForPhotoIssue(item); return item; }
 
 /* ---------- Photo tag suggestions ---------- */
 // Each walk photo goes to the Worker's /tag-photo route, which looks at the
@@ -1887,6 +1893,51 @@ function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade
 // trade as before.
 const PHOTO_KIND_LABEL = { trade: 'Trade only', safety: 'Safety hazard', quality: 'Quality issue' };
 function photoTagEnabled() { return !!currentAiEndpoint() && loadJson(LS.photoTag, true) !== false; }
+// Cost gate, under the Setup switch: a photo is sent only once it's tied to
+// an issue — linked to an item the sentence filter filed (punch / change
+// order / RFI / safety / quality) or put in Review. That happens when:
+//   - "take a photo" is said inside an issue sentence (the held photo links
+//     when that sentence is filed; a neutral sentence skips it for good), or
+//   - the photo links to an item filed in the 60 s before or after it (the
+//     existing link window), e.g. a Snap button shot or a bare "take a photo".
+// A photo nothing links to within that window is skipped. The decision is
+// made before any resize or upload. photo.tagGate: 'waiting' | 'sent' | 'skipped'.
+function photoTagStats() { const s = loadJson(LS.photoTagStats, null); return s && typeof s === 'object' ? s : { sent: 0, skipped: 0 }; }
+function countPhotoTag(kind) {
+  const s = photoTagStats(); s[kind] = (s[kind] || 0) + 1; saveJson(LS.photoTagStats, s);
+  if (currentWalk) { currentWalk.photoTags = currentWalk.photoTags || { sent: 0, skipped: 0 }; currentWalk.photoTags[kind]++; persistWalks(); }
+  renderPhotoTagStats();
+}
+function renderPhotoTagStats() {
+  const el = document.getElementById('photoTagStats');
+  if (!el) return;
+  const s = photoTagStats();
+  el.textContent = 'Photo tag calls on this phone: ' + s.sent + ' sent, ' + s.skipped + ' skipped (no issue with the photo).' + (currentWalk && currentWalk.photoTags ? ' This walk: ' + currentWalk.photoTags.sent + ' sent, ' + currentWalk.photoTags.skipped + ' skipped.' : '');
+}
+function gatePhotoTag(photo) {
+  if (!photoTagEnabled() || photo.tagGate === 'sent' || photo.tagGate === 'skipped' || photo.suggestion) return;
+  photo.tagGate = 'sent';
+  countPhotoTag('sent');
+  console.log('[SiteWalk] photo tag: sending (linked to an issue)');
+  requestPhotoTag(photo);
+}
+function skipPhotoTag(photo, reason) {
+  if (!photoTagEnabled() || photo.tagGate === 'sent' || photo.tagGate === 'skipped') return;
+  photo.tagGate = 'skipped';
+  countPhotoTag('skipped');
+  console.log('[SiteWalk] photo tag: skipped (' + reason + ')');
+}
+function waitForPhotoIssue(photo) {
+  if (!photoTagEnabled()) return;
+  photo.tagGate = 'waiting';
+  setTimeout(function () { expirePhotoTagWait(photo); }, PHOTO_LINK_WINDOW_MS);
+}
+function expirePhotoTagWait(photo) {
+  if (photo.tagGate !== 'waiting' || photos.indexOf(photo) === -1) return;
+  delete photo.tagGate;
+  skipPhotoTag(photo, 'no issue linked within 60 s');
+  persistPhotos();
+}
 function shrinkForTagging(src, cb) {
   const img = new Image();
   img.onload = function () { const scale = Math.min(1, 768 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.6)); };
@@ -3223,6 +3274,7 @@ window.addEventListener('load', function () {
   renderPhotoTagQueue();
   const photoTagToggle = document.getElementById('photoTagToggle');
   if (photoTagToggle) { photoTagToggle.checked = loadJson(LS.photoTag, true) !== false; photoTagToggle.addEventListener('change', function () { saveJson(LS.photoTag, !!photoTagToggle.checked); }); }
+  renderPhotoTagStats();
   renderSummary();
   showWalkTab('main');
   renderAllItems();
