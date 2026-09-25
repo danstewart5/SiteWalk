@@ -2,7 +2,8 @@
 
 The phone app can take photos and hear speech. It cannot hold an Anthropic API key in a public GitHub Pages file. This Worker is the lockbox, and now serves three routes off the same URL:
 
-- `/classify` — voice-to-punch-list: turns one spoken sentence into `{type, trade, text, costImpact}` (Punch Item / Change Order / RFI)
+- `/classify` — voice-to-punch-list: turns one spoken sentence into `{isItem, confidence, type, trade, text, location, costImpact, severity, reason}`
+- `/tag-photo` — looks at one walk photo and suggests `{kind: trade|safety|quality, trade, severity, confidence, observation}`. The app shows it as a suggestion the user confirms or overrides. One vision call per photo (sent at 768px); turn it off in Setup → "Suggest … tags from walk photos".
 - `/transcribe` — speech-to-text via Cloudflare Workers AI (Whisper), for phones without built-in `SpeechRecognition` (notably iOS Safari)
 - `/` (root) — the original AI Code-Check Photo flow, unchanged
 
@@ -83,7 +84,7 @@ Phone-oriented version of this list: `PHONE_SETUP.md`.
 
 ## Files
 
-- `ai-backend/worker.js` — the function (photo-check, `/classify`, `/transcribe`)
+- `ai-backend/worker.js` — the function (photo-check, `/classify`, `/tag-photo`, `/transcribe`)
 - `ai-backend/wrangler.toml` — worker name + the Workers AI binding `/transcribe` needs
 - `index.html` — phone UI; stores the Worker URL in `localStorage` key `swAiEndpoint` and the optional shared key in `swAiKey`
 - `PHONE_SETUP.md` — short checklist including the merge-then-secret order

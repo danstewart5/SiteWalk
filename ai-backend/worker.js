@@ -1,10 +1,12 @@
 /**
  * SiteWalk AI backend — Cloudflare Worker
  *
- * Three routes, all POST, all behind the same CORS + shared-key gate:
+ * Four routes, all POST, all behind the same CORS + shared-key gate:
  *   /            (or /photo-check) — existing AI code-check photo flow
  *   /classify    — voice-to-punch-list: classify one spoken sentence into
- *                  {isItem, confidence, type, trade, text, location, costImpact, reason}
+ *                  {isItem, confidence, type, trade, text, location, costImpact, severity, reason}
+ *   /tag-photo   — look at one walk photo and suggest a tag:
+ *                  {kind: trade|safety|quality, trade, severity, confidence, observation}
  *   /transcribe  — speech-to-text for phones without SpeechRecognition
  *                  (iOS Safari), via Workers AI Whisper. Needs the `AI`
  *                  binding in wrangler.toml — no separate API key.
@@ -31,17 +33,17 @@ const ALLOWED_ORIGINS = ['https://sitewalk-app.netlify.app', 'https://danstewart
 // Few-shot examples: the single biggest accuracy lever. The model mirrors these
 // patterns instead of guessing from a bare description.
 const EXAMPLES = [
-  { in: 'Drywall is cracked above the window in unit three.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Drywall', text: 'Cracked drywall above the window in unit 3.', location: 'Unit 3', costImpact: null } },
-  { in: 'Add a second outlet on the east wall, that is extra work.', out: { isItem: true, confidence: 0.9, type: 'change_order', trade: 'Electrical', text: 'Add a second outlet on the east wall (extra work).', location: 'East wall', costImpact: null } },
-  { in: 'Do we move the electrical panel left or right of the door?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Electrical', text: 'Confirm electrical panel location: left or right of the door?', location: '', costImpact: null } },
-  { in: 'Roof leak over the hallway, water coming through the ceiling.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Roofing', text: 'Roof leak over the hallway — water through the ceiling.', location: 'Hallway', costImpact: null } },
-  { in: 'Client wants the concrete stamped instead of broom finish, add fifteen hundred dollars.', out: { isItem: true, confidence: 0.95, type: 'change_order', trade: 'Concrete', text: 'Change concrete finish from broom to stamped (client request).', location: '', costImpact: 1500 } },
-  { in: 'Is the stair stringer supposed to be pressure treated or regular lumber?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Framing', text: 'Confirm stair stringer material: pressure treated or regular lumber?', location: 'Stairs', costImpact: null } },
-  { in: 'Guy on the second floor deck has no harness on.', out: { isItem: true, confidence: 0.9, type: 'safety', trade: 'General', text: 'Worker on second floor deck without a harness.', location: 'Second floor deck', costImpact: null } },
-  { in: 'Patch the nail pops in the master bedroom, maybe two hundred bucks.', out: { isItem: true, confidence: 0.9, type: 'punch', trade: 'Drywall', text: 'Patch nail pops in the master bedroom.', location: 'Master bedroom', costImpact: 200 } },
-  { in: 'Okay we are heading upstairs now.', out: { isItem: false, confidence: 0.95, type: 'punch', trade: 'General', text: 'Heading upstairs.', location: '', costImpact: null } },
-  { in: 'Framing in the kitchen looks good.', out: { isItem: false, confidence: 0.85, type: 'punch', trade: 'Framing', text: 'Kitchen framing looks good.', location: 'Kitchen', costImpact: null } },
-  { in: 'The trim around the back door, I don\'t know.', out: { isItem: true, confidence: 0.4, type: 'punch', trade: 'Other', text: 'Check trim around the back door.', location: 'Back door', costImpact: null, reason: 'Mentions trim but no clear problem.' } },
+  { in: 'Drywall is cracked above the window in unit three.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Drywall', text: 'Cracked drywall above the window in unit 3.', location: 'Unit 3', costImpact: null, severity: 'medium' } },
+  { in: 'Add a second outlet on the east wall, that is extra work.', out: { isItem: true, confidence: 0.9, type: 'change_order', trade: 'Electrical', text: 'Add a second outlet on the east wall (extra work).', location: 'East wall', costImpact: null, severity: 'low' } },
+  { in: 'Do we move the electrical panel left or right of the door?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Electrical', text: 'Confirm electrical panel location: left or right of the door?', location: '', costImpact: null, severity: 'medium' } },
+  { in: 'Roof leak over the hallway, water coming through the ceiling.', out: { isItem: true, confidence: 0.95, type: 'punch', trade: 'Roofing', text: 'Roof leak over the hallway — water through the ceiling.', location: 'Hallway', costImpact: null, severity: 'high' } },
+  { in: 'Client wants the concrete stamped instead of broom finish, add fifteen hundred dollars.', out: { isItem: true, confidence: 0.95, type: 'change_order', trade: 'Concrete', text: 'Change concrete finish from broom to stamped (client request).', location: '', costImpact: 1500, severity: 'low' } },
+  { in: 'Is the stair stringer supposed to be pressure treated or regular lumber?', out: { isItem: true, confidence: 0.9, type: 'rfi', trade: 'Framing', text: 'Confirm stair stringer material: pressure treated or regular lumber?', location: 'Stairs', costImpact: null, severity: 'medium' } },
+  { in: 'Guy on the second floor deck has no harness on.', out: { isItem: true, confidence: 0.9, type: 'safety', trade: 'General', text: 'Worker on second floor deck without a harness.', location: 'Second floor deck', costImpact: null, severity: 'critical' } },
+  { in: 'Patch the nail pops in the master bedroom, maybe two hundred bucks.', out: { isItem: true, confidence: 0.9, type: 'punch', trade: 'Drywall', text: 'Patch nail pops in the master bedroom.', location: 'Master bedroom', costImpact: 200, severity: 'low' } },
+  { in: 'Okay we are heading upstairs now.', out: { isItem: false, confidence: 0.95, type: 'punch', trade: 'General', text: 'Heading upstairs.', location: '', costImpact: null, severity: 'low' } },
+  { in: 'Framing in the kitchen looks good.', out: { isItem: false, confidence: 0.85, type: 'punch', trade: 'Framing', text: 'Kitchen framing looks good.', location: 'Kitchen', costImpact: null, severity: 'low' } },
+  { in: 'The trim around the back door, I don\'t know.', out: { isItem: true, confidence: 0.4, type: 'punch', trade: 'Other', text: 'Check trim around the back door.', location: 'Back door', costImpact: null, severity: 'low', reason: 'Mentions trim but no clear problem.' } },
 ];
 
 function corsHeadersFor(request) {
@@ -82,6 +84,7 @@ export default {
 
     const path = new URL(request.url).pathname;
     if (path === '/classify') return handleClassify(request, env, json);
+    if (path === '/tag-photo') return handleTagPhoto(request, env, json);
     if (path === '/transcribe') return handleTranscribe(request, env, json);
     return handlePhotoCheck(request, env, json);
   },
@@ -274,9 +277,12 @@ async function handleClassify(request, env, json) {
     'location: where on site, if said (unit, floor, room, wall), else "".\n' +
     'costImpact: if a dollar amount is stated or clearly implied (any type), a plain number ' +
     '(e.g. "add three hundred dollars" -> 300). Otherwise null.\n' +
+    'severity: how urgent, one of "critical" (immediate danger to people or the structure: live wires, gas, fall risk, collapse), ' +
+    '"high" (active damage or blocks work/inspection: leaks, water damage, code failures, anything urgent), ' +
+    '"medium" (a normal defect to fix), "low" (cosmetic, minor touch-ups, non-items).\n' +
     'reason: a few words, only when confidence is below 0.6.\n\n' +
     'Reply with ONLY a JSON object, no other text, in exactly this shape:\n' +
-    '{"isItem":true|false,"confidence":<0-1>,"type":"punch|change_order|rfi|safety|quality","trade":"<one of the valid trades>","text":"<cleaned-up concise version of the sentence>","location":"<string>","costImpact":<number or null>,"reason":"<string>"}';
+    '{"isItem":true|false,"confidence":<0-1>,"type":"punch|change_order|rfi|safety|quality","trade":"<one of the valid trades>","text":"<cleaned-up concise version of the sentence>","location":"<string>","costImpact":<number or null>,"severity":"critical|high|medium|low","reason":"<string>"}';
 
   let raw;
   try {
@@ -303,7 +309,80 @@ async function handleClassify(request, env, json) {
   const confidence = typeof parsed.confidence === 'number' && isFinite(parsed.confidence) ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
   const location = typeof parsed.location === 'string' ? parsed.location.trim() : '';
   const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
-  return json({ isItem, confidence, type, trade, text: cleanText, location, costImpact, reason });
+  const severity = SEVERITIES.includes(parsed.severity) ? parsed.severity : 'medium';
+  return json({ isItem, confidence, type, trade, text: cleanText, location, costImpact, severity, reason });
+}
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+
+// Image-based tag suggestion for one walk photo. The app shows the answer as
+// a suggestion; the user confirms or overrides it before anything changes.
+// Body: { image: "data:image/…", trade?: string (tag from voice), context?: string (what was being said) }
+// Reply: { kind: 'trade'|'safety'|'quality', trade, severity: 'critical'|'high'|'medium'|'low',
+//          confidence: 0..1, observation: string }
+async function handleTagPhoto(request, env, json) {
+  if (!env.ANTHROPIC_API_KEY) {
+    return json({ error: 'ANTHROPIC_API_KEY secret is not set on this Worker.' }, 500);
+  }
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return json({ error: 'Invalid JSON body. Send { image: "data:image/…" }' }, 400);
+  }
+  const image = payload && payload.image;
+  if (!image || typeof image !== 'string' || image.indexOf('data:image') !== 0 || image.indexOf(',') < 0) {
+    return json({ error: 'Bad or missing photo. image must be a data:image… URL.' }, 400);
+  }
+  const comma = image.indexOf(',');
+  const mimeMatch = image.slice(0, comma).match(/data:(image\/[a-zA-Z0-9.+-]+)/);
+  const mediaType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const data = image.slice(comma + 1);
+  if (data.length < 100) return json({ error: 'Photo data looks empty.' }, 400);
+  const voiceTrade = TRADES.includes(payload.trade) ? payload.trade : 'General';
+  const context = typeof payload.context === 'string' ? payload.context.slice(0, 300) : '';
+
+  const prompt =
+    'This photo was taken during a construction site walk-around. Judge it from what you can SEE.\n' +
+    'The voice tag at the time was "' + voiceTrade + '"' + (context ? ' and the supervisor was saying: "' + context.replace(/"/g, '\\"') + '"' : '') + '. ' +
+    'Treat those as hints only; they are often wrong or stale.\n\n' +
+    'Valid trades: ' + TRADES.join(', ') + '\n' +
+    'kind: "safety" if the photo shows a hazard or safety violation (exposed wiring, missing guardrails, open holes or trenches, ' +
+    'no PPE or harness, trip hazards, unsafe ladders or scaffolding); "quality" if it shows work that looks defective or not to code/spec; ' +
+    'otherwise "trade".\n' +
+    'trade: the single trade whose work is the subject of the photo. "General" only if truly unclear.\n' +
+    'severity: "critical" (immediate danger to people or structure), "high" (active damage like leaks or water damage, or a clear code/safety problem), ' +
+    '"medium" (a normal defect), "low" (cosmetic, or nothing wrong visible).\n' +
+    'confidence: 0 to 1, how sure you are about kind and trade.\n' +
+    'observation: one short sentence saying what you see that drives the tag. Be conservative: only flag what is visible.\n\n' +
+    'Reply with ONLY a JSON object:\n' +
+    '{"kind":"trade|safety|quality","trade":"<valid trade>","severity":"critical|high|medium|low","confidence":<0-1>,"observation":"<string>"}';
+
+  let raw;
+  try {
+    raw = await callAnthropic(env, {
+      maxTokens: 300,
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
+        { type: 'text', text: prompt },
+      ],
+      prefill: '{',
+    });
+  } catch (e) {
+    return json({ error: 'Photo tag failed: ' + (e && e.message ? e.message : e) }, 502);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse('{' + raw.replace(/^\{/, ''));
+  } catch (e) {
+    return json({ error: 'Model returned non-JSON.', detail: raw.slice(0, 300) }, 502);
+  }
+  const kind = ['trade', 'safety', 'quality'].includes(parsed.kind) ? parsed.kind : 'trade';
+  const trade = TRADES.includes(parsed.trade) ? parsed.trade : voiceTrade;
+  const severity = SEVERITIES.includes(parsed.severity) ? parsed.severity : (kind === 'safety' ? 'high' : 'medium');
+  const confidence = typeof parsed.confidence === 'number' && isFinite(parsed.confidence) ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5;
+  const observation = typeof parsed.observation === 'string' ? parsed.observation.trim().slice(0, 300) : '';
+  return json({ kind, trade, severity, confidence, observation });
 }
 
 // Speech-to-text for phones without SpeechRecognition (iOS Safari), via Workers AI Whisper.

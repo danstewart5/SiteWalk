@@ -158,7 +158,7 @@ document.querySelectorAll('.home-mode-btn').forEach(function (btn) {
 });
 
 const TRADES = ['General', 'Plumbing', 'Electrical', 'Framing', 'Drywall', 'Roofing', 'Concrete', 'Landscaping', 'Other'];
-const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock', invoices: 'swInvoices', business: 'swBusiness', invoiceSeq: 'swInvoiceSeq', review: 'swReview' };
+const LS = { photos: 'swPhotos', punch: 'swPunch', changes: 'swChanges', rfis: 'swRfis', contacts: 'swTradeContacts', aiEndpoint: 'swAiEndpoint', aiKey: 'swAiKey', submittals: 'swSubmittals', clockEvents: 'swClockEvents', dailyLogs: 'swDailyLogs', safety: 'swSafety', notes: 'swWalkNotes', siteName: 'swJobSiteName', siteAddress: 'swJobSiteAddress', wages: 'swWageRates', materials: 'swMaterials', budget: 'swBudget', drawings: 'swDrawings', saveVideo: 'swSaveVideoEnabled', walks: 'swWalks', homeMode: 'swHomeMode', role: 'swRole', properties: 'swProperties', units: 'swUnits', tenants: 'swTenants', leases: 'swLeases', payments: 'swPayments', subContracts: 'swSubContracts', geoSites: 'swGeoSites', autoClock: 'swAutoClock', invoices: 'swInvoices', business: 'swBusiness', invoiceSeq: 'swInvoiceSeq', review: 'swReview', photoTag: 'swPhotoTagEnabled', photoTagStats: 'swPhotoTagStats' };
 // Jobs. Each job keeps its own copy of the job-scoped keys, stored as
 // key + '@' + jobId. The original job ('default') keeps the plain keys, so
 // upgrading copies nothing (photos can be most of the storage quota). The LS
@@ -287,6 +287,8 @@ function tryLinkPhotoToRecentItem(photo) {
   addPhotoToItem(candidates[0], photo.src);
   photo.linkedItemText = itemDesc(candidates[0]);
   photo.linkedItemTs = candidates[0].ts;
+  if (photo.tag) applyPhotoTagToItem(photo, candidates[0]);
+  gatePhotoTag(photo);
   persistLinkable(); persistPhotos(); renderAllItems(); renderSafetyLogs(); renderReview();
   return true;
 }
@@ -298,7 +300,7 @@ function tryLinkItemToRecentPhoto(entry) {
     return !p.linkedItemText && dt >= 0 && dt <= PHOTO_LINK_WINDOW_MS && (!p.holdForId || p.holdForId === entry.transcriptId);
   }).sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); });
   if (!candidates.length) return false;
-  candidates.forEach(function (p) { addPhotoToItem(entry, p.src); p.linkedItemText = itemDesc(entry); p.linkedItemTs = entry.ts; });
+  candidates.forEach(function (p) { addPhotoToItem(entry, p.src); p.linkedItemText = itemDesc(entry); p.linkedItemTs = entry.ts; if (p.tag) applyPhotoTagToItem(p, entry); gatePhotoTag(p); });
   persistPhotos();
   return true;
 }
@@ -339,6 +341,7 @@ function deleteSelectedPhotos() {
   persistPhotos();
   persistLists();
   renderPhotosTab();
+  renderPhotoTagQueue();
   renderAllItems();
   renderSummary();
   updateSelectionBar();
@@ -349,6 +352,7 @@ function buildPhotoThumb(item) {
   thumb.className = 'w-photo-thumb';
   thumb.innerHTML = '<img src="' + item.src + '"><span class="w-thumb-trade">' + item.trade + '</span>'
     + (item.linkedItemText ? '<span class="w-thumb-linked" title="Linked to a punch list item">🔗</span>' : '')
+    + (item.suggestion && item.suggestion.status === 'suggested' ? '<span class="w-thumb-tag" title="Photo tag suggestion waiting">🤖?</span>' : (item.tag && item.tag.kind !== 'trade' ? '<span class="w-thumb-tag" title="' + PHOTO_KIND_LABEL[item.tag.kind] + '">⚠️</span>' : ''))
     + '<label class="w-thumb-check-wrap"><input type="checkbox" class="w-thumb-check"' + (selectedPhotos.has(item) ? ' checked' : '') + '></label>';
   thumb.addEventListener('click', function () { openLightbox(item.src); });
   const checkbox = thumb.querySelector('.w-thumb-check');
@@ -465,13 +469,13 @@ function renderSummary() {
   tradesPresent.forEach(function (trade) {
     const items = byTrade[trade];
     html += '<div class="w-summary-card"><h3><span class="w-trade-dot ' + (TRADE_DOT[trade] || 'dot-general') + '"></span>' + trade + '</h3>';
-    items.forEach(function (e) {
+    items.slice().sort(byUrgency).forEach(function (e) {
       const typeLabel = e.status !== undefined ? 'RFI' : (e.approval !== undefined ? 'Change Order' : 'Punch Item');
       let extra;
       if (e.status !== undefined) extra = e.status;
       else if (e.approval !== undefined) extra = (e.costEstimate != null ? ('$' + e.costEstimate + ' — ') : '') + e.approval;
       else extra = e.resolved ? 'Resolved' : 'Open';
-      html += '<div class="w-summary-item">' + escapeHtml(e.text) + '<div class="meta">' + typeLabel + ' · ' + extra + '</div></div>';
+      html += '<div class="w-summary-item">' + severityTagHtml(itemSeverity(e)) + ' ' + escapeHtml(e.text) + '<div class="meta">' + typeLabel + ' · ' + extra + '</div></div>';
     });
     html += '</div>';
   });
@@ -511,7 +515,8 @@ function renderItemCard(entry, type) {
   if (photoRow) card.appendChild(photoRow);
   const meta = document.createElement('div');
   meta.className = 'meta';
-  let metaHtml = '<span class="trade-tag">' + entry.trade + '</span><span class="type-tag ' + tagClass + '">' + tagLabel + '</span>';
+  let metaHtml = severityTagHtml(itemSeverity(entry)) + '<span class="trade-tag">' + entry.trade + '</span><span class="type-tag ' + tagClass + '">' + tagLabel + '</span>';
+  if (entry.photoFlag) metaHtml += '<span class="type-tag unverified">📷 ' + (entry.photoFlag === 'quality' ? 'Quality' : 'Safety') + '</span>';
   if (entry.verified === false) metaHtml += '<span class="type-tag unverified">Unverified</span>';
   if (type === 'punch' && entry.resolved) metaHtml += '<span class="type-tag change">Resolved</span>';
   metaHtml += ' ' + entry.time;
@@ -531,6 +536,7 @@ function renderItemCard(entry, type) {
   textBtn.onclick = function () { sendText(entry, tagLabel); };
   card.appendChild(emailBtn);
   card.appendChild(textBtn);
+  card.appendChild(severityButton(entry, function () { persistLists(); renderAllItems(); renderSummary(); }));
 
   if (photos.length && itemPhotos(entry).indexOf(photos[photos.length - 1].src) === -1) {
     const attachBtn = document.createElement('button');
@@ -693,7 +699,7 @@ function renderSafetyLogs() {
   safetyLogs.slice().reverse().forEach(function (s) {
     const card = document.createElement('div');
     card.className = 'item-card';
-    let html = '<strong>' + escapeHtml(s.type) + '</strong><div>' + escapeHtml(itemDesc(s)) + '</div>';
+    let html = severityTagHtml(itemSeverity(s)) + ' <strong>' + escapeHtml(s.type) + '</strong><div>' + escapeHtml(itemDesc(s)) + '</div>';
     if (s.trade || s.location || s.drawingRef) html += '<div class="meta">' + [s.trade, s.location ? 'Location: ' + s.location : '', s.drawingRef ? 'Sheet ' + s.drawingRef : ''].filter(Boolean).map(escapeHtml).join(' · ') + '</div>';
     if (s.person) html += '<div class="meta">Involved: ' + escapeHtml(s.person) + '</div>';
     if (s.action) html += '<div class="meta">Action taken: ' + escapeHtml(s.action) + '</div>';
@@ -701,6 +707,7 @@ function renderSafetyLogs() {
     card.innerHTML = html;
     const row = photoRowEl(itemPhotos(s));
     if (row) card.appendChild(row);
+    card.appendChild(severityButton(s, function () { persistSafety(); renderSafetyLogs(); }));
     wrap.appendChild(card);
   });
 }
@@ -1450,6 +1457,7 @@ function fileEntry(data) {
   if (type !== 'change' && type !== 'rfi') type = 'punch';
   entry.itemType = type === 'change' ? 'change_order' : type;
   entry.isChangeOrder = type === 'change';
+  entry.severity = maxSeverity(data.severity, scoreSeverity(entry.text, type)) || 'medium';
   if (type !== 'rfi') entry.costEstimate = typeof data.costEstimate === 'number' && isFinite(data.costEstimate) ? data.costEstimate : parseSpokenCost(entry.text);
   if (type === 'change') { entry.approval = data.approval || 'Pending'; changes.push(entry); }
   else if (type === 'rfi') { entry.status = 'Open'; rfis.push(entry); }
@@ -1549,6 +1557,59 @@ function scoreUtterance(text) {
   return { level: 'none', route: 'punch', reason: 'no item wording' };
 }
 
+/* ---------- Urgency ---------- */
+// Every item carries a severity: critical / high / medium / low. It's set at
+// capture from the words (and the AI Worker, and a confirmed photo tag,
+// whichever is higher), can be changed by hand on any card, and orders the
+// report so the worst things come first. Older items without one are scored
+// on the fly from their text.
+const SEVERITY_LEVELS = ['low', 'medium', 'high', 'critical'];
+const SEVERITY_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const CRITICAL_RE = /\b(live wires?|exposed (?:live )?wir(?:e|es|ing)|gas (?:leak|smell)|smells? (?:like )?gas|fire hazard|on fire|sparking|arcing|collaps(?:e|ed|ing)|structural failure|about to fall|could fall|fall hazard|fall risk|no (?:harness|fall protection)|not wearing (?:a )?harness|unguarded (?:opening|edge|stairs?|floor)|open (?:hole|shaft|edge)|unshored|open trench|carbon monoxide|electrocut\w*|flooding)\b/i;
+const HIGH_RE = /\b(hazard|unsafe|leak(?:s|ing|y)?|water damage|water (?:coming|pouring|dripping)|mold|rot(?:ted|ten)?|structural|sagging|cracked (?:foundation|slab|beam|joist|header|footing)|not (?:up )?to code|code violation|fails? code|failed inspection|won'?t pass|blocked (?:exit|fire exit)|trip hazard|no hard hat|no ppe|urgent|asap|right away|immediately|today|before (?:inspection|drywall|close[- ]?in|the pour|pour)|stop work|no power|no water|not working)\b/i;
+const LOW_RE = /\b(cosmetic|touch[- ]?up|scuff(?:ed|s)?|scratch(?:ed|es)?|nail pops?|paint|caulk(?:ing)?|minor|stain(?:ed|s)?|smudge|dust|clean ?up|chipped|when (?:you|we) get a chance|eventually|no rush|low priority)\b/i;
+function validSeverity(s) { return SEVERITY_LEVELS.indexOf(s) !== -1 ? s : null; }
+function scoreSeverity(text, kind) {
+  const t = text || '';
+  if (CRITICAL_RE.test(t)) return 'critical';
+  if (HIGH_RE.test(t) || kind === 'safety') return 'high';
+  if (LOW_RE.test(t)) return 'low';
+  return 'medium';
+}
+function maxSeverity(a, b) {
+  a = validSeverity(a); b = validSeverity(b);
+  if (!a) return b; if (!b) return a;
+  return SEVERITY_LEVELS.indexOf(a) >= SEVERITY_LEVELS.indexOf(b) ? a : b;
+}
+function severityRank(s) { return SEVERITY_LEVELS.indexOf(validSeverity(s) || 'medium'); }
+// Safety-log entries use their incident type; the rest use itemType.
+function itemKind(e) {
+  if (e.itemType) return e.itemType;
+  if (e.suggestedType) return e.suggestedType;
+  if (e.type === 'Quality Issue') return 'quality';
+  if (e.type) return 'safety';
+  return 'punch';
+}
+function itemSeverity(e) { return validSeverity(e.severity) || scoreSeverity(itemDesc(e), itemKind(e)); }
+function severityTagHtml(s) { return '<span class="sev-tag sev-' + s + '">' + SEVERITY_LABEL[s] + '</span>'; }
+// Tap to step through Low → Medium → High → Critical → Low.
+function severityButton(e, onChange) {
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'small gray sev-btn';
+  btn.textContent = 'Urgency: ' + SEVERITY_LABEL[itemSeverity(e)];
+  btn.onclick = function () {
+    e.severity = SEVERITY_LEVELS[(severityRank(itemSeverity(e)) + 1) % SEVERITY_LEVELS.length];
+    e.severityBy = 'user';
+    onChange();
+  };
+  return btn;
+}
+// Open before closed, then most urgent first, then capture order.
+function isItemClosed(e) { return !!e.resolved || e.status === 'Answered' || e.approval === 'Declined'; }
+function byUrgency(a, b) {
+  return (isItemClosed(a) - isItemClosed(b)) || (severityRank(itemSeverity(b)) - severityRank(itemSeverity(a))) || ((a.ts || 0) - (b.ts || 0));
+}
+
 /* ---------- Full transcript record ---------- */
 // Every finalized sentence is kept as said, with what the filter did with it.
 const OUTCOME_LABEL = { punch: 'Punch item', change: 'Change order', rfi: 'RFI', safety: 'Safety', quality: 'Quality', review: 'Needs review', transcript: 'Transcript only', dismissed: 'Dismissed', photo: 'Photo command', pending: 'Sorting…' };
@@ -1579,11 +1640,11 @@ function addReviewItem(d) {
   reviewItems.push(item);
   persistReview();
   renderReview();
+  if (item.photoFlag) resolveReviewItem(item.id, item.photoFlag);
   return item;
 }
 function renderReview() {
-  const badge = document.getElementById('reviewCount');
-  if (badge) { badge.textContent = reviewItems.length ? String(reviewItems.length) : ''; badge.style.display = reviewItems.length ? '' : 'none'; }
+  updateReviewBadge();
   const wrap = document.getElementById('reviewList');
   if (!wrap) return;
   wrap.innerHTML = '';
@@ -1592,7 +1653,7 @@ function renderReview() {
     const card = document.createElement('div');
     card.className = 'item-card review-card';
     const typeLabel = { punch: 'Punch item', change: 'Change order', rfi: 'RFI', safety: 'Safety', quality: 'Quality' }[r.suggestedType] || 'Punch item';
-    card.innerHTML = '<div>' + escapeHtml(r.text) + '</div><div class="meta">Best guess: ' + typeLabel + ' · ' + escapeHtml(r.trade || 'General')
+    card.innerHTML = '<div>' + severityTagHtml(itemSeverity(r)) + ' ' + escapeHtml(r.text) + '</div><div class="meta">Best guess: ' + typeLabel + ' · ' + escapeHtml(r.trade || 'General')
       + (r.location ? ' · ' + escapeHtml(r.location) : '') + (r.costEstimate != null ? ' · ~$' + r.costEstimate : '') + (r.drawingRef ? ' · Sheet ' + escapeHtml(r.drawingRef) : '')
       + '<br>' + escapeHtml(r.time) + (r.reason ? ' · ' + escapeHtml(r.reason) : '') + '</div>';
     const row = photoRowEl(itemPhotos(r));
@@ -1603,6 +1664,7 @@ function renderReview() {
       btn.onclick = function () { resolveReviewItem(r.id, b[0]); };
       card.appendChild(btn);
     });
+    card.appendChild(severityButton(r, function () { persistReview(); renderReview(); }));
     wrap.appendChild(card);
   });
 }
@@ -1618,10 +1680,10 @@ function resolveReviewItem(id, action) {
     persistPhotos();
     setTranscriptOutcome(r.transcriptId, 'dismissed');
   } else if (action === 'safety' || action === 'quality') {
-    logSafetyQuality(r.text, action, { trade: r.trade, location: r.location, drawingRef: r.drawingRef, photos: itemPhotos(r), stamp: stamp, via: 'review', transcriptId: r.transcriptId });
+    logSafetyQuality(r.text, action, { trade: r.trade, location: r.location, drawingRef: r.drawingRef, photos: itemPhotos(r), stamp: stamp, via: 'review', transcriptId: r.transcriptId, severity: r.severity });
     setTranscriptOutcome(r.transcriptId, action);
   } else {
-    fileEntry({ text: r.text, type: action, trade: r.trade, location: r.location, costEstimate: r.costEstimate, drawingRef: r.drawingRef, photos: itemPhotos(r), stamp: stamp, via: 'review', verified: true, transcriptId: r.transcriptId, approval: r.approval });
+    fileEntry({ text: r.text, type: action, trade: r.trade, location: r.location, costEstimate: r.costEstimate, drawingRef: r.drawingRef, photos: itemPhotos(r), stamp: stamp, via: 'review', verified: true, transcriptId: r.transcriptId, approval: r.approval, severity: r.severity });
     setTranscriptOutcome(r.transcriptId, action, r.trade);
   }
   renderReview();
@@ -1636,6 +1698,7 @@ function logSafetyQuality(text, kind, meta) {
   const ref = meta.drawingRef || extractDrawingRef(text);
   if (ref) entry.drawingRef = ref;
   if (meta.transcriptId) entry.transcriptId = meta.transcriptId;
+  entry.severity = maxSeverity(meta.severity, scoreSeverity(text, kind));
   (meta.photos || []).forEach(function (src) { addPhotoToItem(entry, src); });
   if (!itemPhotos(entry).length) tryLinkItemToRecentPhoto(entry);
   safetyLogs.push(entry);
@@ -1708,7 +1771,7 @@ function localClassify(text) {
   if (guessedTrade) tradeSelect.value = guessedTrade;
   const score = scoreUtterance(text);
   const clean = cleanSpeech(text) || text;
-  return { level: score.level, type: score.route, reason: score.reason, text: clean.charAt(0).toUpperCase() + clean.slice(1), trade: tradeSelect.value, costEstimate: null, location: '', verified: false };
+  return { level: score.level, type: score.route, reason: score.reason, text: clean.charAt(0).toUpperCase() + clean.slice(1), trade: tradeSelect.value, costEstimate: null, location: '', verified: false, severity: scoreSeverity(text, score.route) };
 }
 
 // One finalized sentence from the walk (continuous recognition or the
@@ -1765,7 +1828,7 @@ function mergeAiClassification(data, local) {
   const typeMap = { change_order: 'change', rfi: 'rfi', safety: 'safety', quality: 'quality', punch: 'punch' };
   const trade = data.trade && TRADES.indexOf(data.trade) !== -1 ? data.trade : local.trade;
   if (trade) tradeSelect.value = trade;
-  const out = { type: typeMap[data.type] || 'punch', text: data.text || local.text, trade: trade, costEstimate: typeof data.costImpact === 'number' ? data.costImpact : null, location: typeof data.location === 'string' ? data.location : '', verified: true, reason: data.reason || '' };
+  const out = { type: typeMap[data.type] || 'punch', text: data.text || local.text, trade: trade, costEstimate: typeof data.costImpact === 'number' ? data.costImpact : null, location: typeof data.location === 'string' ? data.location : '', verified: true, reason: data.reason || '', severity: maxSeverity(data.severity, local.severity) };
   if (typeof data.isItem !== 'boolean') { out.level = local.level; out.reason = out.reason || local.reason; return out; }
   const conf = typeof data.confidence === 'number' ? data.confidence : 0.8;
   if (data.isItem && conf >= AI_CONFIDENT) out.level = 'high';
@@ -1778,18 +1841,22 @@ function mergeAiClassification(data, local) {
   return out;
 }
 function routeClassified(c, rawText, transcriptId, voiceApproval) {
+  c.severity = maxSeverity(c.severity, scoreSeverity(rawText, c.type));
   if (c.level === 'none') {
     setTranscriptOutcome(transcriptId, 'transcript', c.trade);
     setWalkStatus('info', 'Noted in the transcript (not an item).');
   } else if (c.level === 'low') {
-    addReviewItem({ text: c.text, raw: rawText, suggestedType: c.type, trade: c.trade, location: c.location || extractLocation(rawText), costEstimate: c.costEstimate != null ? c.costEstimate : parseSpokenCost(rawText), drawingRef: extractDrawingRef(rawText), reason: c.reason, transcriptId: transcriptId, approval: c.type === 'change' ? (voiceApproval || undefined) : undefined });
-    setTranscriptOutcome(transcriptId, 'review', c.trade);
-    setWalkStatus('info', 'Not sure that\'s an item — added to Review.');
+    const rv = addReviewItem({ text: c.text, raw: rawText, suggestedType: c.type, trade: c.trade, location: c.location || extractLocation(rawText), costEstimate: c.costEstimate != null ? c.costEstimate : parseSpokenCost(rawText), drawingRef: extractDrawingRef(rawText), reason: c.reason, transcriptId: transcriptId, approval: c.type === 'change' ? (voiceApproval || undefined) : undefined, severity: c.severity });
+    // Already filed if a confirmed photo tag flagged it as safety/quality.
+    if (reviewItems.indexOf(rv) !== -1) {
+      setTranscriptOutcome(transcriptId, 'review', c.trade);
+      setWalkStatus('info', 'Not sure that\'s an item — added to Review.');
+    }
   } else if (c.type === 'safety' || c.type === 'quality') {
-    logSafetyQuality(c.text, c.type, { trade: c.trade, location: c.location, via: 'voice', transcriptId: transcriptId });
+    logSafetyQuality(c.text, c.type, { trade: c.trade, location: c.location, via: 'voice', transcriptId: transcriptId, severity: c.severity });
     setTranscriptOutcome(transcriptId, c.type, c.trade);
   } else {
-    const e = fileEntry({ text: c.text, type: c.type, trade: c.trade, costEstimate: c.costEstimate, location: c.location, verified: c.verified, via: 'voice', transcriptId: transcriptId, approval: c.type === 'change' ? (voiceApproval || 'Pending') : undefined });
+    const e = fileEntry({ text: c.text, type: c.type, trade: c.trade, costEstimate: c.costEstimate, location: c.location, verified: c.verified, via: 'voice', transcriptId: transcriptId, approval: c.type === 'change' ? (voiceApproval || 'Pending') : undefined, severity: c.severity });
     // Cost/location said in the raw sentence but dropped by AI cleanup.
     if (e.costEstimate == null && e.itemType !== 'rfi') { const cost = parseSpokenCost(rawText); if (cost != null) { e.costEstimate = cost; persistLists(); renderAllItems(); } }
     if (!e.location) { const loc = extractLocation(rawText); if (loc) { e.location = loc; persistLists(); renderAllItems(); } }
@@ -1799,7 +1866,12 @@ function routeClassified(c, rawText, transcriptId, voiceApproval) {
   // A photo held for this sentence is released (linked above, or left
   // unlinked if the sentence wasn't an item).
   if (transcriptId && photos.some(function (p) { return p.holdForId === transcriptId; })) {
-    photos.forEach(function (p) { if (p.holdForId === transcriptId) delete p.holdForId; });
+    photos.forEach(function (p) {
+      if (p.holdForId !== transcriptId) return;
+      delete p.holdForId;
+      // Neutral sentence: this photo is never sent for a tag.
+      if (c.level === 'none' && !p.linkedItemText) skipPhotoTag(p, 'neutral sentence');
+    });
     persistPhotos();
   }
 }
@@ -1808,7 +1880,206 @@ function snapFromVideo(video) { if (!video || !video.videoWidth) return null; co
 // meta carries structured, timestamped provenance (how the shot was taken and
 // the transcript that triggered it, if any) so a still can be matched back
 // to both the spoken record and whatever punch/change/RFI item it links to.
-function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); if (!item.holdForId) tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); return item; }
+function saveWalkPhoto(src, meta) { const item = Object.assign({ src: src, trade: tradeSelect.value, time: new Date().toLocaleString(), ts: Date.now(), source: 'manual' }, meta || {}); photos.push(item); if (!item.holdForId) tryLinkPhotoToRecentItem(item); persistPhotos(); renderPhotosTab(); setWalkStatus('ok', 'Photo tagged as ' + item.trade + ' (' + photos.length + ' total)'); if (!item.holdForId && !item.linkedItemText) waitForPhotoIssue(item); return item; }
+
+/* ---------- Photo tag suggestions ---------- */
+// Each walk photo goes to the Worker's /tag-photo route, which looks at the
+// image itself and suggests a trade, whether it shows a safety or quality
+// problem, and how urgent it looks. Nothing changes until someone confirms
+// or overrides the suggestion on its card (Walk screen or Review tab). A
+// suggestion that matches what's already tagged is recorded but not asked
+// about. Plain fetch only: it never touches the camera, mic or recognition.
+// Without a Worker URL (or with the Setup toggle off) photos keep the voice
+// trade as before.
+const PHOTO_KIND_LABEL = { trade: 'Trade only', safety: 'Safety hazard', quality: 'Quality issue' };
+function photoTagEnabled() { return !!currentAiEndpoint() && loadJson(LS.photoTag, true) !== false; }
+// Cost gate, under the Setup switch: a photo is sent only once it's tied to
+// an issue — linked to an item the sentence filter filed (punch / change
+// order / RFI / safety / quality) or put in Review. That happens when:
+//   - "take a photo" is said inside an issue sentence (the held photo links
+//     when that sentence is filed; a neutral sentence skips it for good), or
+//   - the photo links to an item filed in the 60 s before or after it (the
+//     existing link window), e.g. a Snap button shot or a bare "take a photo".
+// A photo nothing links to within that window is skipped. The decision is
+// made before any resize or upload. photo.tagGate: 'waiting' | 'sent' | 'skipped'.
+function photoTagStats() { const s = loadJson(LS.photoTagStats, null); return s && typeof s === 'object' ? s : { sent: 0, skipped: 0 }; }
+function countPhotoTag(kind) {
+  const s = photoTagStats(); s[kind] = (s[kind] || 0) + 1; saveJson(LS.photoTagStats, s);
+  if (currentWalk) { currentWalk.photoTags = currentWalk.photoTags || { sent: 0, skipped: 0 }; currentWalk.photoTags[kind]++; persistWalks(); }
+  renderPhotoTagStats();
+}
+function renderPhotoTagStats() {
+  const el = document.getElementById('photoTagStats');
+  if (!el) return;
+  const s = photoTagStats();
+  el.textContent = 'Photo tag calls on this phone: ' + s.sent + ' sent, ' + s.skipped + ' skipped (no issue with the photo).' + (currentWalk && currentWalk.photoTags ? ' This walk: ' + currentWalk.photoTags.sent + ' sent, ' + currentWalk.photoTags.skipped + ' skipped.' : '');
+}
+function gatePhotoTag(photo) {
+  if (!photoTagEnabled() || photo.tagGate === 'sent' || photo.tagGate === 'skipped' || photo.suggestion) return;
+  photo.tagGate = 'sent';
+  countPhotoTag('sent');
+  console.log('[SiteWalk] photo tag: sending (linked to an issue)');
+  requestPhotoTag(photo);
+}
+function skipPhotoTag(photo, reason) {
+  if (!photoTagEnabled() || photo.tagGate === 'sent' || photo.tagGate === 'skipped') return;
+  photo.tagGate = 'skipped';
+  countPhotoTag('skipped');
+  console.log('[SiteWalk] photo tag: skipped (' + reason + ')');
+}
+function waitForPhotoIssue(photo) {
+  if (!photoTagEnabled()) return;
+  photo.tagGate = 'waiting';
+  setTimeout(function () { expirePhotoTagWait(photo); }, PHOTO_LINK_WINDOW_MS);
+}
+function expirePhotoTagWait(photo) {
+  if (photo.tagGate !== 'waiting' || photos.indexOf(photo) === -1) return;
+  delete photo.tagGate;
+  skipPhotoTag(photo, 'no issue linked within 60 s');
+  persistPhotos();
+}
+function shrinkForTagging(src, cb) {
+  const img = new Image();
+  img.onload = function () { const scale = Math.min(1, 768 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.6)); };
+  img.onerror = function () { cb(src); };
+  img.src = src;
+}
+function findItemForPhoto(photo) { return linkableItems().find(function (e) { return itemPhotos(e).indexOf(photo.src) !== -1; }) || null; }
+function requestPhotoTag(photo) {
+  if (!photoTagEnabled()) return;
+  const endpoint = currentAiEndpoint();
+  const headers = { 'Content-Type': 'application/json' };
+  const key = currentAiKey(); if (key) headers['X-SiteWalk-Key'] = key;
+  photo.suggestion = { status: 'pending' };
+  shrinkForTagging(photo.src, function (small) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
+    fetch(endpoint + '/tag-photo', { method: 'POST', headers: headers, body: JSON.stringify({ image: small, trade: photo.trade, context: photo.transcriptText || photo.linkedItemText || '' }), signal: controller ? controller.signal : undefined })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (timer) clearTimeout(timer);
+        if (!data || data.error || !data.trade) throw new Error((data && data.error) || 'bad response');
+        receivePhotoTag(photo, data);
+      })
+      .catch(function (err) {
+        if (timer) clearTimeout(timer);
+        console.warn('[SiteWalk] photo tag failed:', err && err.message);
+        if (photos.indexOf(photo) !== -1) { delete photo.suggestion; persistPhotos(); }
+      });
+  });
+}
+function receivePhotoTag(photo, data) {
+  if (photos.indexOf(photo) === -1) return; // deleted while waiting
+  const kind = data.kind === 'safety' || data.kind === 'quality' ? data.kind : 'trade';
+  const sug = {
+    kind: kind,
+    trade: TRADES.indexOf(data.trade) !== -1 ? data.trade : photo.trade,
+    severity: validSeverity(data.severity) || (kind === 'safety' ? 'high' : 'medium'),
+    confidence: typeof data.confidence === 'number' ? data.confidence : null,
+    observation: typeof data.observation === 'string' ? data.observation.trim() : ''
+  };
+  // Only ask when confirming would change something.
+  const item = findItemForPhoto(photo);
+  const current = item ? itemSeverity(item) : 'medium';
+  const wouldChange = kind !== 'trade' || sug.trade !== photo.trade || (item && item.trade !== sug.trade) || severityRank(sug.severity) > severityRank(current);
+  sug.status = wouldChange ? 'suggested' : 'agrees';
+  photo.suggestion = sug;
+  persistPhotos();
+  renderPhotoTagQueue();
+  renderPhotosTab();
+  if (wouldChange) setWalkStatus('info', '📷 Photo looks like ' + (kind === 'trade' ? sug.trade : PHOTO_KIND_LABEL[kind].toLowerCase() + ' (' + sug.trade + ')') + ' — check it in Review.');
+}
+function pendingPhotoTags() { return photos.filter(function (p) { return p.suggestion && p.suggestion.status === 'suggested'; }); }
+// Applies a confirmed tag to the photo and to the item it's linked to (if
+// any). An unlinked safety/quality photo becomes its own Safety & Quality
+// entry. A photo still waiting on its sentence (holdForId) keeps the tag and
+// hands it over when it links (applyPhotoTagToItem from the link helpers).
+function confirmPhotoTag(photo, choice) {
+  const sug = photo.suggestion || {};
+  photo.tag = { kind: choice.kind, trade: choice.trade, severity: choice.severity, by: (choice.kind === sug.kind && choice.trade === sug.trade && choice.severity === sug.severity) ? 'ai' : 'user', at: Date.now() };
+  sug.status = photo.tag.by === 'ai' ? 'confirmed' : 'overridden';
+  photo.suggestion = sug;
+  photo.trade = choice.trade;
+  const item = findItemForPhoto(photo);
+  if (item) applyPhotoTagToItem(photo, item);
+  else if (!photo.holdForId && choice.kind !== 'trade') {
+    const e = logSafetyQuality(sug.observation || ('Photo flagged as ' + PHOTO_KIND_LABEL[choice.kind].toLowerCase()), choice.kind, { trade: choice.trade, photos: [photo.src], severity: choice.severity, via: 'photo' });
+    photo.linkedItemText = itemDesc(e); photo.linkedItemTs = e.ts;
+  }
+  persistPhotos(); persistLinkable();
+  renderPhotoTagQueue(); renderPhotosTab(); renderAllItems(); renderSafetyLogs(); renderReview(); renderSummary(); renderDashboard();
+}
+function applyPhotoTagToItem(photo, item) {
+  const tag = photo.tag;
+  if (!tag) return;
+  item.trade = tag.trade; item.tradeBy = 'photo';
+  item.severity = maxSeverity(itemSeverity(item), tag.severity);
+  if (tag.kind === 'trade') return;
+  item.photoFlag = tag.kind;
+  // A borderline sentence plus a photo confirmed as a hazard is an item.
+  // (A review item still being built is resolved by addReviewItem.)
+  if (reviewItems.indexOf(item) !== -1) resolveReviewItem(item.id, tag.kind);
+}
+function dismissPhotoTag(photo) {
+  if (photo.suggestion) photo.suggestion.status = 'dismissed';
+  persistPhotos(); renderPhotoTagQueue(); renderPhotosTab();
+}
+function photoTagCard(photo) {
+  const sug = photo.suggestion;
+  const card = document.createElement('div');
+  card.className = 'item-card photo-tag-card';
+  const item = findItemForPhoto(photo);
+  const conf = sug.confidence != null ? ' (' + Math.round(sug.confidence * 100) + '% sure)' : '';
+  card.innerHTML = '<div class="photo-tag-head"><img src="' + photo.src + '" alt="Walk photo"><div><div><strong>📷 Photo suggests:</strong> ' + escapeHtml(sug.kind === 'trade' ? sug.trade : PHOTO_KIND_LABEL[sug.kind] + ' · ' + sug.trade) + ' ' + severityTagHtml(sug.severity) + '</div>'
+    + (sug.observation ? '<div class="meta">' + escapeHtml(sug.observation) + conf + '</div>' : (conf ? '<div class="meta">' + conf + '</div>' : ''))
+    + '<div class="meta">Tagged by voice: ' + escapeHtml(photo.trade) + (item ? ' · Linked to: ' + escapeHtml(itemDesc(item)) : ' · Not linked to an item') + '</div></div></div>';
+  const row = document.createElement('div');
+  row.className = 'photo-tag-controls';
+  const mkSelect = function (opts, val, label) {
+    const sel = document.createElement('select'); sel.setAttribute('aria-label', label);
+    opts.forEach(function (o) { const op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; if (o[0] === val) op.selected = true; sel.appendChild(op); });
+    row.appendChild(sel); return sel;
+  };
+  const tradeSel = mkSelect(TRADES.map(function (t) { return [t, t]; }), sug.trade, 'Trade');
+  const kindSel = mkSelect(Object.keys(PHOTO_KIND_LABEL).map(function (k) { return [k, PHOTO_KIND_LABEL[k]]; }), sug.kind, 'Tag');
+  const sevSel = mkSelect(SEVERITY_LEVELS.slice().reverse().map(function (l) { return [l, 'Urgency: ' + SEVERITY_LABEL[l]]; }), sug.severity, 'Urgency');
+  card.appendChild(row);
+  const ok = document.createElement('button');
+  ok.type = 'button'; ok.className = 'small green'; ok.textContent = 'Confirm';
+  ok.onclick = function () { confirmPhotoTag(photo, { trade: tradeSel.value, kind: kindSel.value, severity: sevSel.value }); };
+  const no = document.createElement('button');
+  no.type = 'button'; no.className = 'small gray'; no.textContent = 'Keep as tagged';
+  no.onclick = function () { dismissPhotoTag(photo); };
+  card.appendChild(ok); card.appendChild(no);
+  return card;
+}
+// The Walk screen only gets a one-line badge (no dropdowns over the live
+// camera mid-walk); the cards themselves live in Walk → Review.
+function renderPhotoTagQueue() {
+  const pending = pendingPhotoTags().sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  const walkWrap = document.getElementById('photoTagQueue');
+  if (walkWrap) {
+    walkWrap.innerHTML = '';
+    if (pending.length) {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'photo-tag-badge';
+      btn.textContent = '📷 ' + pending.length + ' photo' + (pending.length > 1 ? 's need' : ' needs') + ' a look →';
+      btn.onclick = function () { showWalkTab('review'); };
+      walkWrap.appendChild(btn);
+    }
+  }
+  const reviewWrap = document.getElementById('photoTagReviewList');
+  if (reviewWrap) {
+    reviewWrap.innerHTML = pending.length ? '<h3 class="photo-tag-title">Photo tag suggestions (' + pending.length + ')</h3>' : '';
+    pending.forEach(function (p) { reviewWrap.appendChild(photoTagCard(p)); });
+  }
+  updateReviewBadge();
+}
+function updateReviewBadge() {
+  const badge = document.getElementById('reviewCount');
+  const n = reviewItems.length + pendingPhotoTags().length;
+  if (badge) { badge.textContent = n ? String(n) : ''; badge.style.display = n ? '' : 'none'; }
+}
 
 // Voice-triggered snap runs entirely off the live <video> element and never
 // touches `recognition` (no stop/start) — a "take a photo" trigger must not
@@ -2411,7 +2682,7 @@ document.getElementById('addSafetyBtn').addEventListener('click', function () {
   if (!desc) { alert('Enter a description first.'); return; }
   function finish(photoSrc) {
     const stamp = nowStamp();
-    safetyLogs.push({ type: type, desc: desc, person: person, action: action, photo: photoSrc || null, photos: photoSrc ? [photoSrc] : [], time: stamp.time, ts: stamp.ts, iso: stamp.iso, source: 'manual' });
+    safetyLogs.push({ type: type, desc: desc, person: person, action: action, photo: photoSrc || null, photos: photoSrc ? [photoSrc] : [], time: stamp.time, ts: stamp.ts, iso: stamp.iso, source: 'manual', severity: scoreSeverity(desc + ' ' + type, type === 'Quality Issue' ? 'quality' : 'safety') });
     persistSafety(); renderSafetyLogs();
     document.getElementById('safetyDesc').value = '';
     document.getElementById('safetyPerson').value = '';
@@ -2472,41 +2743,68 @@ function renderWalkLogSection() {
 }
 // One report row: the item, its details, and its photos inline. A single
 // photo sits beside the text; several show as a row of small photos.
-function reportItemRow(text, metaParts, photoList) {
+function reportItemRow(text, metaParts, photoList, severity) {
   const meta = metaParts.filter(Boolean).map(escapeHtml).join(' · ');
-  let h = '<div class="rpt-item"><div class="rpt-item-body"><div class="rpt-item-text">' + escapeHtml(text) + '</div>' + (meta ? '<div class="rpt-item-meta">' + meta + '</div>' : '') + '</div>';
+  let h = '<div class="rpt-item"><div class="rpt-item-body"><div class="rpt-item-text">' + (severity ? severityTagHtml(severity) + ' ' : '') + escapeHtml(text) + '</div>' + (meta ? '<div class="rpt-item-meta">' + meta + '</div>' : '') + '</div>';
   if (photoList.length === 1) h += '<img class="rpt-photo-single" src="' + photoList[0] + '" alt="Item photo">';
   else if (photoList.length > 1) h += '<div class="rpt-photo-row">' + photoList.map(function (src) { return '<img src="' + src + '" alt="Item photo">'; }).join('') + '</div>';
   return h + '</div>';
 }
-function reportItemSection(title, arr, metaFn) {
+// Items already shown in "Most Urgent First" (pinned) are not repeated;
+// the heading says how many of this list are up there.
+function reportItemSection(title, arr, metaFn, pinned) {
   if (!arr.length) return '';
-  const sorted = arr.slice().sort(function (a, b) { return String(a.trade || '').localeCompare(String(b.trade || '')) || (a.ts || 0) - (b.ts || 0); });
-  let h = '<div class="report-section"><h3>' + title + ' (' + arr.length + ')</h3>';
-  sorted.forEach(function (e) { h += reportItemRow(itemDesc(e), metaFn(e), itemPhotos(e)); });
+  const rest = arr.filter(function (e) { return !pinned || pinned.indexOf(e) === -1; });
+  const above = arr.length - rest.length;
+  // Most urgent first (open before closed), capture order breaks ties.
+  const sorted = rest.sort(byUrgency);
+  let h = '<div class="report-section"><h3>' + title + ' (' + arr.length + ')' + (above ? ' <span class="rpt-above">' + above + ' listed above</span>' : '') + '</h3>';
+  sorted.forEach(function (e) { h += reportItemRow(itemDesc(e), metaFn(e).concat(photoTagMeta(e)), itemPhotos(e), itemSeverity(e)); });
+  if (!sorted.length) h += '<div class="rpt-item-meta">All listed above.</div>';
   return h + '</div>';
 }
 function money0(n) { return n != null ? '$' + Number(n).toLocaleString() : ''; }
 function itemLocMeta(e) { return [e.location ? 'Location: ' + e.location : '', e.drawingRef ? 'Sheet ' + e.drawingRef : '']; }
+function photoTagMeta(e) { return [e.photoFlag ? 'Photo flagged: ' + (e.photoFlag === 'quality' ? 'Quality' : 'Safety') : '', e.tradeBy === 'photo' ? 'Trade from photo' : '']; }
+// Top of the report: every open Critical/High item across all lists, worst
+// first, with full details and photos. Each is listed here only, not again
+// in its own section. lists = [[label, items, metaFn], ...]
+function reportUrgentSection(lists) {
+  const rows = [];
+  lists.forEach(function (l) { l[1].forEach(function (e) { if (!isItemClosed(e) && severityRank(itemSeverity(e)) >= severityRank('high')) rows.push({ e: e, label: l[0], meta: l[2] }); }); });
+  rows.sort(function (a, b) { return byUrgency(a.e, b.e); });
+  let h = '<div class="report-section rpt-urgent"><h3>Most Urgent First (' + rows.length + ')</h3>';
+  if (!rows.length) return { html: h + '<div class="rpt-item-meta">Nothing open is flagged Critical or High.</div></div>', pinned: [] };
+  rows.forEach(function (r) { h += reportItemRow(itemDesc(r.e), [r.label].concat(r.meta(r.e), photoTagMeta(r.e)), itemPhotos(r.e), itemSeverity(r.e)); });
+  return { html: h + '</div>', pinned: rows.map(function (r) { return r.e; }) };
+}
 // Manual only: runs when someone taps Generate Report (Walk screen, Report
 // tab, or the Home gold button), never on its own when a walk ends.
 window.generateReport = function () {
   const siteName = document.getElementById('siteName').textContent.trim();
   const siteAddress = document.getElementById('siteAddress').textContent.trim();
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + escapeHtml(siteName) + (siteAddress && siteAddress !== 'Tap to add address' ? '<br>' + escapeHtml(siteAddress) : '') + '<br>' + new Date().toLocaleString() + '</div>';
-  html += reportItemSection('Punch List', punch, function (i) { return [i.trade].concat(itemLocMeta(i), [i.costEstimate != null ? 'Est. ' + money0(i.costEstimate) : '', i.resolved ? 'Resolved' : 'Open']); });
-  html += reportItemSection('Change Orders', changes, function (i) { return [i.trade].concat(itemLocMeta(i), ['Est. ' + (i.costEstimate != null ? money0(i.costEstimate) : '?'), 'Client: ' + (i.approval || 'Pending')]); });
-  html += reportItemSection('RFIs', rfis, function (i) { return [i.trade].concat(itemLocMeta(i), [i.status || 'Open']); });
-  html += reportItemSection('Safety &amp; Quality', safetyLogs, function (s) { return [s.type, s.trade].concat(itemLocMeta(s), [s.person ? 'Involved: ' + s.person : '', s.action ? 'Action: ' + s.action : '', s.time]); });
-  html += reportItemSection('Needs Review (not on the punch list yet)', reviewItems, function (r) { return [r.trade].concat(itemLocMeta(r), [r.costEstimate != null ? 'Est. ' + money0(r.costEstimate) : '', r.time]); });
+  const punchMeta = function (i) { return [i.trade].concat(itemLocMeta(i), [i.costEstimate != null ? 'Est. ' + money0(i.costEstimate) : '', i.resolved ? 'Resolved' : 'Open']); };
+  const coMeta = function (i) { return [i.trade].concat(itemLocMeta(i), ['Est. ' + (i.costEstimate != null ? money0(i.costEstimate) : '?'), 'Client: ' + (i.approval || 'Pending')]); };
+  const rfiMeta = function (i) { return [i.trade].concat(itemLocMeta(i), [i.status || 'Open']); };
+  const safetyMeta = function (s) { return [s.type, s.trade].concat(itemLocMeta(s), [s.person ? 'Involved: ' + s.person : '', s.action ? 'Action: ' + s.action : '', s.time]); };
+  const reviewMeta = function (r) { return [r.trade].concat(itemLocMeta(r), [r.costEstimate != null ? 'Est. ' + money0(r.costEstimate) : '', r.time]); };
+  const urgent = reportUrgentSection([['Punch', punch, punchMeta], ['Change order', changes, coMeta], ['RFI', rfis, rfiMeta], ['Safety & Quality', safetyLogs, safetyMeta], ['Needs review', reviewItems, reviewMeta]]);
+  html += urgent.html;
+  html += reportItemSection('Punch List', punch, punchMeta, urgent.pinned);
+  html += reportItemSection('Change Orders', changes, coMeta, urgent.pinned);
+  html += reportItemSection('RFIs', rfis, rfiMeta, urgent.pinned);
+  html += reportItemSection('Safety &amp; Quality', safetyLogs, safetyMeta, urgent.pinned);
+  html += reportItemSection('Needs Review (not on the punch list yet)', reviewItems, reviewMeta, urgent.pinned);
   // Photos not attached to any item, with what was being said when taken.
   const used = {};
   linkableItems().forEach(function (e) { itemPhotos(e).forEach(function (src) { used[src] = true; }); });
-  const loose = photos.filter(function (p) { return !used[p.src]; });
+  const tagRank = function (p) { return p.tag ? severityRank(p.tag.severity) : -1; };
+  const loose = photos.filter(function (p) { return !used[p.src]; }).sort(function (a, b) { return (tagRank(b) - tagRank(a)) || (photoTs(a) - photoTs(b)); });
   if (loose.length) {
     html += '<div class="report-section"><h3>Other Photos (' + loose.length + ')</h3><div class="rpt-loose-grid">';
     loose.forEach(function (p) {
-      const caption = (p.transcriptText ? '“' + p.transcriptText + '” · ' : '') + (p.trade || '') + ' · ' + (p.time || '');
+      const caption = (p.transcriptText ? '“' + p.transcriptText + '” · ' : '') + (p.trade || '') + (p.tag && p.tag.kind !== 'trade' ? ' · ' + (p.tag.kind === 'quality' ? 'Quality' : 'Safety') : '') + (p.tag && p.tag.severity ? ' · Urgency ' + SEVERITY_LABEL[p.tag.severity] : '') + ' · ' + (p.time || '');
       html += '<figure class="rpt-loose"><img src="' + p.src + '" alt="Walk photo"><figcaption>' + escapeHtml(caption) + '</figcaption></figure>';
     });
     html += '</div></div>';
@@ -2973,6 +3271,10 @@ window.addEventListener('load', function () {
   if (photoSearchEl) photoSearchEl.addEventListener('input', renderPhotosTab);
   renderAllNotes();
   renderReview();
+  renderPhotoTagQueue();
+  const photoTagToggle = document.getElementById('photoTagToggle');
+  if (photoTagToggle) { photoTagToggle.checked = loadJson(LS.photoTag, true) !== false; photoTagToggle.addEventListener('change', function () { saveJson(LS.photoTag, !!photoTagToggle.checked); }); }
+  renderPhotoTagStats();
   renderSummary();
   showWalkTab('main');
   renderAllItems();
