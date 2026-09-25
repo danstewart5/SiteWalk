@@ -11,6 +11,30 @@ Two public links (no login):
 
 Do not use Grok sandbox preview URLs.
 
+## 🔒 LOCKED SCOPE — Chapter 1 (Walk-Around) only (set 2026-09-25)
+
+**All other chapters are paused**: dashboard, property management (LeaseFlow), reports, repo privacy, drawing references, video saving, trade routing, jobs, invoicing, role views, GPS clock, home dial. Don't add to them, polish them, or refactor them. Full focus stays on Chapter 1 until the user has proven it solid on a real job site. If a request touches a paused chapter, point to this section and check with the user first.
+
+**In scope — one core walk engine, all on together:**
+1. Camera and microphone always on together during a session (Start Walk-Around → Stop).
+2. Live transcript that never breaks or resets, including when a photo is taken.
+3. Voice-triggered photo ("snap picture", "take a photo", or similar) that doesn't interrupt listening or recording.
+4. Punch list items captured and tagged by trade.
+5. Safety/quality hazard flags captured and tagged separately from punch items.
+6. Change orders captured by voice, tagged with cost impact, stored in the shared item schema (`fileEntry()`) so estimating and invoicing can use them later.
+
+**Explicitly out of scope for now:**
+- Drawing/sheet reference tagging (existing `drawingRef` extraction stays as is; don't extend it)
+- Continuous video file saving (the "Also save a video" toggle stays, off by default; don't work on it)
+- Trade routing / sending items to subcontractors
+
+**Definition of done:** the user tests it personally on a real job site: voice, photo capture, punch items, safety flags and change orders all work reliably start to finish. Only then does anything else get added back. Headless-Chromium tests are useful but do **not** count as done.
+
+**Where each item stands today** (code exists for all six, none phone-verified on a job site):
+- 1–3: `startWalk()`/`getWalkStream()`, continuous recognition with its `onend` restart loop, `handleFinalUtterance()` → `voiceTriggeredSnap()` (canvas grab only, never touches tracks or `recognition`), `SNAP_TRIGGER_RE`. "snap picture", "snap a picture", "take photo" all match; "grab a photo" does not.
+- 4–6: `scoreUtterance()` / `/classify` → `fileEntry()` (punch, change order with `costEstimate`) and `logSafetyQuality()` (Hazard Observed / Quality Issue). Low-confidence items go to the Review bucket.
+- Field-test failures are the priority queue. Fix them in `walk.js`/`index.html`, bump `sw.js` cache, and log what was found here.
+
 ## What the live app actually does (as of 2026-09-19)
 
 **Start Walk-Around is the only entry point — there is no mode picker.** An earlier note in this file (below, now corrected) described a video-walk/photo-only mode split as "landed in live app" at cache `sitewalk-v42`; that was wrong — no mode-picker code (`swWalkMode`, `captureWalkStill()`, etc.) was ever actually written to `index.html`/`walk.js`, only this file described it. The actual product decision, made the same day, superseded that split anyway: one always-on walk engine, no picker. Camera preview, mic, live speech-to-text, voice-triggered snap, and punch-list tagging all start together on **Start Walk-Around** and stay on together until **Stop**, every time.
