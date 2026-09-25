@@ -1889,7 +1889,7 @@ const PHOTO_KIND_LABEL = { trade: 'Trade only', safety: 'Safety hazard', quality
 function photoTagEnabled() { return !!currentAiEndpoint() && loadJson(LS.photoTag, true) !== false; }
 function shrinkForTagging(src, cb) {
   const img = new Image();
-  img.onload = function () { const scale = Math.min(1, 768 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.7)); };
+  img.onload = function () { const scale = Math.min(1, 768 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.6)); };
   img.onerror = function () { cb(src); };
   img.src = src;
 }
@@ -1936,7 +1936,7 @@ function receivePhotoTag(photo, data) {
   persistPhotos();
   renderPhotoTagQueue();
   renderPhotosTab();
-  if (wouldChange) setWalkStatus('info', '📷 Photo looks like ' + (kind === 'trade' ? sug.trade : PHOTO_KIND_LABEL[kind].toLowerCase() + ' (' + sug.trade + ')') + ' — confirm or change it below.');
+  if (wouldChange) setWalkStatus('info', '📷 Photo looks like ' + (kind === 'trade' ? sug.trade : PHOTO_KIND_LABEL[kind].toLowerCase() + ' (' + sug.trade + ')') + ' — check it in Review.');
 }
 function pendingPhotoTags() { return photos.filter(function (p) { return p.suggestion && p.suggestion.status === 'suggested'; }); }
 // Applies a confirmed tag to the photo and to the item it's linked to (if
@@ -2002,15 +2002,19 @@ function photoTagCard(photo) {
   card.appendChild(ok); card.appendChild(no);
   return card;
 }
-// Walk screen shows the newest suggestion; Review shows them all.
+// The Walk screen only gets a one-line badge (no dropdowns over the live
+// camera mid-walk); the cards themselves live in Walk → Review.
 function renderPhotoTagQueue() {
   const pending = pendingPhotoTags().sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
   const walkWrap = document.getElementById('photoTagQueue');
   if (walkWrap) {
     walkWrap.innerHTML = '';
     if (pending.length) {
-      walkWrap.appendChild(photoTagCard(pending[0]));
-      if (pending.length > 1) { const more = document.createElement('div'); more.className = 'meta'; more.textContent = (pending.length - 1) + ' more photo suggestion(s) in Review.'; walkWrap.appendChild(more); }
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'photo-tag-badge';
+      btn.textContent = '📷 ' + pending.length + ' photo' + (pending.length > 1 ? 's need' : ' needs') + ' a look →';
+      btn.onclick = function () { showWalkTab('review'); };
+      walkWrap.appendChild(btn);
     }
   }
   const reviewWrap = document.getElementById('photoTagReviewList');
@@ -2695,29 +2699,33 @@ function reportItemRow(text, metaParts, photoList, severity) {
   else if (photoList.length > 1) h += '<div class="rpt-photo-row">' + photoList.map(function (src) { return '<img src="' + src + '" alt="Item photo">'; }).join('') + '</div>';
   return h + '</div>';
 }
-function reportItemSection(title, arr, metaFn) {
+// Items already shown in "Most Urgent First" (pinned) are not repeated;
+// the heading says how many of this list are up there.
+function reportItemSection(title, arr, metaFn, pinned) {
   if (!arr.length) return '';
+  const rest = arr.filter(function (e) { return !pinned || pinned.indexOf(e) === -1; });
+  const above = arr.length - rest.length;
   // Most urgent first (open before closed), capture order breaks ties.
-  const sorted = arr.slice().sort(byUrgency);
-  let h = '<div class="report-section"><h3>' + title + ' (' + arr.length + ')</h3>';
+  const sorted = rest.sort(byUrgency);
+  let h = '<div class="report-section"><h3>' + title + ' (' + arr.length + ')' + (above ? ' <span class="rpt-above">' + above + ' listed above</span>' : '') + '</h3>';
   sorted.forEach(function (e) { h += reportItemRow(itemDesc(e), metaFn(e).concat(photoTagMeta(e)), itemPhotos(e), itemSeverity(e)); });
+  if (!sorted.length) h += '<div class="rpt-item-meta">All listed above.</div>';
   return h + '</div>';
 }
 function money0(n) { return n != null ? '$' + Number(n).toLocaleString() : ''; }
 function itemLocMeta(e) { return [e.location ? 'Location: ' + e.location : '', e.drawingRef ? 'Sheet ' + e.drawingRef : '']; }
 function photoTagMeta(e) { return [e.photoFlag ? 'Photo flagged: ' + (e.photoFlag === 'quality' ? 'Quality' : 'Safety') : '', e.tradeBy === 'photo' ? 'Trade from photo' : '']; }
 // Top of the report: every open Critical/High item across all lists, worst
-// first, so the reader sees what needs action before the per-list detail.
-function reportUrgentSection() {
-  const kindLabel = function (e) { return e.id && reviewItems.indexOf(e) !== -1 ? 'Needs review' : ({ punch: 'Punch', change_order: 'Change order', rfi: 'RFI', quality: 'Quality' })[itemKind(e)] || 'Safety'; };
-  const open = punch.filter(function (e) { return !e.resolved; })
-    .concat(changes.filter(function (e) { return e.approval !== 'Declined'; }), rfis.filter(function (e) { return e.status !== 'Answered'; }), safetyLogs, reviewItems)
-    .filter(function (e) { return severityRank(itemSeverity(e)) >= severityRank('high'); })
-    .sort(byUrgency);
-  let h = '<div class="report-section rpt-urgent"><h3>Most Urgent First (' + open.length + ')</h3>';
-  if (!open.length) return h + '<div class="rpt-item-meta">Nothing open is flagged Critical or High.</div></div>';
-  open.forEach(function (e) { h += reportItemRow(itemDesc(e), [kindLabel(e), e.trade, e.location ? 'Location: ' + e.location : ''], [], itemSeverity(e)); });
-  return h + '<div class="rpt-item-meta">Full details and photos are in each section below, also most urgent first.</div></div>';
+// first, with full details and photos. Each is listed here only, not again
+// in its own section. lists = [[label, items, metaFn], ...]
+function reportUrgentSection(lists) {
+  const rows = [];
+  lists.forEach(function (l) { l[1].forEach(function (e) { if (!isItemClosed(e) && severityRank(itemSeverity(e)) >= severityRank('high')) rows.push({ e: e, label: l[0], meta: l[2] }); }); });
+  rows.sort(function (a, b) { return byUrgency(a.e, b.e); });
+  let h = '<div class="report-section rpt-urgent"><h3>Most Urgent First (' + rows.length + ')</h3>';
+  if (!rows.length) return { html: h + '<div class="rpt-item-meta">Nothing open is flagged Critical or High.</div></div>', pinned: [] };
+  rows.forEach(function (r) { h += reportItemRow(itemDesc(r.e), [r.label].concat(r.meta(r.e), photoTagMeta(r.e)), itemPhotos(r.e), itemSeverity(r.e)); });
+  return { html: h + '</div>', pinned: rows.map(function (r) { return r.e; }) };
 }
 // Manual only: runs when someone taps Generate Report (Walk screen, Report
 // tab, or the Home gold button), never on its own when a walk ends.
@@ -2725,12 +2733,18 @@ window.generateReport = function () {
   const siteName = document.getElementById('siteName').textContent.trim();
   const siteAddress = document.getElementById('siteAddress').textContent.trim();
   let html = '<div style="text-align:center"><strong>SiteWalk Report</strong><br>' + escapeHtml(siteName) + (siteAddress && siteAddress !== 'Tap to add address' ? '<br>' + escapeHtml(siteAddress) : '') + '<br>' + new Date().toLocaleString() + '</div>';
-  html += reportUrgentSection();
-  html += reportItemSection('Punch List', punch, function (i) { return [i.trade].concat(itemLocMeta(i), [i.costEstimate != null ? 'Est. ' + money0(i.costEstimate) : '', i.resolved ? 'Resolved' : 'Open']); });
-  html += reportItemSection('Change Orders', changes, function (i) { return [i.trade].concat(itemLocMeta(i), ['Est. ' + (i.costEstimate != null ? money0(i.costEstimate) : '?'), 'Client: ' + (i.approval || 'Pending')]); });
-  html += reportItemSection('RFIs', rfis, function (i) { return [i.trade].concat(itemLocMeta(i), [i.status || 'Open']); });
-  html += reportItemSection('Safety &amp; Quality', safetyLogs, function (s) { return [s.type, s.trade].concat(itemLocMeta(s), [s.person ? 'Involved: ' + s.person : '', s.action ? 'Action: ' + s.action : '', s.time]); });
-  html += reportItemSection('Needs Review (not on the punch list yet)', reviewItems, function (r) { return [r.trade].concat(itemLocMeta(r), [r.costEstimate != null ? 'Est. ' + money0(r.costEstimate) : '', r.time]); });
+  const punchMeta = function (i) { return [i.trade].concat(itemLocMeta(i), [i.costEstimate != null ? 'Est. ' + money0(i.costEstimate) : '', i.resolved ? 'Resolved' : 'Open']); };
+  const coMeta = function (i) { return [i.trade].concat(itemLocMeta(i), ['Est. ' + (i.costEstimate != null ? money0(i.costEstimate) : '?'), 'Client: ' + (i.approval || 'Pending')]); };
+  const rfiMeta = function (i) { return [i.trade].concat(itemLocMeta(i), [i.status || 'Open']); };
+  const safetyMeta = function (s) { return [s.type, s.trade].concat(itemLocMeta(s), [s.person ? 'Involved: ' + s.person : '', s.action ? 'Action: ' + s.action : '', s.time]); };
+  const reviewMeta = function (r) { return [r.trade].concat(itemLocMeta(r), [r.costEstimate != null ? 'Est. ' + money0(r.costEstimate) : '', r.time]); };
+  const urgent = reportUrgentSection([['Punch', punch, punchMeta], ['Change order', changes, coMeta], ['RFI', rfis, rfiMeta], ['Safety & Quality', safetyLogs, safetyMeta], ['Needs review', reviewItems, reviewMeta]]);
+  html += urgent.html;
+  html += reportItemSection('Punch List', punch, punchMeta, urgent.pinned);
+  html += reportItemSection('Change Orders', changes, coMeta, urgent.pinned);
+  html += reportItemSection('RFIs', rfis, rfiMeta, urgent.pinned);
+  html += reportItemSection('Safety &amp; Quality', safetyLogs, safetyMeta, urgent.pinned);
+  html += reportItemSection('Needs Review (not on the punch list yet)', reviewItems, reviewMeta, urgent.pinned);
   // Photos not attached to any item, with what was being said when taken.
   const used = {};
   linkableItems().forEach(function (e) { itemPhotos(e).forEach(function (src) { used[src] = true; }); });
