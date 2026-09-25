@@ -31,7 +31,7 @@ If `SITEWALK_KEY` is **not** set, the Worker still runs. CORS limits callers to 
 
 **Order is mandatory. Do not set the Cloudflare secret the same night you only merge code.**
 
-1. Merge header support (`index.html` sends `X-SiteWalk-Key` when a key is saved) → confirm the live site (`https://sitewalk-app.netlify.app`) actually has the **Shared key** field.
+1. Merge header support (`index.html` sends `X-SiteWalk-Key` when a key is saved) → confirm the live site (`https://sitewalk-app.netlify.app`, or `https://danstewart5.github.io/SiteWalk/`) actually has the **Shared key** field.
 2. Only then set `SITEWALK_KEY` in Cloudflare (steps below).
 3. Save the same string in the app’s **Shared key** field → **Save Worker URL & key**.
 4. Test one photo check live on that Pages URL before trusting it on site.
@@ -52,7 +52,7 @@ wrangler secret put SITEWALK_KEY
 The Worker then requires header `X-SiteWalk-Key` on every POST. The phone only sends that header when a shared key is saved in the app. Leave the field blank while the Worker secret is unset.
 
 ## 3. Paste into the app
-1. Open https://sitewalk-app.netlify.app on the phone. Any other origin — a Netlify preview/branch subdomain, localhost, etc. — will fail CORS against the tightened Worker and look like a dead network.
+1. Open https://sitewalk-app.netlify.app on the phone (or https://danstewart5.github.io/SiteWalk/, still allowed). Any other origin — a Netlify preview/branch subdomain, localhost, etc. — will fail CORS against the tightened Worker and look like a dead network.
 2. Scroll to **AI Code-Check Photo**.
 3. Paste the Worker URL. Leave **Shared key** blank until step 2b is done.
 4. Tap **Save Worker URL & key**.
